@@ -1,12 +1,24 @@
 import { useState } from "react";
-// FIXED: Path updated to match your structure
 import { Sidebar } from "@/components/ui/layout/Sidebar";
 import QuoteWorkspace from "@/features/quotes/QuoteWorkspace";
 import QuoteDashboard from "@/features/quotes/pages/QuoteDashboard";
 import DossierWorkspace from "@/features/dossier/DossierWorkspace";
+import { Toaster } from "@/components/ui/use-toast";
+// Import store to access creation logic if needed directly from sidebar (optional)
+import { useQuoteStore } from "@/store/useQuoteStore"; 
 
 function App() {
   const [currentPage, setCurrentPage] = useState<'dashboard' | 'create' | 'dossier'>('dashboard');
+  const { createNewQuote } = useQuoteStore();
+
+  const handleSidebarNav = (page: 'dashboard' | 'dossier') => {
+      setCurrentPage(page);
+  };
+
+  const handleNewQuote = () => {
+      createNewQuote();
+      setCurrentPage('create');
+  };
 
   return (
     <div className="flex min-h-screen w-full bg-slate-50 text-slate-900 font-sans">
@@ -17,15 +29,15 @@ function App() {
            {/* Temporary Navigation Links for Development */}
            <div className="p-4 border-b bg-slate-50">
                <div className="text-xs font-bold text-slate-400 uppercase mb-2">Dev Navigation</div>
-               <button onClick={() => setCurrentPage('dashboard')} className="block w-full text-left text-sm font-medium mb-1 hover:text-blue-600">
+               <button onClick={() => handleSidebarNav('dashboard')} className="block w-full text-left text-sm font-medium mb-1 hover:text-blue-600">
                  1. Quote Management
                </button>
-               <button onClick={() => setCurrentPage('dossier')} className="block w-full text-left text-sm font-medium hover:text-blue-600">
+               <button onClick={() => handleSidebarNav('dossier')} className="block w-full text-left text-sm font-medium hover:text-blue-600">
                  2. Operations (Dossier)
                </button>
            </div>
            
-           {/* Your Main Sidebar Component */}
+           {/* Main Sidebar Component */}
            <div className="flex-1">
               <Sidebar /> 
            </div>
@@ -61,6 +73,7 @@ function App() {
         )}
 
       </main>
+      <Toaster />
     </div>
   );
 }

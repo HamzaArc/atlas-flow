@@ -1,27 +1,27 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileOutput, Box } from "lucide-react";
-
-// Feature Components
-import { QuoteHeader } from "./components/QuoteHeader"; // <--- The New Smart Header
+import { QuoteHeader } from "./components/QuoteHeader"; 
 import { RouteSelector } from "./components/RouteSelector";
 import { CargoEngine } from "./components/CargoEngine";
 import { PricingTable } from "./components/PricingTable";
-
-// State & PDF
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { pdf } from '@react-pdf/renderer';
 import { QuotePDF } from './components/QuotePDF';
 import { Badge } from "@/components/ui/badge";
 
 export default function QuoteWorkspace() {
-  const { totalSellMAD, totalMarginMAD, items, pol, pod, mode, incoterm, reference, clientName, validityDate } = useQuoteStore();
+  const { 
+      totalSellMAD, totalTaxMAD, totalSellTTC, totalMarginMAD, 
+      items, pol, pod, mode, incoterm, reference, clientName, validityDate,
+      exchangeRates, marginBuffer
+  } = useQuoteStore();
 
   const marginPercent = totalSellMAD > 0 
     ? ((totalMarginMAD / totalSellMAD) * 100).toFixed(1) 
     : "0.0";
 
-  // PDF Generation
+  // --- UPDATED PDF GENERATION ---
   const handleGeneratePDF = async () => {
     const blob = await pdf(
       <QuotePDF 
@@ -32,9 +32,14 @@ export default function QuoteWorkspace() {
         mode={mode}
         incoterm={incoterm}
         items={items}
-        totalSell={totalSellMAD}
+        // Passing the Calculated Financials
+        totalHT={totalSellMAD}
+        totalTax={totalTaxMAD}
+        totalTTC={totalSellTTC}
         currency="MAD"
-        validityDate={new Date().toLocaleDateString()}
+        validityDate={new Date(validityDate).toLocaleDateString()}
+        exchangeRates={exchangeRates}
+        marginBuffer={marginBuffer}
       />
     ).toBlob();
     const url = URL.createObjectURL(blob);
@@ -44,10 +49,10 @@ export default function QuoteWorkspace() {
   return (
     <div className="h-screen flex flex-col bg-slate-50 overflow-hidden">
       
-      {/* 1. NEW SMART HEADER [Gaps 3, 4, 7, 8] */}
+      {/* 1. HEADER */}
       <QuoteHeader />
 
-      {/* 2. MAIN GRID CANVAS */}
+      {/* 2. MAIN GRID */}
       <div className="flex-1 grid grid-cols-12 gap-4 p-4 overflow-hidden">
         
         {/* LEFT PANEL */}
@@ -73,15 +78,34 @@ export default function QuoteWorkspace() {
               
               <PricingTable />
 
-              {/* Profit Card */}
-              <div className="h-16 border-t bg-slate-900 text-white flex items-center justify-between px-6 shadow-lg z-20">
-                 <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-400 uppercase tracking-wider">Total Sell (TTC)</span>
-                    <span className="text-xl font-bold font-mono">
-                      {totalSellMAD.toFixed(2)} <span className="text-sm font-normal text-slate-500">MAD</span>
-                    </span>
+              {/* PROFIT & TAX CARD */}
+              <div className="h-20 border-t bg-slate-900 text-white flex items-center justify-between px-6 shadow-lg z-20">
+                 
+                 {/* Breakdown */}
+                 <div className="flex gap-8">
+                     <div className="flex flex-col">
+                        <span className="text-[10px] text-slate-400 uppercase tracking-wider">Total HT (Net)</span>
+                        <span className="text-lg font-bold font-mono">
+                          {totalSellMAD.toFixed(2)} <span className="text-sm font-normal text-slate-500">MAD</span>
+                        </span>
+                     </div>
+                     <div className="flex flex-col">
+                        <span className="text-[10px] text-slate-400 uppercase tracking-wider">Total VAT</span>
+                        <span className="text-lg font-bold font-mono text-slate-300">
+                          {totalTaxMAD.toFixed(2)} <span className="text-sm font-normal text-slate-500">MAD</span>
+                        </span>
+                     </div>
+                     <div className="flex flex-col">
+                        <span className="text-[10px] text-blue-400 uppercase tracking-wider">Total TTC</span>
+                        <span className="text-xl font-bold font-mono text-blue-400">
+                          {totalSellTTC.toFixed(2)} <span className="text-sm font-normal text-blue-300">MAD</span>
+                        </span>
+                     </div>
                  </div>
-                 <div className="h-8 w-px bg-slate-700"></div>
+
+                 <div className="h-10 w-px bg-slate-700"></div>
+
+                 {/* Margin (Private View) */}
                  <div className="flex flex-col items-end">
                      <span className="text-[10px] text-green-400 uppercase tracking-wider">Net Margin</span>
                      <div className="flex items-baseline gap-2">
