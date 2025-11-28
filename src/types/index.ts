@@ -1,23 +1,59 @@
 // --- 1. CORE LOGISTICS ENUMS ---
 export type Incoterm = 'EXW' | 'FOB' | 'CFR' | 'CIF' | 'DDP';
 export type TransportMode = 'SEA_FCL' | 'SEA_LCL' | 'AIR' | 'ROAD';
-export type Currency = 'MAD' | 'USD' | 'EUR';
+export type Currency = 'MAD' | 'USD' | 'EUR' | 'GBP';
+export type Probability = 'LOW' | 'MEDIUM' | 'HIGH';
+export type PackagingType = 'PALLETS' | 'CARTONS' | 'CRATES' | 'DRUMS' | 'LOOSE';
 
 // --- 2. QUOTE ENGINE MODELS ---
 export interface Quote {
   id: string;
   reference: string;
+  customerReference?: string;
   status: 'DRAFT' | 'PRICING' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'REJECTED';
+  
+  // CRM & Identity
   clientId: string;
   clientName: string;
-  validityDate: Date;
+  salespersonId: string;
+  salespersonName: string;
+  
+  // Logistics Timeline
+  validityDate: Date; // RE-ADDED
+  cargoReadyDate: Date;
+  requestedDepartureDate?: Date;
+  estimatedDepartureDate?: Date;
+  estimatedArrivalDate?: Date;
+  transitTime?: number;
+  
+  // Logistics Route
   incoterm: Incoterm;
   mode: TransportMode;
   pol: string;
   pod: string;
-  outputCurrency: Currency;
-  marginBuffer: number;
-  exchangeRates: Record<string, number>;
+  
+  // Cargo Details (Enhanced)
+  cargoRows: any[];
+  goodsDescription: string;
+  hsCode?: string;
+  packagingType: PackagingType; // New
+  isHazmat: boolean;
+  isStackable: boolean;
+  isReefer: boolean; // New (Temp Control)
+  temperature?: string; // New (e.g. "-18C")
+  cargoValue?: number; // New (For Insurance)
+  insuranceRequired: boolean; // New
+  
+  // Business Intelligence
+  probability: Probability;
+  competitorInfo?: string;
+  internalNotes: string;
+  
+  // Financials
+  baseCurrency: Currency; 
+  quoteCurrency: Currency; 
+  exchangeRates: Record<string, number>; 
+  items: QuoteLineItem[];
 }
 
 export interface QuoteLineItem {
@@ -30,7 +66,6 @@ export interface QuoteLineItem {
   markupType: 'PERCENT' | 'FIXED_AMOUNT';
   markupValue: number;
   vatRule: 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | 'DISBURSEMENT';
-  isDisbursement: boolean;
 }
 
 export interface Dossier {

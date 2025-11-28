@@ -4,14 +4,14 @@ import QuoteWorkspace from "@/features/quotes/QuoteWorkspace";
 import QuoteDashboard from "@/features/quotes/pages/QuoteDashboard";
 import DossierWorkspace from "@/features/dossier/DossierWorkspace";
 import { Toaster } from "@/components/ui/use-toast";
-// Import store to access creation logic if needed directly from sidebar (optional)
 import { useQuoteStore } from "@/store/useQuoteStore"; 
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<'dashboard' | 'create' | 'dossier'>('dashboard');
+  // Navigation State
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'create' | 'dossier' | 'crm' | 'finance'>('dashboard');
   const { createNewQuote } = useQuoteStore();
 
-  const handleSidebarNav = (page: 'dashboard' | 'dossier') => {
+  const handleSidebarNav = (page: any) => {
       setCurrentPage(page);
   };
 
@@ -23,25 +23,9 @@ function App() {
   return (
     <div className="flex min-h-screen w-full bg-slate-50 text-slate-900 font-sans">
       
-      {/* Sidebar Area */}
-      <aside className="w-64 flex-none hidden md:block border-r bg-white z-10">
-        <div className="h-full flex flex-col">
-           {/* Temporary Navigation Links for Development */}
-           <div className="p-4 border-b bg-slate-50">
-               <div className="text-xs font-bold text-slate-400 uppercase mb-2">Dev Navigation</div>
-               <button onClick={() => handleSidebarNav('dashboard')} className="block w-full text-left text-sm font-medium mb-1 hover:text-blue-600">
-                 1. Quote Management
-               </button>
-               <button onClick={() => handleSidebarNav('dossier')} className="block w-full text-left text-sm font-medium hover:text-blue-600">
-                 2. Operations (Dossier)
-               </button>
-           </div>
-           
-           {/* Main Sidebar Component */}
-           <div className="flex-1">
-              <Sidebar /> 
-           </div>
-        </div>
+      {/* Sidebar Area - Fixed Width */}
+      <aside className="w-64 flex-none hidden md:block z-30 shadow-sm">
+          <Sidebar currentView={currentPage} onNavigate={handleSidebarNav} /> 
       </aside>
 
       {/* Main Content Area */}
@@ -55,12 +39,13 @@ function App() {
         {/* 2. Quote Editor View */}
         {currentPage === 'create' && (
           <div className="absolute inset-0 z-20 bg-white">
+             {/* Back Button Overlay */}
              <div className="absolute top-4 left-4 z-50">
                 <button 
                   onClick={() => setCurrentPage('dashboard')}
-                  className="bg-white/90 backdrop-blur border shadow-sm px-3 py-1 rounded text-xs font-medium hover:bg-slate-100 transition"
+                  className="bg-white/90 backdrop-blur border shadow-sm px-3 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors flex items-center gap-1"
                 >
-                  ← Back to Dashboard
+                  ← Back to List
                 </button>
              </div>
              <QuoteWorkspace />
@@ -70,6 +55,16 @@ function App() {
         {/* 3. Dossier Operations View */}
         {currentPage === 'dossier' && (
             <DossierWorkspace />
+        )}
+
+        {/* Placeholders for Future Modules */}
+        {(currentPage === 'crm' || currentPage === 'finance') && (
+            <div className="flex items-center justify-center h-full text-slate-400 flex-col gap-2">
+                <div className="h-12 w-12 bg-slate-100 rounded-full flex items-center justify-center">
+                    <span className="text-xl">🚧</span>
+                </div>
+                <p>Module under construction</p>
+            </div>
         )}
 
       </main>

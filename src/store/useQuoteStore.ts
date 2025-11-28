@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase'; 
-import { Quote, QuoteLineItem, TransportMode, Incoterm } from '@/types/index';
+import { Quote, QuoteLineItem, TransportMode, Incoterm, Currency, Probability, PackagingType } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 
 // --- TYPES ---
@@ -21,14 +21,35 @@ interface QuoteState {
   // --- EDITOR STATE ---
   id: string;
   reference: string;
+  customerReference: string;
   status: 'DRAFT' | 'PRICING' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'REJECTED';
+  
+  // CRM & Identity
   clientId: string;
   clientName: string;
   salespersonId: string;
   salespersonName: string;
-  validityDate: string;
   
+  // Dates & KPIs
+  validityDate: string;
+  cargoReadyDate: string;
+  requestedDepartureDate: string;
+  estimatedDepartureDate: string;
+  estimatedArrivalDate: string;
+  transitTime: number;
+  probability: Probability;
+  competitorInfo: string;
+  
+  // Cargo Specifics
   goodsDescription: string; 
+  hsCode: string;
+  packagingType: PackagingType;
+  isHazmat: boolean;
+  isStackable: boolean;
+  isReefer: boolean;
+  temperature: string;
+  cargoValue: number;
+  insuranceRequired: boolean;
   internalNotes: string;
 
   pol: string;
@@ -40,28 +61,40 @@ interface QuoteState {
   // Financials
   items: QuoteLineItem[];
   exchangeRates: Record<string, number>;
-  marginBuffer: number;
+  marginBuffer: number; // <--- RESTORED FIELD
+  quoteCurrency: Currency; 
+  
+  // Calculated Fields
   totalVolume: number;
   totalWeight: number;
   chargeableWeight: number;
+  
+  // Internal Reporting (MAD)
+  totalCostMAD: number;
   totalSellMAD: number;
-  totalTaxMAD: number;
-  totalSellTTC: number;
   totalMarginMAD: number;
+  totalTaxMAD: number; 
+  totalTTCMAD: number; 
+  
+  // Client Facing (Target)
+  totalSellTarget: number; 
+  totalTaxTarget: number;  
+  totalTTCTarget: number;  
 
   // --- ACTIONS ---
-  
-  // Editor Setters
-  setIdentity: (field: string, value: string) => void;
+  setIdentity: (field: string, value: any) => void;
   setStatus: (status: QuoteState['status']) => void;
   setRoute: (pol: string, pod: string, mode: TransportMode) => void;
   setIncoterm: (incoterm: Incoterm) => void;
   updateCargo: (rows: CargoRow[]) => void;
+  
+  setExchangeRate: (currency: string, rate: number) => void;
+  setQuoteCurrency: (currency: Currency) => void;
+  
   addLineItem: (section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION') => void;
   updateLineItem: (id: string, field: keyof QuoteLineItem, value: any) => void;
   removeLineItem: (id: string) => void;
   
-  // Cloud Actions
   fetchQuotes: () => Promise<void>;
   saveQuote: () => Promise<void>;
   loadQuote: (id: string) => void; 
@@ -70,36 +103,61 @@ interface QuoteState {
   duplicateQuote: () => void;
 }
 
-// Default Editor State
 const DEFAULT_STATE = {
   id: 'new',
   reference: 'Q-24-DRAFT',
+  customerReference: '',
   status: 'DRAFT' as const,
   clientId: '',
   clientName: '',
   salespersonId: 'user-1', 
   salespersonName: 'Youssef (Sales)',
-  validityDate: new Date().toISOString().split('T')[0],
+  
+  validityDate: new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0],
+  cargoReadyDate: new Date().toISOString().split('T')[0],
+  requestedDepartureDate: '',
+  estimatedDepartureDate: '',
+  estimatedArrivalDate: '',
+  
+  transitTime: 0,
+  probability: 'MEDIUM' as Probability,
+  competitorInfo: '',
+
   goodsDescription: '',
+  hsCode: '',
+  packagingType: 'PALLETS' as PackagingType,
+  isHazmat: false,
+  isStackable: true,
+  isReefer: false,
+  temperature: '',
+  cargoValue: 0,
+  insuranceRequired: false,
   internalNotes: '',
-  pol: '',
-  pod: '',
+  
+  pol: 'CASABLANCA (MAP)',
+  pod: 'SHANGHAI (CN)',
   incoterm: 'FOB' as Incoterm,
   mode: 'SEA_LCL' as TransportMode,
   cargoRows: [{ id: '1', qty: 1, length: 0, width: 0, height: 0, weight: 0 }],
+  
   totalVolume: 0,
   totalWeight: 0,
   chargeableWeight: 0,
   items: [],
-  exchangeRates: { MAD: 1, USD: 10.0, EUR: 11.0 },
-  marginBuffer: 1.02,
+  exchangeRates: { MAD: 1, USD: 9.80, EUR: 10.75, GBP: 12.50 }, 
+  marginBuffer: 1.02, // Default 2% Safety Buffer
+  quoteCurrency: 'MAD' as Currency,
+  
+  totalCostMAD: 0,
   totalSellMAD: 0,
-  totalTaxMAD: 0,
-  totalSellTTC: 0,
   totalMarginMAD: 0,
+  totalTaxMAD: 0,
+  totalTTCMAD: 0,
+  totalSellTarget: 0,
+  totalTaxTarget: 0,
+  totalTTCTarget: 0,
 };
 
-// Helper: Tax Logic
 const getTaxRate = (rule: string) => {
   switch (rule) {
     case 'STD_20': return 0.20;
@@ -114,7 +172,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   isLoading: false,
   ...DEFAULT_STATE,
 
-  // --- EDITOR LOGIC ---
   setIdentity: (field, value) => set((state) => ({ ...state, [field]: value })),
   setStatus: (status) => set({ status }),
 
@@ -125,6 +182,17 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
   setIncoterm: (incoterm) => set({ incoterm }),
 
+  setExchangeRate: (currency, rate) => {
+    const newRates = { ...get().exchangeRates, [currency]: rate };
+    set({ exchangeRates: newRates });
+    get().updateLineItem('trigger', 'description', 'trigger');
+  },
+
+  setQuoteCurrency: (currency) => {
+    set({ quoteCurrency: currency });
+    get().updateLineItem('trigger', 'description', 'trigger');
+  },
+
   updateCargo: (rows) => {
     const { mode } = get();
     let vol = 0;
@@ -134,16 +202,18 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       vol += rowVol;
       weight += (r.weight * r.qty);
     });
-    let volumetricWeight = 0;
-    if (mode === 'AIR') volumetricWeight = (vol * 1000000) / 6000;
-    if (mode === 'SEA_LCL') volumetricWeight = vol * 1000;
-    if (mode === 'ROAD') volumetricWeight = vol * 333;
+    
+    let chargeable = 0;
+    if (mode === 'AIR') chargeable = Math.max(weight, (vol * 1000000) / 6000);
+    else if (mode === 'SEA_LCL') chargeable = Math.max(weight, vol * 1000);
+    else if (mode === 'ROAD') chargeable = Math.max(weight, vol * 333);
+    else chargeable = weight;
     
     set({
       cargoRows: rows,
       totalVolume: parseFloat(vol.toFixed(3)),
       totalWeight: parseFloat(weight.toFixed(2)),
-      chargeableWeight: parseFloat(Math.max(weight, volumetricWeight).toFixed(2))
+      chargeableWeight: parseFloat(chargeable.toFixed(2))
     });
   },
 
@@ -154,76 +224,74 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       section,
       description: '',
       buyPrice: 0,
-      buyCurrency: 'MAD',
+      buyCurrency: 'MAD', 
       markupType: 'PERCENT',
-      markupValue: 0,
+      markupValue: 20, 
       vatRule: 'STD_20',
-      isDisbursement: false
     };
     set(state => ({ items: [...state.items, newItem] }));
+    get().updateLineItem('trigger', 'description', 'trigger');
   },
 
   removeLineItem: (id) => {
     const newItems = get().items.filter(i => i.id !== id);
     set({ items: newItems });
-    // Trigger recalc via dummy update
     get().updateLineItem('trigger', 'description', 'trigger'); 
   },
 
   updateLineItem: (id, field, value) => {
-    const { items } = get();
-    // Special handling to allow triggering recalc without changing data
+    const { items, exchangeRates, quoteCurrency } = get();
+    
     const updatedItems = items.map(item => {
       if (item.id !== id && id !== 'trigger') return item;
       if (id !== 'trigger') return { ...item, [field]: value };
       return item;
     });
     
-    let totalSell = 0;
-    let totalTax = 0;
-    let totalBuy = 0;
+    let totalCostMAD = 0;
+    let totalSellMAD = 0;
+    let totalTaxMAD = 0;
 
     updatedItems.forEach(item => {
-        const rate = get().exchangeRates[item.buyCurrency] || 1;
-        const bufferedRate = rate * get().marginBuffer;
-        const costInMAD = item.buyPrice * bufferedRate;
+        const buyRate = exchangeRates[item.buyCurrency] || 1;
+        const costInMAD = item.buyPrice * buyRate;
 
-        let sellPrice = 0;
+        let sellInMAD = 0;
         if (item.markupType === 'PERCENT') {
-            sellPrice = costInMAD * (1 + (item.markupValue / 100));
+            sellInMAD = costInMAD * (1 + (item.markupValue / 100));
         } else {
-            sellPrice = costInMAD + item.markupValue;
+            const marginInMAD = item.markupValue * buyRate; 
+            sellInMAD = costInMAD + marginInMAD;
         }
         
-        const taxAmount = sellPrice * getTaxRate(item.vatRule);
-        totalSell += sellPrice;
-        totalTax += taxAmount;
-        totalBuy += (item.buyPrice * rate);
+        const taxAmountMAD = sellInMAD * getTaxRate(item.vatRule);
+
+        totalCostMAD += costInMAD;
+        totalSellMAD += sellInMAD;
+        totalTaxMAD += taxAmountMAD;
     });
+
+    const targetRate = exchangeRates[quoteCurrency] || 1;
+    const totalSellTarget = quoteCurrency === 'MAD' ? totalSellMAD : totalSellMAD / targetRate;
+    const totalTaxTarget = quoteCurrency === 'MAD' ? totalTaxMAD : totalTaxMAD / targetRate;
 
     set({ 
         items: updatedItems, 
-        totalSellMAD: parseFloat(totalSell.toFixed(2)),
-        totalTaxMAD: parseFloat(totalTax.toFixed(2)),
-        totalSellTTC: parseFloat((totalSell + totalTax).toFixed(2)),
-        totalMarginMAD: parseFloat((totalSell - totalBuy).toFixed(2))
+        totalCostMAD: parseFloat(totalCostMAD.toFixed(2)),
+        totalSellMAD: parseFloat(totalSellMAD.toFixed(2)),
+        totalMarginMAD: parseFloat((totalSellMAD - totalCostMAD).toFixed(2)),
+        totalTaxMAD: parseFloat(totalTaxMAD.toFixed(2)),
+        totalTTCMAD: parseFloat((totalSellMAD + totalTaxMAD).toFixed(2)),
+        totalSellTarget: parseFloat(totalSellTarget.toFixed(2)),
+        totalTaxTarget: parseFloat(totalTaxTarget.toFixed(2)),
+        totalTTCTarget: parseFloat((totalSellTarget + totalTaxTarget).toFixed(2)),
     });
   },
 
-  // --- CLOUD INTERACTION LOGIC ---
-
   fetchQuotes: async () => {
       set({ isLoading: true });
-      const { data, error } = await supabase
-        .from('quotes')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-          console.error('Error fetching quotes:', error);
-          set({ isLoading: false });
-          return;
-      }
+      const { data, error } = await supabase.from('quotes').select('*').order('created_at', { ascending: false });
+      if (error) { set({ isLoading: false }); return; }
 
       const mappedQuotes: Quote[] = data.map((row: any) => ({
           id: row.id,
@@ -236,9 +304,26 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           mode: row.data.mode || 'SEA_LCL',
           incoterm: row.data.incoterm || 'FOB',
           clientId: '', 
-          outputCurrency: 'MAD',
-          marginBuffer: row.data.marginBuffer || 1.0,
-          exchangeRates: row.data.exchangeRates || {}
+          salespersonId: row.data.salespersonId || '',
+          salespersonName: row.data.salespersonName || 'Admin',
+          baseCurrency: 'MAD',
+          quoteCurrency: row.data.quoteCurrency || 'MAD',
+          exchangeRates: row.data.exchangeRates || DEFAULT_STATE.exchangeRates,
+          marginBuffer: row.data.marginBuffer || 1.02, // <--- Map from DB
+          items: [],
+          cargoRows: row.data.cargoRows || [],
+          internalNotes: row.data.internalNotes || '',
+          cargoReadyDate: new Date(row.data.cargoReadyDate || new Date()),
+          probability: row.data.probability || 'MEDIUM',
+          packagingType: row.data.packagingType || 'PALLETS',
+          isReefer: row.data.isReefer || false,
+          temperature: row.data.temperature || '',
+          cargoValue: row.data.cargoValue || 0,
+          insuranceRequired: row.data.insuranceRequired || false,
+          isHazmat: row.data.isHazmat || false,
+          isStackable: row.data.isStackable ?? true,
+          goodsDescription: row.data.goodsDescription || '',
+          hsCode: row.data.hsCode || ''
       }));
 
       set({ quotes: mappedQuotes, isLoading: false });
@@ -246,20 +331,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
   saveQuote: async () => {
       const state = get();
-
-      // 1. VALIDATION GUARD
-      if (!state.clientName) {
-          useToast.getState().toast("Missing Client Name. Please select a customer.", "error");
-          return;
-      }
-      if (!state.pol || !state.pod) {
-          useToast.getState().toast("Route Incomplete. Please specify Origin and Destination.", "error");
-          return;
-      }
-      if (state.items.length === 0) {
-          useToast.getState().toast("No Charges. Please add at least one line item.", "error");
-          return;
-      }
+      if (!state.clientName) { useToast.getState().toast("Missing Client Name.", "error"); return; }
+      if (state.items.length === 0) { useToast.getState().toast("Please add at least one charge.", "error"); return; }
 
       set({ isLoading: true });
       
@@ -271,8 +344,26 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           goodsDescription: state.goodsDescription,
           internalNotes: state.internalNotes,
           exchangeRates: state.exchangeRates,
-          marginBuffer: state.marginBuffer,
-          salespersonName: state.salespersonName
+          marginBuffer: state.marginBuffer, // <--- Save to DB
+          quoteCurrency: state.quoteCurrency,
+          salespersonName: state.salespersonName,
+          salespersonId: state.salespersonId,
+          probability: state.probability,
+          cargoReadyDate: state.cargoReadyDate,
+          requestedDepartureDate: state.requestedDepartureDate,
+          estimatedDepartureDate: state.estimatedDepartureDate,
+          estimatedArrivalDate: state.estimatedArrivalDate,
+          transitTime: state.transitTime,
+          competitorInfo: state.competitorInfo,
+          customerReference: state.customerReference,
+          hsCode: state.hsCode,
+          packagingType: state.packagingType,
+          isHazmat: state.isHazmat,
+          isStackable: state.isStackable,
+          isReefer: state.isReefer,
+          temperature: state.temperature,
+          cargoValue: state.cargoValue,
+          insuranceRequired: state.insuranceRequired
       };
 
       const dbRow = {
@@ -282,47 +373,35 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           pol: state.pol,
           pod: state.pod,
           validity_date: state.validityDate,
-          total_ttc: state.totalSellTTC,
+          total_ttc: state.totalTTCMAD,
           data: jsonPayload
       };
 
-      const isNew = state.id === 'new';
-      let resultId = state.id;
-
       try {
-          if (isNew) {
+          if (state.id === 'new') {
               const { data, error } = await supabase.from('quotes').insert([dbRow]).select().single();
               if (error) throw error;
-              resultId = data.id;
+              set({ id: data.id });
           } else {
               const { error } = await supabase.from('quotes').update(dbRow).eq('id', state.id);
               if (error) throw error;
           }
-
           await get().fetchQuotes();
-          set({ id: resultId, isLoading: false });
-          
-          useToast.getState().toast(`Quote ${state.reference} saved successfully!`, "success");
-
+          set({ isLoading: false });
+          useToast.getState().toast(`Quote saved!`, "success");
       } catch (error: any) {
           console.error(error);
           set({ isLoading: false });
-          useToast.getState().toast("Failed to save quote. Check console.", "error");
+          useToast.getState().toast("Save failed.", "error");
       }
   },
 
   loadQuote: async (id) => {
       set({ isLoading: true });
       const { data, error } = await supabase.from('quotes').select('*').eq('id', id).single();
-      
-      if (error || !data) {
-          console.error("Load Error", error);
-          set({ isLoading: false });
-          return;
-      }
+      if (error || !data) { set({ isLoading: false }); return; }
 
       const json = data.data; 
-
       set({
           isLoading: false,
           id: data.id,
@@ -332,46 +411,50 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           pol: data.pol,
           pod: data.pod,
           validityDate: data.validity_date,
-          // Hydrate from JSONB
+          
           mode: json.mode,
           incoterm: json.incoterm,
           cargoRows: json.cargoRows || [],
           items: json.items || [],
           goodsDescription: json.goodsDescription || '',
           internalNotes: json.internalNotes || '',
-          exchangeRates: json.exchangeRates,
-          marginBuffer: json.marginBuffer
+          exchangeRates: json.exchangeRates || DEFAULT_STATE.exchangeRates,
+          marginBuffer: json.marginBuffer || DEFAULT_STATE.marginBuffer, // <--- Load
+          quoteCurrency: json.quoteCurrency || 'MAD',
+          salespersonName: json.salespersonName || 'Admin',
+          probability: json.probability || 'MEDIUM',
+          customerReference: json.customerReference || '',
+          cargoReadyDate: json.cargoReadyDate || new Date().toISOString().split('T')[0],
+          requestedDepartureDate: json.requestedDepartureDate || '',
+          estimatedDepartureDate: json.estimatedDepartureDate || '',
+          estimatedArrivalDate: json.estimatedArrivalDate || '',
+          transitTime: json.transitTime || 0,
+          competitorInfo: json.competitorInfo || '',
+          hsCode: json.hsCode || '',
+          packagingType: json.packagingType || 'PALLETS',
+          isHazmat: json.isHazmat || false,
+          isStackable: json.isStackable ?? true,
+          isReefer: json.isReefer || false,
+          temperature: json.temperature || '',
+          cargoValue: json.cargoValue || 0,
+          insuranceRequired: json.insuranceRequired || false
       });
+      get().updateLineItem('trigger', 'description', 'trigger');
   },
 
   deleteQuote: async (id) => {
-      if(!confirm("Are you sure you want to delete this quote?")) return;
-      
+      if(!confirm("Confirm delete?")) return;
       set({ isLoading: true });
-      const { error } = await supabase.from('quotes').delete().eq('id', id);
-      
-      if (error) {
-          useToast.getState().toast("Failed to delete quote.", "error");
-      } else {
-          useToast.getState().toast("Quote deleted successfully.", "info");
-          await get().fetchQuotes();
-      }
+      await supabase.from('quotes').delete().eq('id', id);
+      await get().fetchQuotes();
       set({ isLoading: false });
   },
 
-  createNewQuote: () => {
-    set({ ...DEFAULT_STATE, id: 'new', reference: `Q-24-${Math.floor(Math.random() * 10000)}` });
-  },
+  createNewQuote: () => set({ ...DEFAULT_STATE, id: 'new', reference: `Q-24-${Math.floor(Math.random() * 10000)}` }),
 
   duplicateQuote: () => {
     const current = get();
-    set({
-        ...current,
-        id: 'new',
-        reference: `${current.reference}-COPY`,
-        status: 'DRAFT'
-    });
-    useToast.getState().toast("Duplicated! Click Save to write to Cloud.", "info");
+    set({ ...current, id: 'new', reference: `${current.reference}-COPY`, status: 'DRAFT' });
+    useToast.getState().toast("Duplicated!", "info");
   }
-
 }));

@@ -1,61 +1,51 @@
-import { Page, Text, View, Document, StyleSheet, Image } from '@react-pdf/renderer';
+import { Page, Text, View, Document, StyleSheet } from '@react-pdf/renderer';
 import { QuoteLineItem, Incoterm, TransportMode } from '@/types/index';
 
 // --- STYLES ---
 const styles = StyleSheet.create({
-  page: { padding: 40, fontFamily: 'Helvetica', fontSize: 10, color: '#333', lineHeight: 1.5 },
+  page: { padding: 40, fontFamily: 'Helvetica', fontSize: 9, color: '#333', lineHeight: 1.4 },
   
   // Header
-  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20, borderBottom: '1px solid #e2e8f0', paddingBottom: 10 },
-  brandSection: { flexDirection: 'column' },
-  brandName: { fontSize: 20, fontWeight: 'bold', color: '#0f172a' },
-  brandSub: { fontSize: 8, color: '#64748b' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20, borderBottom: '1px solid #0f172a', paddingBottom: 15 },
+  logoText: { fontSize: 24, fontWeight: 'heavy', color: '#0f172a', textTransform: 'uppercase' },
+  subTitle: { fontSize: 8, color: '#64748b', marginTop: 2 },
   
-  metaSection: { textAlign: 'right' },
-  statusBadge: { fontSize: 9, color: '#64748b', textTransform: 'uppercase', marginTop: 4 },
+  quoteMeta: { alignItems: 'flex-end' },
+  quoteRef: { fontSize: 14, fontWeight: 'bold', color: '#0f172a' },
+  date: { fontSize: 9, color: '#64748b' },
 
-  // Info Grid
-  grid: { flexDirection: 'row', gap: 20, marginBottom: 30, backgroundColor: '#f8fafc', padding: 10, borderRadius: 4 },
-  col: { flex: 1 },
-  label: { fontSize: 8, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 2 },
-  value: { fontSize: 10, fontWeight: 'bold', color: '#1e293b' },
+  // Info Box
+  boxContainer: { flexDirection: 'row', marginBottom: 25, gap: 10 },
+  box: { flex: 1, backgroundColor: '#f8fafc', padding: 8, borderRadius: 2 },
+  boxLabel: { fontSize: 7, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 },
+  boxValue: { fontSize: 10, fontWeight: 'bold', color: '#1e293b' },
 
   // Table
-  table: { width: '100%', marginBottom: 20 },
-  row: { flexDirection: 'row', borderBottom: '1px solid #f1f5f9', paddingVertical: 8, alignItems: 'center' },
-  headerRow: { flexDirection: 'row', borderBottom: '2px solid #e2e8f0', paddingVertical: 8, backgroundColor: '#f1f5f9' },
+  table: { width: '100%', marginBottom: 10 },
   
-  // Columns
-  colDesc: { flex: 3, paddingLeft: 8 },
-  colMeta: { flex: 1, textAlign: 'center' },
-  colMoney: { flex: 1, textAlign: 'right', paddingRight: 8 },
+  // Section Header inside Table
+  sectionRow: { backgroundColor: '#e2e8f0', padding: 4, paddingLeft: 8, marginTop: 8 },
+  sectionText: { fontSize: 8, fontWeight: 'bold', color: '#475569', textTransform: 'uppercase' },
 
-  // Totals Area
-  footerSection: { flexDirection: 'row', marginTop: 10 },
-  notesArea: { flex: 2, paddingRight: 20 },
-  totalsArea: { flex: 1, backgroundColor: '#f8fafc', padding: 10, borderRadius: 4 },
+  // Standard Row
+  row: { flexDirection: 'row', borderBottom: '1px solid #f1f5f9', paddingVertical: 6, alignItems: 'center' },
+  headerRow: { flexDirection: 'row', borderBottom: '1px solid #0f172a', paddingVertical: 6, marginBottom: 4 },
   
+  colDesc: { flex: 4, paddingLeft: 8 },
+  colMeta: { flex: 1, textAlign: 'center' },
+  colMoney: { flex: 1.5, textAlign: 'right', paddingRight: 8 },
+
+  // Totals
+  totalsContainer: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 15 },
+  totalsBox: { width: '40%', backgroundColor: '#f8fafc', padding: 10, borderRadius: 2 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  totalLabel: { fontSize: 9, color: '#64748b' },
-  totalValue: { fontSize: 9, fontWeight: 'bold' },
-  grandTotal: { borderTop: '1px solid #e2e8f0', paddingTop: 6, marginTop: 6 },
-  grandLabel: { fontSize: 11, fontWeight: 'bold', color: '#0f172a' },
+  totalLabel: { color: '#64748b' },
+  totalValue: { fontWeight: 'bold', color: '#0f172a' },
+  grandTotal: { borderTop: '1px solid #cbd5e1', paddingTop: 6, marginTop: 4 },
   grandValue: { fontSize: 12, fontWeight: 'bold', color: '#2563eb' },
 
-  // Footer
-  legal: { marginTop: 'auto', borderTop: '1px solid #e2e8f0', paddingTop: 10, textAlign: 'center' },
-  disclaimer: { fontSize: 7, color: '#94a3b8', marginBottom: 2 }
+  footer: { position: 'absolute', bottom: 30, left: 40, right: 40, textAlign: 'center', fontSize: 7, color: '#94a3b8', borderTop: '1px solid #e2e8f0', paddingTop: 10 }
 });
-
-// --- HELPER LOGIC (Duplicated from Store to ensure PDF consistency) ---
-const getTaxRate = (rule: string) => {
-  switch (rule) {
-    case 'STD_20': return 0.20;
-    case 'ROAD_14': return 0.14;
-    case 'EXPORT_0_ART92': return 0.0;
-    default: return 0.20;
-  }
-};
 
 interface QuotePDFProps {
   reference: string;
@@ -65,126 +55,129 @@ interface QuotePDFProps {
   incoterm: Incoterm;
   mode: TransportMode;
   items: QuoteLineItem[];
-  // We pass pre-calculated totals to ensure UI matches PDF
+  // Financials
   totalHT: number;
   totalTax: number;
   totalTTC: number;
   currency: string;
   validityDate: string;
+  weight: number;
+  volume: number;
   exchangeRates: Record<string, number>;
-  marginBuffer: number;
+  marginBuffer: number; // <--- FIXED: Added missing prop
 }
 
 export const QuotePDF = ({ 
   reference, clientName, pol, pod, incoterm, mode, items, 
   totalHT, totalTax, totalTTC, currency, validityDate,
-  exchangeRates, marginBuffer
+  weight, volume, exchangeRates, marginBuffer
 }: QuotePDFProps) => {
+
+  // Helper to render sections
+  const renderSection = (title: string, sectionFilter: string) => {
+      const sectionItems = items.filter(i => i.section === sectionFilter);
+      if (sectionItems.length === 0) return null;
+
+      return (
+          <View>
+              <View style={styles.sectionRow}>
+                  <Text style={styles.sectionText}>{title}</Text>
+              </View>
+              {sectionItems.map((item, i) => {
+                  // Re-calc logic for PDF consistency
+                  const buyRate = exchangeRates[item.buyCurrency] || 1;
+                  const targetRate = exchangeRates[currency] || 1;
+                  // Apply margin buffer to base cost if needed, or stick to raw buyPrice
+                  // (Logic here depends on if you want to show cost or sell. Usually PDF shows Sell Price)
+                  const costInMAD = item.buyPrice * buyRate;
+                  
+                  let sellInMAD = 0;
+                  if (item.markupType === 'PERCENT') sellInMAD = costInMAD * (1 + (item.markupValue / 100));
+                  else sellInMAD = costInMAD + (item.markupValue * buyRate);
+
+                  const finalSell = currency === 'MAD' ? sellInMAD : sellInMAD / targetRate;
+
+                  return (
+                    <View key={i} style={styles.row}>
+                        <Text style={styles.colDesc}>{item.description}</Text>
+                        <Text style={styles.colMeta}>{item.vatRule === 'EXPORT_0_ART92' ? '0%' : '20%'}</Text>
+                        <Text style={styles.colMoney}>{finalSell.toFixed(2)}</Text>
+                    </View>
+                  );
+              })}
+          </View>
+      );
+  };
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         
-        {/* 1. Header */}
+        {/* Header */}
         <View style={styles.header}>
-          <View style={styles.brandSection}>
-            <Text style={styles.brandName}>ATLAS FLOW LOGISTICS</Text>
-            <Text style={styles.brandSub}>Casablanca, Morocco | Tax ID: 12345678</Text>
+          <View>
+            <Text style={styles.logoText}>Atlas Flow</Text>
+            <Text style={styles.subTitle}>Global Logistics & Freight Forwarding</Text>
           </View>
-          <View style={styles.metaSection}>
-            <Text style={styles.value}>Quote #{reference}</Text>
-            <Text style={styles.statusBadge}>Valid Until: {validityDate}</Text>
-          </View>
-        </View>
-
-        {/* 2. Logistics Context */}
-        <View style={styles.grid}>
-          <View style={styles.col}>
-            <Text style={styles.label}>Client</Text>
-            <Text style={styles.value}>{clientName}</Text>
-          </View>
-          <View style={styles.col}>
-            <Text style={styles.label}>Origin (POL)</Text>
-            <Text style={styles.value}>{pol || '---'}</Text>
-          </View>
-          <View style={styles.col}>
-            <Text style={styles.label}>Destination (POD)</Text>
-            <Text style={styles.value}>{pod || '---'}</Text>
-          </View>
-          <View style={styles.col}>
-            <Text style={styles.label}>Terms</Text>
-            <Text style={styles.value}>{mode} / {incoterm}</Text>
+          <View style={styles.quoteMeta}>
+            <Text style={styles.quoteRef}>QUOTE: {reference}</Text>
+            <Text style={styles.date}>Date: {new Date().toLocaleDateString()}</Text>
+            <Text style={styles.date}>Valid Until: {validityDate}</Text>
           </View>
         </View>
 
-        {/* 3. The Line Items */}
+        {/* Cargo Context */}
+        <View style={styles.boxContainer}>
+            <View style={styles.box}>
+                <Text style={styles.boxLabel}>Customer</Text>
+                <Text style={styles.boxValue}>{clientName}</Text>
+            </View>
+            <View style={styles.box}>
+                <Text style={styles.boxLabel}>Route</Text>
+                <Text style={styles.boxValue}>{pol}  to  {pod}</Text>
+            </View>
+            <View style={styles.box}>
+                <Text style={styles.boxLabel}>Shipment Details</Text>
+                <Text style={styles.boxValue}>{mode} | {incoterm}</Text>
+                <Text style={{fontSize: 8, marginTop: 2}}>{weight} kg | {volume} m3</Text>
+            </View>
+        </View>
+
+        {/* Line Items */}
         <View style={styles.table}>
-          {/* Header */}
-          <View style={styles.headerRow}>
-            <Text style={[styles.label, styles.colDesc]}>Description of Services</Text>
-            <Text style={[styles.label, styles.colMeta]}>VAT Rule</Text>
-            <Text style={[styles.label, styles.colMoney]}>Amount ({currency})</Text>
-          </View>
-
-          {/* Rows */}
-          {items.map((item, i) => {
-             // Re-calculate sell price for display consistency
-             const rate = exchangeRates[item.buyCurrency] || 1;
-             const bufferedRate = rate * marginBuffer;
-             const costInMAD = item.buyPrice * bufferedRate;
-             let sell = 0;
-             if (item.markupType === 'PERCENT') sell = costInMAD * (1 + (item.markupValue / 100));
-             else sell = costInMAD + item.markupValue;
-             
-             return (
-               <View key={i} style={styles.row}>
-                 <Text style={styles.colDesc}>{item.description || 'Service Charge'}</Text>
-                 <Text style={[styles.statusBadge, styles.colMeta]}>{item.vatRule.replace('_', ' ')}</Text>
-                 <Text style={styles.colMoney}>{sell.toFixed(2)}</Text>
-               </View>
-             );
-          })}
-        </View>
-
-        {/* 4. Financial Footer */}
-        <View style={styles.footerSection}>
-            <View style={styles.notesArea}>
-                <Text style={styles.label}>Terms & Conditions</Text>
-                <Text style={styles.disclaimer}>
-                    1. Rates are subject to space and equipment availability.
-                </Text>
-                <Text style={styles.disclaimer}>
-                    2. Payment terms: 30 Days from invoice date.
-                </Text>
-                <Text style={styles.disclaimer}>
-                    3. This quote does not include insurance unless specified.
-                </Text>
+            <View style={styles.headerRow}>
+                <Text style={styles.colDesc}>Description</Text>
+                <Text style={styles.colMeta}>VAT</Text>
+                <Text style={styles.colMoney}>Amount ({currency})</Text>
             </View>
 
-            <View style={styles.totalsArea}>
+            {renderSection("Origin Charges", "ORIGIN")}
+            {renderSection("Freight Charges", "FREIGHT")}
+            {renderSection("Destination Charges", "DESTINATION")}
+        </View>
+
+        {/* Totals */}
+        <View style={styles.totalsContainer}>
+            <View style={styles.totalsBox}>
                 <View style={styles.totalRow}>
-                    <Text style={styles.totalLabel}>Total Net (HT):</Text>
+                    <Text style={styles.totalLabel}>Subtotal (Net):</Text>
                     <Text style={styles.totalValue}>{totalHT.toFixed(2)} {currency}</Text>
                 </View>
                 <View style={styles.totalRow}>
-                    <Text style={styles.totalLabel}>Total VAT (TVA):</Text>
+                    <Text style={styles.totalLabel}>VAT:</Text>
                     <Text style={styles.totalValue}>{totalTax.toFixed(2)} {currency}</Text>
                 </View>
                 <View style={[styles.totalRow, styles.grandTotal]}>
-                    <Text style={styles.grandLabel}>Total TTC:</Text>
+                    <Text style={[styles.totalLabel, {fontWeight:'bold', color:'#0f172a'}]}>Total TTC:</Text>
                     <Text style={styles.grandValue}>{totalTTC.toFixed(2)} {currency}</Text>
                 </View>
             </View>
         </View>
 
-        {/* 5. Legal Footer */}
-        <View style={styles.legal}>
-            <Text style={styles.disclaimer}>
-                Atlas Flow Logistics SARL | RC: 12345 | ICE: 0011223344 | Patente: 889900
-            </Text>
-            <Text style={styles.disclaimer}>
-                Generated by Atlas Flow Platform on {new Date().toLocaleDateString()}
-            </Text>
+        {/* Footer */}
+        <View style={styles.footer}>
+            <Text>Terms and Conditions: Subject to equipment availability. Standard trading conditions apply.</Text>
+            <Text>Atlas Flow SARL | Casablanca, Morocco | www.atlasflow.com</Text>
         </View>
 
       </Page>
