@@ -5,6 +5,7 @@ import { QuoteHeader } from "./components/QuoteHeader";
 import { RouteSelector } from "./components/RouteSelector";
 import { CargoEngine } from "./components/CargoEngine";
 import { PricingTable } from "./components/PricingTable";
+import { ActivityFeed } from "./components/ActivityFeed";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { pdf } from '@react-pdf/renderer';
 import { QuotePDF } from './components/QuotePDF';
@@ -51,101 +52,104 @@ export default function QuoteWorkspace() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-slate-50/50 overflow-hidden font-sans">
+    <div className="h-screen flex flex-col bg-slate-100 overflow-hidden font-sans">
       
       {/* 1. TOP NAVIGATION */}
       <QuoteHeader />
 
-      {/* 2. COCKPIT GRID (The Main Stage) */}
-      <div className="flex-1 p-4 overflow-hidden">
-          <div className="grid grid-cols-12 gap-4 h-full">
-              
-              {/* LEFT COLUMN: Route & Context (25%) */}
-              <div className="col-span-3 flex flex-col h-full overflow-hidden gap-4">
-                  <div className="flex-none">
+      {/* 2. SPLIT LAYOUT: Operations (Top) / Collaboration (Bottom) */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+          
+          {/* TOP SECTION: OPERATIONS (65%) */}
+          <div className="h-[65%] p-6 pb-3 overflow-hidden">
+              <div className="grid grid-cols-12 gap-6 h-full">
+                  
+                  {/* LEFT: Route */}
+                  <div className="col-span-3 flex flex-col h-full overflow-hidden">
                       <RouteSelector />
                   </div>
-                  {/* Placeholder for future "Notes" or "Activity Log" if needed */}
-                  <div className="flex-1 bg-transparent"></div>
-              </div>
 
-              {/* MIDDLE COLUMN: Pricing Engine (50%) - The Core Work Area */}
-              <div className="col-span-6 flex flex-col h-full gap-4">
-                   <Card className="flex-1 shadow-sm border-slate-200 flex flex-col overflow-hidden bg-white">
-                      {/* Toolbar */}
-                      <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-white">
-                         <div className="flex items-center gap-2 font-bold text-slate-800 text-sm">
-                            <div className="p-1.5 bg-blue-50 text-blue-600 rounded">
-                                <Box className="h-4 w-4" />
-                            </div>
-                            <span>Commercial Offer</span>
-                         </div>
-                         <div className="flex gap-2">
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                                <MoreHorizontal className="h-4 w-4 text-slate-400" />
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={handleGeneratePDF} className="h-7 text-xs bg-white border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200">
-                                <FileOutput className="h-3 w-3 mr-2" /> PDF Preview
-                            </Button>
-                         </div>
-                      </div>
-                      
-                      {/* Scrollable Table Area */}
-                      <div className="flex-1 overflow-hidden relative">
-                          <PricingTable />
-                      </div>
-
-                      {/* Financial Footer (Fixed at bottom of card) */}
-                      <div className="h-20 border-t border-slate-100 flex z-10 bg-white">
-                         {/* Internal Margin (Hidden from Client) */}
-                         <div className="w-1/3 bg-slate-50 border-r border-slate-100 p-3 flex flex-col justify-center relative overflow-hidden group">
-                             <div className="flex items-center gap-2 mb-1">
-                                <Lock className="h-3 w-3 text-slate-400" />
-                                <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Internal Margin</span>
-                             </div>
-                             <div className="flex items-baseline gap-2">
-                                <span className={`text-xl font-bold font-mono ${parseFloat(marginPercent) < 15 ? 'text-amber-500' : 'text-emerald-600'}`}>
-                                    {totalMarginMAD.toFixed(2)}
-                                </span>
-                                <Badge variant="outline" className="h-4 px-1 text-[9px] border-slate-200 bg-white text-slate-500">
-                                    {marginPercent}%
-                                </Badge>
-                             </div>
-                         </div>
-
-                         {/* Client Totals */}
-                         <div className="flex-1 flex items-center justify-end px-6 gap-6">
-                             <div className="text-right">
-                                <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Total Net</div>
-                                <div className="text-base font-bold text-slate-700 font-mono">
-                                  {totalSellTarget.toFixed(2)} <span className="text-[10px] text-slate-400 font-sans">{quoteCurrency}</span>
+                  {/* MIDDLE: Pricing */}
+                  <div className="col-span-6 flex flex-col h-full">
+                       <Card className="flex-1 flex flex-col overflow-hidden bg-white shadow-md ring-1 ring-slate-200/60 border-none">
+                          {/* Toolbar */}
+                          <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+                             <div className="flex items-center gap-3">
+                                <div className="h-8 w-8 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
+                                    <Box className="h-4 w-4" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-slate-800 text-sm">Commercial Offer</h3>
+                                    <p className="text-[10px] text-slate-400 font-medium">Pricing & Margins</p>
                                 </div>
                              </div>
-                             <div className="w-px h-8 bg-slate-100"></div>
-                             <div className="text-right">
-                                <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">VAT</div>
-                                <div className="text-base font-bold text-slate-700 font-mono">
-                                  {totalTaxTarget.toFixed(2)} <span className="text-[10px] text-slate-400 font-sans">{quoteCurrency}</span>
-                                </div>
+                             <div className="flex gap-2">
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-slate-700">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={handleGeneratePDF} className="h-8 text-xs bg-white border-slate-200 text-slate-700 font-medium hover:bg-slate-50 hover:text-blue-700">
+                                    <FileOutput className="h-3.5 w-3.5 mr-2" /> Preview
+                                </Button>
                              </div>
-                             <div className="w-px h-8 bg-slate-100"></div>
-                             <div className="text-right">
-                                <div className="text-[9px] text-blue-600 uppercase font-bold tracking-wider">Payable</div>
-                                <div className="text-2xl font-bold text-blue-700 font-mono tracking-tight">
-                                  {totalTTCTarget.toFixed(2)} <span className="text-xs text-blue-400 font-sans font-medium">{quoteCurrency}</span>
-                                </div>
+                          </div>
+                          
+                          {/* Table */}
+                          <div className="flex-1 overflow-hidden relative bg-slate-50/30">
+                              <PricingTable />
+                          </div>
+
+                          {/* Footer */}
+                          <div className="h-20 border-t border-slate-100 flex z-10 bg-white shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)] shrink-0">
+                             {/* Internal Margin */}
+                             <div className="w-1/3 bg-slate-50/50 border-r border-slate-100 p-3 flex flex-col justify-center relative group">
+                                 <div className="flex items-center gap-2 mb-1">
+                                    <div className="p-1 rounded bg-slate-200/50"><Lock className="h-3 w-3 text-slate-500" /></div>
+                                    <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Margin</span>
+                                 </div>
+                                 <div className="flex items-baseline gap-3">
+                                    <span className={`text-xl font-bold font-mono tracking-tight ${parseFloat(marginPercent) < 15 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                        {totalMarginMAD.toFixed(2)}
+                                    </span>
+                                    <Badge variant="secondary" className={`h-5 px-1.5 text-[10px] border ${parseFloat(marginPercent) < 15 ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
+                                        {marginPercent}%
+                                    </Badge>
+                                 </div>
                              </div>
-                         </div>
-                      </div>
-                   </Card>
-              </div>
 
-              {/* RIGHT COLUMN: Cargo & Compliance (25%) */}
-              <div className="col-span-3 flex flex-col h-full overflow-hidden">
-                  <CargoEngine />
-              </div>
+                             {/* Totals */}
+                             <div className="flex-1 flex items-center justify-end px-6 gap-6">
+                                 <div className="text-right">
+                                    <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Total Net</div>
+                                    <div className="text-base font-bold text-slate-700 font-mono">
+                                      {totalSellTarget.toFixed(2)} <span className="text-[10px] text-slate-400 font-sans font-normal">{quoteCurrency}</span>
+                                    </div>
+                                 </div>
+                                 <div className="flex items-center gap-4 pl-4 border-l border-slate-100">
+                                     <div className="text-right">
+                                        <div className="text-[10px] text-blue-600 uppercase font-bold tracking-wider mb-0.5">Payable</div>
+                                        <div className="text-2xl font-extrabold text-blue-700 font-mono tracking-tight leading-none">
+                                          {totalTTCTarget.toFixed(2)} 
+                                        </div>
+                                     </div>
+                                     <span className="text-xs font-bold text-blue-200 self-end mb-1">{quoteCurrency}</span>
+                                 </div>
+                             </div>
+                          </div>
+                       </Card>
+                  </div>
 
+                  {/* RIGHT: Cargo */}
+                  <div className="col-span-3 flex flex-col h-full overflow-hidden">
+                      <CargoEngine />
+                  </div>
+              </div>
           </div>
+
+          {/* BOTTOM SECTION: COLLABORATION (35%) */}
+          <div className="h-[35%] p-6 pt-0 overflow-hidden">
+              <ActivityFeed />
+          </div>
+
       </div>
     </div>
   );

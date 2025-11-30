@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase'; 
-import { Quote, QuoteLineItem, TransportMode, Incoterm, Currency, Probability, PackagingType } from '@/types/index';
+import { Quote, QuoteLineItem, TransportMode, Incoterm, Currency, Probability, PackagingType, ActivityItem, ActivityCategory } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 
 // --- TYPES ---
@@ -61,9 +61,12 @@ interface QuoteState {
   // Financials
   items: QuoteLineItem[];
   exchangeRates: Record<string, number>;
-  marginBuffer: number; // <--- RESTORED FIELD
+  marginBuffer: number;
   quoteCurrency: Currency; 
   
+  // Activity Feed
+  activities: ActivityItem[];
+
   // Calculated Fields
   totalVolume: number;
   totalWeight: number;
@@ -94,6 +97,8 @@ interface QuoteState {
   addLineItem: (section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION') => void;
   updateLineItem: (id: string, field: keyof QuoteLineItem, value: any) => void;
   removeLineItem: (id: string) => void;
+  
+  addActivity: (text: string, category?: ActivityCategory, tone?: 'success' | 'neutral' | 'warning' | 'destructive') => void;
   
   fetchQuotes: () => Promise<void>;
   saveQuote: () => Promise<void>;
@@ -145,9 +150,14 @@ const DEFAULT_STATE = {
   chargeableWeight: 0,
   items: [],
   exchangeRates: { MAD: 1, USD: 9.80, EUR: 10.75, GBP: 12.50 }, 
-  marginBuffer: 1.02, // Default 2% Safety Buffer
+  marginBuffer: 1.02,
   quoteCurrency: 'MAD' as Currency,
   
+  activities: [
+      { id: '1', category: 'SYSTEM', text: 'Quote initialized', meta: 'System', tone: 'neutral', timestamp: new Date() },
+      { id: '2', category: 'ALERT', text: 'Pricing margin below 15%', meta: 'System Alert', tone: 'warning', timestamp: new Date() }
+  ] as ActivityItem[],
+
   totalCostMAD: 0,
   totalSellMAD: 0,
   totalMarginMAD: 0,
@@ -173,7 +183,10 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   ...DEFAULT_STATE,
 
   setIdentity: (field, value) => set((state) => ({ ...state, [field]: value })),
-  setStatus: (status) => set({ status }),
+  setStatus: (status) => {
+      set({ status });
+      get().addActivity(`Status changed to ${status}`, 'SYSTEM', 'success');
+  },
 
   setRoute: (pol, pod, mode) => {
     set({ pol, pod, mode });
@@ -288,6 +301,18 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     });
   },
 
+  addActivity: (text, category = 'NOTE', tone = 'neutral') => {
+      const newItem: ActivityItem = {
+          id: Math.random().toString(36).substring(7),
+          text,
+          tone,
+          category,
+          meta: category === 'NOTE' ? 'You' : 'System',
+          timestamp: new Date()
+      };
+      set((state) => ({ activities: [newItem, ...state.activities] }));
+  },
+
   fetchQuotes: async () => {
       set({ isLoading: true });
       const { data, error } = await supabase.from('quotes').select('*').order('created_at', { ascending: false });
@@ -309,10 +334,11 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           baseCurrency: 'MAD',
           quoteCurrency: row.data.quoteCurrency || 'MAD',
           exchangeRates: row.data.exchangeRates || DEFAULT_STATE.exchangeRates,
-          marginBuffer: row.data.marginBuffer || 1.02, // <--- Map from DB
+          marginBuffer: row.data.marginBuffer || 1.02,
           items: [],
           cargoRows: row.data.cargoRows || [],
           internalNotes: row.data.internalNotes || '',
+          activities: row.data.activities || [],
           cargoReadyDate: new Date(row.data.cargoReadyDate || new Date()),
           probability: row.data.probability || 'MEDIUM',
           packagingType: row.data.packagingType || 'PALLETS',
@@ -343,8 +369,9 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           items: state.items,
           goodsDescription: state.goodsDescription,
           internalNotes: state.internalNotes,
+          activities: state.activities, 
           exchangeRates: state.exchangeRates,
-          marginBuffer: state.marginBuffer, // <--- Save to DB
+          marginBuffer: state.marginBuffer, 
           quoteCurrency: state.quoteCurrency,
           salespersonName: state.salespersonName,
           salespersonId: state.salespersonId,
@@ -418,8 +445,9 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           items: json.items || [],
           goodsDescription: json.goodsDescription || '',
           internalNotes: json.internalNotes || '',
+          activities: json.activities || [],
           exchangeRates: json.exchangeRates || DEFAULT_STATE.exchangeRates,
-          marginBuffer: json.marginBuffer || DEFAULT_STATE.marginBuffer, // <--- Load
+          marginBuffer: json.marginBuffer || DEFAULT_STATE.marginBuffer, 
           quoteCurrency: json.quoteCurrency || 'MAD',
           salespersonName: json.salespersonName || 'Admin',
           probability: json.probability || 'MEDIUM',

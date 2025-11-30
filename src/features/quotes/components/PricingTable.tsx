@@ -8,20 +8,27 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, Plus, Plane, Ship, MapPin, Anchor } from "lucide-react";
+import { Trash2, Plus, MapPin, Ship, Anchor } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { QuoteLineItem, Currency } from "@/types/index";
 
 // Section Header Component
 const SectionHeader = ({ title, icon: Icon, onAdd }: { title: string, icon: any, onAdd: () => void }) => (
-    <TableRow className="bg-slate-100 hover:bg-slate-100">
-        <TableCell colSpan={8} className="py-2">
+    <TableRow className="hover:bg-transparent border-b border-slate-100">
+        <TableCell colSpan={8} className="py-4 pt-6">
             <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 font-semibold text-slate-700">
-                    <Icon className="h-4 w-4 text-slate-500" />
-                    {title}
+                <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-md bg-slate-100 text-slate-600">
+                        <Icon className="h-3.5 w-3.5" />
+                    </div>
+                    <span className="font-bold text-xs uppercase tracking-wider text-slate-700">{title}</span>
                 </div>
-                <Button size="sm" variant="ghost" onClick={onAdd} className="h-6 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50">
+                <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    onClick={onAdd} 
+                    className="h-6 text-[10px] font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 hover:text-blue-700 border border-blue-100 rounded-full px-3"
+                >
                     <Plus className="h-3 w-3 mr-1" /> Add Charge
                 </Button>
             </div>
@@ -65,11 +72,11 @@ export function PricingTable() {
       if (sectionItems.length === 0) return null;
 
       return sectionItems.map((item) => (
-        <TableRow key={item.id} className="group hover:bg-slate-50">
-            <TableCell className="w-[30%]">
+        <TableRow key={item.id} className="group border-b border-slate-50 hover:bg-white transition-colors">
+            <TableCell className="w-[30%] py-2 pl-4">
                 <Input 
                     disabled={isReadOnly}
-                    className="h-8 border-transparent hover:border-slate-200 focus:border-blue-500 bg-transparent font-medium" 
+                    className="h-9 border-transparent bg-transparent hover:bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 font-medium text-slate-700 transition-all placeholder:text-slate-300" 
                     value={item.description}
                     placeholder="Charge Name (e.g. THC)"
                     onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
@@ -77,22 +84,22 @@ export function PricingTable() {
             </TableCell>
 
             {/* COSTING SIDE (Private) */}
-            <TableCell className="w-[10%]">
+            <TableCell className="w-[10%] py-2">
                 <Input 
                     disabled={isReadOnly}
                     type="number"
-                    className="h-8 border-transparent hover:border-slate-200 text-right bg-transparent text-slate-500" 
+                    className="h-9 border-transparent bg-slate-50/50 hover:bg-slate-100 focus:bg-white text-right text-slate-600 font-mono text-xs" 
                     value={item.buyPrice}
                     onChange={(e) => updateLineItem(item.id, 'buyPrice', parseFloat(e.target.value) || 0)}
                 />
             </TableCell>
-            <TableCell className="w-[10%]">
+            <TableCell className="w-[10%] py-2">
                 <Select 
                     disabled={isReadOnly}
                     value={item.buyCurrency} 
                     onValueChange={(v) => updateLineItem(item.id, 'buyCurrency', v as Currency)}
                 >
-                    <SelectTrigger className="h-8 border-transparent bg-transparent text-xs text-slate-500">
+                    <SelectTrigger className="h-9 border-transparent bg-slate-50/50 hover:bg-slate-100 text-xs font-semibold text-slate-500">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -104,29 +111,31 @@ export function PricingTable() {
             </TableCell>
 
             {/* MARKUP */}
-            <TableCell className="w-[12%]">
+            <TableCell className="w-[12%] py-2">
                  <div className="flex items-center gap-1">
                     <Input 
                         disabled={isReadOnly}
                         type="number"
-                        className="h-8 w-16 border-transparent hover:border-slate-200 text-right bg-transparent text-green-600 font-medium" 
+                        className="h-9 w-20 border-transparent bg-emerald-50/50 hover:bg-emerald-50 focus:bg-white text-right text-emerald-700 font-bold font-mono text-xs" 
                         value={item.markupValue}
                         onChange={(e) => updateLineItem(item.id, 'markupValue', parseFloat(e.target.value) || 0)}
                     />
-                    <Badge variant="outline" className="text-[10px] h-5 px-1 bg-slate-50 text-slate-400">
-                        {item.markupType === 'PERCENT' ? '%' : 'Fix'}
+                    <Badge variant="outline" className="h-6 px-1.5 bg-white text-[9px] text-slate-400 border-slate-200 cursor-pointer hover:border-blue-300 hover:text-blue-500 transition-colors"
+                        onClick={() => !isReadOnly && updateLineItem(item.id, 'markupType', item.markupType === 'PERCENT' ? 'FIXED_AMOUNT' : 'PERCENT')}
+                    >
+                        {item.markupType === 'PERCENT' ? '%' : '$'}
                     </Badge>
                  </div>
             </TableCell>
 
             {/* SELLING SIDE (Public) */}
-            <TableCell className="w-[15%]">
+            <TableCell className="w-[15%] py-2">
                 <Select 
                     disabled={isReadOnly}
                     value={item.vatRule} 
                     onValueChange={(v) => updateLineItem(item.id, 'vatRule', v)}
                 >
-                    <SelectTrigger className="h-8 border-transparent bg-transparent text-xs">
+                    <SelectTrigger className="h-9 border-transparent bg-slate-50 hover:bg-slate-100 text-xs text-slate-600">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -137,16 +146,20 @@ export function PricingTable() {
                 </Select>
             </TableCell>
 
-            <TableCell className="w-[15%] text-right font-mono font-bold text-slate-800 bg-slate-50/50">
-                {calculateSellDisplay(item)} <span className="text-[10px] text-slate-400 font-normal">{quoteCurrency}</span>
+            <TableCell className="w-[15%] py-2 text-right pr-6">
+                <div className="flex flex-col items-end">
+                    <span className="font-mono font-bold text-slate-800">
+                        {calculateSellDisplay(item)}
+                    </span>
+                </div>
             </TableCell>
 
-            <TableCell className="w-[5%]">
+            <TableCell className="w-[5%] py-2">
                 {!isReadOnly && (
                     <Button 
                         variant="ghost" 
                         size="icon" 
-                        className="h-8 w-8 opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600"
+                        className="h-8 w-8 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"
                         onClick={() => removeLineItem(item.id)}
                     >
                         <Trash2 className="h-4 w-4" />
@@ -161,20 +174,20 @@ export function PricingTable() {
     <div className="flex-1 flex flex-col overflow-hidden bg-white">
       <div className="flex-1 overflow-auto">
         <Table>
-            <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
-                <TableRow>
-                    <TableHead className="text-xs uppercase tracking-wider">Item Description</TableHead>
-                    <TableHead className="text-xs uppercase tracking-wider text-right">Cost</TableHead>
-                    <TableHead className="text-xs uppercase tracking-wider">Curr</TableHead>
-                    <TableHead className="text-xs uppercase tracking-wider text-right">Margin</TableHead>
-                    <TableHead className="text-xs uppercase tracking-wider">VAT</TableHead>
-                    <TableHead className="text-xs uppercase tracking-wider text-right text-blue-700">Sell Price</TableHead>
-                    <TableHead></TableHead>
+            <TableHeader className="bg-white sticky top-0 z-10 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                <TableRow className="hover:bg-transparent border-none">
+                    <TableHead className="h-10 text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-4">Description</TableHead>
+                    <TableHead className="h-10 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Cost</TableHead>
+                    <TableHead className="h-10 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Curr</TableHead>
+                    <TableHead className="h-10 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Margin</TableHead>
+                    <TableHead className="h-10 text-[10px] font-bold text-slate-400 uppercase tracking-widest">VAT</TableHead>
+                    <TableHead className="h-10 text-[10px] font-bold text-blue-600 uppercase tracking-widest text-right pr-6">Sell Price</TableHead>
+                    <TableHead className="h-10 w-10"></TableHead>
                 </TableRow>
             </TableHeader>
-            <TableBody>
+            <TableBody className="px-2">
                 {/* ORIGIN SECTION */}
-                <SectionHeader title="Origin Charges (Pre-Carriage / POL)" icon={MapPin} onAdd={() => addLineItem('ORIGIN')} />
+                <SectionHeader title="Origin Charges" icon={MapPin} onAdd={() => addLineItem('ORIGIN')} />
                 {renderRows('ORIGIN')}
 
                 {/* FREIGHT SECTION */}
@@ -182,13 +195,16 @@ export function PricingTable() {
                 {renderRows('FREIGHT')}
 
                 {/* DESTINATION SECTION */}
-                <SectionHeader title="Destination Charges (POD / Delivery)" icon={Anchor} onAdd={() => addLineItem('DESTINATION')} />
+                <SectionHeader title="Destination Charges" icon={Anchor} onAdd={() => addLineItem('DESTINATION')} />
                 {renderRows('DESTINATION')}
                 
                 {items.length === 0 && (
                     <TableRow>
-                        <TableCell colSpan={8} className="h-24 text-center text-slate-400">
-                            Click "Add Charge" above to build your quote.
+                        <TableCell colSpan={8} className="h-32 text-center">
+                            <div className="flex flex-col items-center justify-center text-slate-400 gap-2">
+                                <Ship className="h-8 w-8 opacity-20" />
+                                <span className="text-sm">No charges added yet. Start by adding a section above.</span>
+                            </div>
                         </TableCell>
                     </TableRow>
                 )}

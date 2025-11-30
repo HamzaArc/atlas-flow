@@ -6,6 +6,17 @@ export type Probability = 'LOW' | 'MEDIUM' | 'HIGH';
 export type PackagingType = 'PALLETS' | 'CARTONS' | 'CRATES' | 'DRUMS' | 'LOOSE';
 
 // --- 2. QUOTE ENGINE MODELS ---
+export type ActivityCategory = 'NOTE' | 'SYSTEM' | 'EMAIL' | 'ALERT';
+
+export interface ActivityItem {
+  id: string;
+  category: ActivityCategory; // New Smart Category
+  tone?: "success" | "neutral" | "warning" | "destructive";
+  text: string;
+  meta: string; 
+  timestamp: Date;
+}
+
 export interface Quote {
   id: string;
   reference: string;
@@ -19,7 +30,7 @@ export interface Quote {
   salespersonName: string;
   
   // Logistics Timeline
-  validityDate: Date; // RE-ADDED
+  validityDate: Date;
   cargoReadyDate: Date;
   requestedDepartureDate?: Date;
   estimatedDepartureDate?: Date;
@@ -32,22 +43,23 @@ export interface Quote {
   pol: string;
   pod: string;
   
-  // Cargo Details (Enhanced)
+  // Cargo Details
   cargoRows: any[];
   goodsDescription: string;
   hsCode?: string;
-  packagingType: PackagingType; // New
+  packagingType: PackagingType;
   isHazmat: boolean;
   isStackable: boolean;
-  isReefer: boolean; // New (Temp Control)
-  temperature?: string; // New (e.g. "-18C")
-  cargoValue?: number; // New (For Insurance)
-  insuranceRequired: boolean; // New
+  isReefer: boolean;
+  temperature?: string;
+  cargoValue?: number;
+  insuranceRequired: boolean;
   
   // Business Intelligence
   probability: Probability;
   competitorInfo?: string;
   internalNotes: string;
+  activities: ActivityItem[];
   
   // Financials
   baseCurrency: Currency; 
