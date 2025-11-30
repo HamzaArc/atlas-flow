@@ -6,16 +6,17 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useQuoteStore } from "@/store/useQuoteStore";
-import { Package, Plus, Trash2, Box } from "lucide-react";
+import { Package, Plus, Trash2, AlertCircle } from "lucide-react";
 import { Switch } from "@/components/ui/switch"; 
 import { PackagingType } from "@/types/index";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 export function CargoEngine() {
   const { 
       cargoRows, updateCargo, totalVolume, totalWeight, chargeableWeight,
       hsCode, isHazmat, isStackable, isReefer, temperature, packagingType,
-      setIdentity
+      setIdentity, mode
   } = useQuoteStore();
 
   const addRow = () => {
@@ -31,12 +32,23 @@ export function CargoEngine() {
     updateCargo(newRows);
   };
 
+  // Logic: Highlight this card if mode relies on exact dimensions
+  const isCritical = mode === 'AIR' || mode === 'SEA_LCL';
+
   return (
-    <Card className="p-5 bg-white shadow-sm ring-1 ring-slate-100 h-full flex flex-col">
+    <Card className={cn(
+        "p-5 h-full flex flex-col transition-all duration-300",
+        isCritical 
+            ? "bg-amber-50/40 ring-2 ring-amber-400/50 shadow-md border-amber-200" 
+            : "bg-white shadow-sm ring-1 ring-slate-100"
+    )}>
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
-          <div className="p-1.5 bg-blue-50 text-blue-600 rounded-md"><Package className="h-4 w-4" /></div>
+          <div className={cn("p-1.5 rounded-md transition-colors", isCritical ? "bg-amber-100 text-amber-700" : "bg-blue-50 text-blue-600")}>
+              <Package className="h-4 w-4" />
+          </div>
           <span>Cargo Specs</span>
+          {isCritical && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold uppercase">Mandatory</span>}
         </div>
         <div className="flex gap-2">
              <Badge variant="secondary" className="text-[10px] h-6 px-2 bg-slate-100 text-slate-600 font-mono border-slate-200">
@@ -133,9 +145,14 @@ export function CargoEngine() {
 
       {/* 4. Chargeable Weight Footer */}
       <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center">
-          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Chargeable Weight</span>
+          <div className="flex items-center gap-1.5">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Chargeable Weight</span>
+              {isCritical && <AlertCircle className="h-3 w-3 text-amber-500" />}
+          </div>
           <div className="flex items-baseline gap-1">
-              <span className="font-mono font-bold text-xl text-blue-600">{chargeableWeight}</span>
+              <span className={cn("font-mono font-bold text-xl", isCritical ? "text-amber-600" : "text-blue-600")}>
+                  {chargeableWeight}
+              </span>
               <span className="text-xs text-slate-400 font-medium">kg</span>
           </div>
       </div>

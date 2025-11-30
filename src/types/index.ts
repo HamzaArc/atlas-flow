@@ -1,5 +1,9 @@
 // --- 1. CORE LOGISTICS ENUMS ---
-export type Incoterm = 'EXW' | 'FOB' | 'CFR' | 'CIF' | 'DDP';
+// Expanded to full Incoterms 2020 support for validation logic
+export type Incoterm = 
+  | 'EXW' | 'FCA' | 'CPT' | 'CIP' | 'DAP' | 'DPU' | 'DDP' // Any Mode
+  | 'FAS' | 'FOB' | 'CFR' | 'CIF';                        // Sea & Inland Waterway Only
+
 export type TransportMode = 'SEA_FCL' | 'SEA_LCL' | 'AIR' | 'ROAD';
 export type Currency = 'MAD' | 'USD' | 'EUR' | 'GBP';
 export type Probability = 'LOW' | 'MEDIUM' | 'HIGH';
@@ -45,13 +49,18 @@ export interface Quote {
   requestedDepartureDate?: Date;
   estimatedDepartureDate?: Date;
   estimatedArrivalDate?: Date;
-  transitTime?: number;
+  transitTime?: number; // Estimated transit in days
+  freeTime?: number;    // Detention/Demurrage Franchise (Days)
   
-  // Logistics Route
+  // Logistics Route & Equipment
   incoterm: Incoterm;
   mode: TransportMode;
-  pol: string;
-  pod: string;
+  pol: string; // Port of Loading or Airport of Departure
+  pod: string; // Port of Discharge or Airport of Destination
+  placeOfLoading?: string;  // Physical address (EXW)
+  placeOfDelivery?: string; // Physical address (DAP/DDP)
+  equipmentType?: string;   // 20DV, 40HC, FTL Mega, etc.
+  containerCount: number;   // Number of units
   
   // Cargo Details
   cargoRows: any[];
@@ -77,7 +86,7 @@ export interface Quote {
   exchangeRates: Record<string, number>; 
   items: QuoteLineItem[];
   
-  // KPI Data (Added for Dashboard)
+  // KPI Data
   totalTTC: number; 
   
   // Workflow Engine

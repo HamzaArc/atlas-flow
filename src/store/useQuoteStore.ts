@@ -39,7 +39,8 @@ interface QuoteState {
   requestedDepartureDate: string;
   estimatedDepartureDate: string;
   estimatedArrivalDate: string;
-  transitTime: number;
+  transitTime: number; // Days
+  freeTime: number;    // Days (Franchise)
   probability: Probability;
   competitorInfo: string;
   
@@ -55,10 +56,16 @@ interface QuoteState {
   insuranceRequired: boolean;
   internalNotes: string;
 
+  // Route & Equipment (Refactored)
+  mode: TransportMode;
+  incoterm: Incoterm;
   pol: string;
   pod: string;
-  incoterm: Incoterm;
-  mode: TransportMode;
+  placeOfLoading: string;
+  placeOfDelivery: string;
+  equipmentType: string;
+  containerCount: number;
+
   cargoRows: CargoRow[];
   
   // Financials
@@ -93,10 +100,14 @@ interface QuoteState {
   // --- ACTIONS ---
   setIdentity: (field: string, value: any) => void;
   setStatus: (status: QuoteState['status']) => void;
-  setRoute: (pol: string, pod: string, mode: TransportMode) => void;
-  setIncoterm: (incoterm: Incoterm) => void;
-  updateCargo: (rows: CargoRow[]) => void;
   
+  // Reactive Logistics Setters
+  setMode: (mode: TransportMode) => void; 
+  setIncoterm: (incoterm: Incoterm) => void;
+  setRouteLocations: (field: 'pol' | 'pod' | 'placeOfLoading' | 'placeOfDelivery', value: string) => void;
+  setEquipment: (type: string, count: number) => void;
+
+  updateCargo: (rows: CargoRow[]) => void;
   setExchangeRate: (currency: string, rate: number) => void;
   setQuoteCurrency: (currency: Currency) => void;
   
@@ -138,6 +149,7 @@ const DEFAULT_STATE = {
   estimatedArrivalDate: '',
   
   transitTime: 0,
+  freeTime: 0,
   probability: 'MEDIUM' as Probability,
   competitorInfo: '',
 
@@ -152,10 +164,16 @@ const DEFAULT_STATE = {
   insuranceRequired: false,
   internalNotes: '',
   
+  // Default to clean state
+  mode: 'SEA_LCL' as TransportMode,
+  incoterm: 'FOB' as Incoterm,
   pol: 'CASABLANCA (MAP)',
   pod: 'SHANGHAI (CN)',
-  incoterm: 'FOB' as Incoterm,
-  mode: 'SEA_LCL' as TransportMode,
+  placeOfLoading: '',
+  placeOfDelivery: '',
+  equipmentType: '',
+  containerCount: 1,
+
   cargoRows: [{ id: '1', qty: 1, length: 0, width: 0, height: 0, weight: 0 }],
   
   totalVolume: 0,
@@ -200,15 +218,47 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   setStatus: async (status) => {
       set({ status });
       get().addActivity(`Status manually changed to ${status}`, 'SYSTEM', 'neutral');
-      await get().saveQuote(); // AUTO-SAVE TRIGGER
+      await get().saveQuote(); 
   },
 
-  setRoute: (pol, pod, mode) => {
-    set({ pol, pod, mode });
-    get().updateCargo(get().cargoRows);
+  // --- STRICT LOGISTICS SETTERS ---
+  
+  setMode: (mode) => {
+      // RESET LOGIC: Enforce a clean slate when mode changes
+      set({ 
+          mode,
+          incoterm: mode === 'AIR' ? 'FCA' : 'FOB', // Default to mode-appropriate incoterm
+          equipmentType: '', // Reset equipment
+          containerCount: 1,
+          freeTime: 0, // Always reset free time on mode change (user must re-enter if applicable)
+          placeOfLoading: '',
+          placeOfDelivery: ''
+      });
+      // Recalculate chargeable weight based on new mode factor
+      get().updateCargo(get().cargoRows);
   },
 
-  setIncoterm: (incoterm) => set({ incoterm }),
+  setIncoterm: (incoterm) => {
+      // RESET LOGIC: Clear addresses if they aren't required by the term
+      const isExw = incoterm === 'EXW';
+      const isDoorDelivery = ['DAP', 'DPU', 'DDP'].includes(incoterm);
+      
+      set({ 
+          incoterm,
+          placeOfLoading: isExw ? get().placeOfLoading : '', 
+          placeOfDelivery: isDoorDelivery ? get().placeOfDelivery : '' 
+      });
+  },
+
+  setRouteLocations: (field, value) => {
+      set((state) => ({ ...state, [field]: value }));
+  },
+
+  setEquipment: (type, count) => {
+      set({ equipmentType: type, containerCount: count });
+  },
+
+  // ------------------------------
 
   setExchangeRate: (currency, rate) => {
     const newRates = { ...get().exchangeRates, [currency]: rate };
@@ -232,10 +282,10 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     });
     
     let chargeable = 0;
-    if (mode === 'AIR') chargeable = Math.max(weight, (vol * 1000000) / 6000);
-    else if (mode === 'SEA_LCL') chargeable = Math.max(weight, vol * 1000);
-    else if (mode === 'ROAD') chargeable = Math.max(weight, vol * 333);
-    else chargeable = weight;
+    if (mode === 'AIR') chargeable = Math.max(weight, (vol * 1000000) / 6000); // 1:6 Ratio
+    else if (mode === 'SEA_LCL') chargeable = Math.max(weight, vol * 1000); // 1:1 Ratio
+    else if (mode === 'ROAD') chargeable = Math.max(weight, vol * 333); // 1:3 Ratio
+    else chargeable = weight; // FCL
     
     set({
       cargoRows: rows,
@@ -335,7 +385,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     const totalSellTarget = quoteCurrency === 'MAD' ? totalSellMAD : totalSellMAD / targetRate;
     const totalTaxTarget = quoteCurrency === 'MAD' ? totalTaxMAD : totalTaxMAD / targetRate;
 
-    // --- SMART POLICY ENGINE ---
     const totalMarginMAD = totalSellMAD - totalCostMAD;
     const marginPercent = totalSellMAD > 0 ? (totalMarginMAD / totalSellMAD) * 100 : 0;
     
@@ -368,7 +417,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       set((state) => ({ activities: [newItem, ...state.activities] }));
   },
 
-  // --- WORKFLOW ACTIONS WITH AUTO-SAVE ---
+  // --- WORKFLOW ACTIONS ---
   
   attemptSubmission: async () => {
       const { approval } = get();
@@ -377,7 +426,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       } else {
           set({ status: 'SENT' });
           get().addActivity('Quote sent to client', 'SYSTEM', 'success');
-          await get().saveQuote(); // AUTO-SAVE
+          await get().saveQuote(); 
           useToast.getState().toast("Quote marked as SENT.", "success");
       }
   },
@@ -393,7 +442,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           }
       });
       get().addActivity(`Requested approval: ${approval.reason}`, 'APPROVAL', 'warning');
-      await get().saveQuote(); // AUTO-SAVE
+      await get().saveQuote(); 
       useToast.getState().toast("Submitted for Manager Approval", "success");
   },
 
@@ -409,7 +458,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           }
       });
       get().addActivity(`Manager approved quote.${comment ? ` Note: ${comment}` : ''}`, 'APPROVAL', 'success');
-      await get().saveQuote(); // AUTO-SAVE
+      await get().saveQuote(); 
       useToast.getState().toast("Quote Approved & Validated", "success");
   },
 
@@ -419,7 +468,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           approval: { ...get().approval, rejectionReason: reason }
       });
       get().addActivity(`Approval rejected: ${reason}`, 'APPROVAL', 'destructive');
-      await get().saveQuote(); // AUTO-SAVE
+      await get().saveQuote(); 
       useToast.getState().toast("Quote Rejected and reset to Draft", "info");
   },
 
@@ -436,10 +485,18 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           status: row.status,
           clientName: row.client_name,
           validityDate: new Date(row.validity_date),
+          
           pol: row.pol,
           pod: row.pod,
           mode: row.data.mode || 'SEA_LCL',
           incoterm: row.data.incoterm || 'FOB',
+          placeOfLoading: row.data.placeOfLoading || '',
+          placeOfDelivery: row.data.placeOfDelivery || '',
+          equipmentType: row.data.equipmentType || '',
+          containerCount: row.data.containerCount || 1,
+          transitTime: row.data.transitTime || 0,
+          freeTime: row.data.freeTime || 0,
+
           clientId: '', 
           salespersonId: row.data.salespersonId || '',
           salespersonName: row.data.salespersonName || 'Admin',
@@ -463,7 +520,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           goodsDescription: row.data.goodsDescription || '',
           hsCode: row.data.hsCode || '',
           approval: row.data.approval || { requiresApproval: false, reason: null },
-          totalTTC: row.total_ttc || 0, // MAP THE KPI FIELD
+          totalTTC: row.total_ttc || 0,
       }));
 
       set({ quotes: mappedQuotes, isLoading: false });
@@ -472,13 +529,22 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   saveQuote: async () => {
       const state = get();
       if (!state.clientName) { useToast.getState().toast("Missing Client Name.", "error"); return; }
-      if (state.items.length === 0) { useToast.getState().toast("Please add at least one charge.", "error"); return; }
-
+      
       set({ isLoading: true });
       
       const jsonPayload = {
+          // Logistics Fields
           mode: state.mode,
           incoterm: state.incoterm,
+          pol: state.pol,
+          pod: state.pod,
+          placeOfLoading: state.placeOfLoading,
+          placeOfDelivery: state.placeOfDelivery,
+          equipmentType: state.equipmentType,
+          containerCount: state.containerCount,
+          transitTime: state.transitTime,
+          freeTime: state.freeTime,
+
           cargoRows: state.cargoRows,
           items: state.items,
           goodsDescription: state.goodsDescription,
@@ -494,7 +560,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           requestedDepartureDate: state.requestedDepartureDate,
           estimatedDepartureDate: state.estimatedDepartureDate,
           estimatedArrivalDate: state.estimatedArrivalDate,
-          transitTime: state.transitTime,
           competitorInfo: state.competitorInfo,
           customerReference: state.customerReference,
           hsCode: state.hsCode,
@@ -530,9 +595,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           }
           await get().fetchQuotes();
           set({ isLoading: false });
-          // Only show toast if explicitly saving manually (not via auto-save trigger), 
-          // or we can leave it to confirm the status change action.
-          // For now, we leave it to provide feedback.
       } catch (error: any) {
           console.error(error);
           set({ isLoading: false });
@@ -552,12 +614,19 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           reference: data.reference,
           status: data.status,
           clientName: data.client_name,
-          pol: data.pol,
-          pod: data.pod,
           validityDate: data.validity_date,
           
-          mode: json.mode,
-          incoterm: json.incoterm,
+          mode: json.mode || 'SEA_LCL',
+          incoterm: json.incoterm || 'FOB',
+          pol: json.pol || data.pol,
+          pod: json.pod || data.pod,
+          placeOfLoading: json.placeOfLoading || '',
+          placeOfDelivery: json.placeOfDelivery || '',
+          equipmentType: json.equipmentType || '',
+          containerCount: json.containerCount || 1,
+          transitTime: json.transitTime || 0,
+          freeTime: json.freeTime || 0,
+
           cargoRows: json.cargoRows || [],
           items: json.items || [],
           goodsDescription: json.goodsDescription || '',
@@ -573,7 +642,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           requestedDepartureDate: json.requestedDepartureDate || '',
           estimatedDepartureDate: json.estimatedDepartureDate || '',
           estimatedArrivalDate: json.estimatedArrivalDate || '',
-          transitTime: json.transitTime || 0,
           competitorInfo: json.competitorInfo || '',
           hsCode: json.hsCode || '',
           packagingType: json.packagingType || 'PALLETS',
