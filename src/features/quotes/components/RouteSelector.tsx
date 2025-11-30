@@ -17,6 +17,8 @@ import {
   Anchor,
   Calendar,
   Map as MapIcon,
+  ArrowRight,
+  MapPin,
 } from "lucide-react";
 import { TransportMode, Incoterm } from "@/types/index";
 
@@ -70,18 +72,11 @@ function inferHub(pol: string, pod: string, mode: TransportMode): string | null 
 
   if (sea && isEUorNA(pol) && isAsia(pod)) return "SUEZ / MED MAINLINE";
   if (sea && isAsia(pol) && isEUorNA(pod)) return "SUEZ / MED MAINLINE";
-  if (sea && isEUorNA(pol) && isSouthAmerica(pod)) return "ATLANTIC MAINLINE";
-  if (sea && isSouthAmerica(pol) && isEUorNA(pod)) return "ATLANTIC MAINLINE";
-  if (air && isEUorNA(pol) && isAsia(pod)) return "MIDDLE EAST HUB";
-  if (air && isAsia(pol) && isEUorNA(pod)) return "MIDDLE EAST HUB";
+  if (sea && isEUorNA(pol) && isSouthAmerica(pod)) return "ATLANTIC";
+  if (sea && isSouthAmerica(pol) && isEUorNA(pod)) return "ATLANTIC";
+  if (air && isEUorNA(pol) && isAsia(pod)) return "DXB HUB";
+  if (air && isAsia(pol) && isEUorNA(pod)) return "DXB HUB";
   return null;
-}
-
-function formatShortDate(iso?: string | null): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 }
 
 function computeEtaFromTransit(requestedDepartureDate: string | null, transitTime: number): string | null {
@@ -104,17 +99,17 @@ const WorldMap = ({ pol, pod, mode, transitTime, requestedDepartureDate, estimat
   const cy = Math.min(start.y, end.y) - arcHeight;
   const pathD = `M${start.x},${start.y} Q${cx},${cy} ${end.x},${end.y}`;
   const routeColor = mode === "AIR" ? "#fbbf24" : mode === "ROAD" ? "#22c55e" : "#3b82f6";
-  const distanceKm = Math.round(dist * 0.5);
+  
   const hub = inferHub(pol, pod, mode);
-  const etdShort = formatShortDate(requestedDepartureDate);
   const etaIso = estimatedArrivalDate || computeEtaFromTransit(requestedDepartureDate, transitTime);
-  const etaShort = formatShortDate(etaIso);
   const effectiveTransit = transitTime || (etaIso && requestedDepartureDate ? Math.round((new Date(etaIso).getTime() - new Date(requestedDepartureDate).getTime()) / (1000 * 60 * 60 * 24)) : null);
 
   return (
-    // REMOVED SHADOW HERE
-    <div className="relative w-full h-64 rounded-xl border border-slate-800 bg-slate-950 overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.18),_transparent_60%),radial-gradient(circle_at_bottom,_rgba(15,23,42,0.95),_transparent_65%)]" />
+    <div className="relative w-full h-64 rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-inner group">
+      {/* Background Gradient */}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.15),_transparent_70%),radial-gradient(circle_at_bottom,_rgba(15,23,42,0.95),_transparent_65%)]" />
+      
+      {/* MAP SVG */}
       <svg viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid slice">
         <defs>
           <linearGradient id="darkenOverlay" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -123,82 +118,115 @@ const WorldMap = ({ pol, pod, mode, transitTime, requestedDepartureDate, estimat
           </linearGradient>
           <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor={routeColor} stopOpacity="0" />
-            <stop offset="35%" stopColor={routeColor} stopOpacity="0.9" />
-            <stop offset="65%" stopColor={routeColor} stopOpacity="0.9" />
+            <stop offset="35%" stopColor={routeColor} stopOpacity="0.8" />
+            <stop offset="65%" stopColor={routeColor} stopOpacity="0.8" />
             <stop offset="100%" stopColor={routeColor} stopOpacity="0" />
           </linearGradient>
           <filter id="softGlow">
-            <feGaussianBlur stdDeviation="2.5" result="blur" />
+            <feGaussianBlur stdDeviation="3" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
         </defs>
+        
+        {/* Map Image */}
         <image x="0" y="0" width={MAP_WIDTH} height={MAP_HEIGHT} preserveAspectRatio="xMidYMid slice" xlinkHref={WORLD_MAP_URL} />
         <rect x="0" y="0" width={MAP_WIDTH} height={MAP_HEIGHT} fill="url(#darkenOverlay)" />
-        <g opacity={0.25}>
+        
+        {/* Subtle Grid Lines */}
+        <g opacity={0.1}>
           {Array.from({ length: 13 }).map((_, i) => (
-            <line key={`v-${i}`} x1={(MAP_WIDTH / 12) * i} y1={0} x2={(MAP_WIDTH / 12) * i} y2={MAP_HEIGHT} stroke="#1e293b" strokeWidth="0.5" />
+            <line key={`v-${i}`} x1={(MAP_WIDTH / 12) * i} y1={0} x2={(MAP_WIDTH / 12) * i} y2={MAP_HEIGHT} stroke="#cbd5e1" strokeWidth="0.5" />
           ))}
           {Array.from({ length: 7 }).map((_, i) => (
-            <line key={`h-${i}`} x1={0} y1={(MAP_HEIGHT / 6) * i} x2={MAP_WIDTH} y2={(MAP_HEIGHT / 6) * i} stroke="#1e293b" strokeWidth="0.5" />
+            <line key={`h-${i}`} x1={0} y1={(MAP_HEIGHT / 6) * i} x2={MAP_WIDTH} y2={(MAP_HEIGHT / 6) * i} stroke="#cbd5e1" strokeWidth="0.5" />
           ))}
         </g>
+
+        {/* Route Path */}
         <g filter="url(#softGlow)">
-          <path d={pathD} fill="none" stroke="url(#routeGradient)" strokeWidth="2" strokeLinecap="round" strokeDasharray="6 8">
-            <animate attributeName="stroke-dashoffset" from="40" to="0" dur="3s" repeatCount="indefinite" />
+          <path d={pathD} fill="none" stroke="url(#routeGradient)" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 8">
+            <animate attributeName="stroke-dashoffset" from="28" to="0" dur="2.5s" repeatCount="indefinite" />
           </path>
-          <circle r="4" fill="#f9fafb">
-            <animateMotion dur="4.2s" repeatCount="indefinite" path={pathD} rotate="auto" />
+          <circle r="3.5" fill="#f8fafc">
+            <animateMotion dur="2.5s" repeatCount="indefinite" path={pathD} rotate="auto" />
           </circle>
+          
+          {/* POL Point & Label */}
           <g>
-            <circle cx={start.x} cy={start.y} r="4" fill={routeColor} />
-            <circle cx={start.x} cy={start.y} r="10" fill="none" stroke={routeColor} strokeWidth="1" opacity="0.6">
-              <animate attributeName="r" from="6" to="12" dur="1.4s" repeatCount="indefinite" />
-              <animate attributeName="opacity" from="0.9" to="0" dur="1.4s" repeatCount="indefinite" />
+            <circle cx={start.x} cy={start.y} r="3" fill="#3b82f6" />
+            <circle cx={start.x} cy={start.y} r="8" fill="none" stroke="#3b82f6" strokeWidth="1" opacity="0.6">
+              <animate attributeName="r" from="4" to="12" dur="2s" repeatCount="indefinite" />
+              <animate attributeName="opacity" from="0.8" to="0" dur="2s" repeatCount="indefinite" />
             </circle>
-            <text x={start.x} y={start.y - 10} fontSize="10" fill="#e5e7eb" textAnchor="middle" fontWeight="600">POL</text>
+            {/* The identifier POL on the map */}
+            <text x={start.x} y={start.y - 12} fontSize="11" fill="#fff" textAnchor="middle" fontWeight="bold" style={{textShadow: '0 2px 4px rgba(0,0,0,0.8)'}}>POL</text>
           </g>
+
+          {/* POD Point & Label */}
           <g>
-            <circle cx={end.x} cy={end.y} r="4" fill="#22c55e" />
-            <circle cx={end.x} cy={end.y} r="10" fill="none" stroke="#22c55e" strokeWidth="1" opacity="0.6">
-              <animate attributeName="r" from="6" to="12" dur="1.4s" repeatCount="indefinite" />
-              <animate attributeName="opacity" from="0.9" to="0" dur="1.4s" repeatCount="indefinite" />
+            <circle cx={end.x} cy={end.y} r="3" fill="#22c55e" />
+            <circle cx={end.x} cy={end.y} r="8" fill="none" stroke="#22c55e" strokeWidth="1" opacity="0.6">
+              <animate attributeName="r" from="4" to="12" dur="2s" repeatCount="indefinite" />
+              <animate attributeName="opacity" from="0.8" to="0" dur="2s" repeatCount="indefinite" />
             </circle>
-            <text x={end.x} y={end.y + 14} fontSize="10" fill="#bbf7d0" textAnchor="middle" fontWeight="600">POD</text>
+            {/* The identifier POD on the map */}
+            <text x={end.x} y={end.y + 18} fontSize="11" fill="#fff" textAnchor="middle" fontWeight="bold" style={{textShadow: '0 2px 4px rgba(0,0,0,0.8)'}}>POD</text>
           </g>
         </g>
       </svg>
-      <div className="pointer-events-none absolute inset-x-4 top-3 flex items-center justify-between text-[11px] font-medium text-slate-300">
-        <div className="flex items-center gap-2">
-          <span className="rounded-full border border-slate-700/70 bg-slate-900/80 px-2 py-0.5">{pol || "SET POL"}</span>
-          <span className="mx-1 text-slate-500">→</span>
-          <span className="rounded-full border border-slate-700/70 bg-slate-900/80 px-2 py-0.5">{pod || "SET POD"}</span>
-          {hub && <span className="ml-2 rounded-full border border-slate-700/70 bg-slate-900/80 px-2 py-0.5 text-[10px] text-sky-300">Via {hub}</span>}
-        </div>
-        <div className="flex items-center gap-2">
-          {etdShort && <span className="rounded-full border border-slate-800 bg-slate-900/80 px-2 py-0.5 text-[10px] text-slate-300">ETD {etdShort}{etaShort ? ` · ETA ${etaShort}` : ""}</span>}
-          <span className="rounded-full border border-slate-700/70 bg-slate-900/90 px-2 py-0.5 uppercase tracking-[0.08em]">{mode.replace("_", " ")}</span>
-          <span className="rounded-full border border-slate-800 bg-slate-900/90 px-2 py-0.5 font-mono text-[10px]">~{distanceKm.toLocaleString()} km</span>
+
+      {/* --- FLOATING UI LAYOUT --- */}
+      
+      {/* 1. Top Left: Origin Identifier */}
+      <div className="pointer-events-none absolute top-4 left-4 flex flex-col gap-1 animate-in fade-in slide-in-from-left-2 duration-500">
+        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest pl-1">Origin</span>
+        <div className="flex items-center gap-2 rounded-lg border border-slate-700/50 bg-slate-900/60 px-3 py-2 shadow-xl backdrop-blur-md">
+          <Anchor className="h-3.5 w-3.5 text-blue-400" />
+          <span className="text-xs font-bold text-white tracking-wide">{pol || "SELECT POL"}</span>
         </div>
       </div>
-      <div className="pointer-events-none absolute inset-x-4 bottom-3 flex items-center justify-between text-[10px] text-slate-400">
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1"><span className="h-1 w-4 rounded-full bg-slate-400/80" /> Grid</span>
-          <span className="flex items-center gap-1"><span className="h-1 w-4 rounded-full bg-sky-400/90" /> Route</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-400" /> Destination</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {effectiveTransit && <span className="rounded-full border border-slate-800 bg-slate-900/90 px-2 py-0.5 font-mono">{effectiveTransit} d</span>}
-          {hub && pol && pod && (
-            <span className="hidden sm:flex items-center gap-2 text-slate-300">
-              <span className="rounded-full bg-slate-900/90 px-2 py-0.5 border border-slate-800">Leg 1 · {pol.split(" (")[0]} → {hub}</span>
-              <span className="rounded-full bg-slate-900/90 px-2 py-0.5 border border-slate-800">Leg 2 · {hub} → {pod.split(" (")[0]}</span>
-            </span>
-          )}
+
+      {/* 2. Top Right: Destination Identifier */}
+      <div className="pointer-events-none absolute top-4 right-4 flex flex-col gap-1 items-end animate-in fade-in slide-in-from-right-2 duration-500">
+        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest pr-1">Destination</span>
+        <div className="flex items-center gap-2 rounded-lg border border-slate-700/50 bg-slate-900/60 px-3 py-2 shadow-xl backdrop-blur-md">
+          <span className="text-xs font-bold text-white tracking-wide">{pod || "SELECT POD"}</span>
+          <MapPin className="h-3.5 w-3.5 text-emerald-400" />
         </div>
       </div>
+
+      {/* 3. Center Hub Info (Only if inferred) */}
+      {hub && (
+        <div className="pointer-events-none absolute top-6 left-1/2 -translate-x-1/2">
+           <div className="flex items-center gap-1.5 rounded-full border border-slate-700/50 bg-slate-950/40 px-3 py-1 shadow-lg backdrop-blur-sm">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+              <span className="text-[10px] font-medium text-slate-300 uppercase tracking-wide">Via {hub}</span>
+           </div>
+        </div>
+      )}
+
+      {/* 4. Bottom Right: Transit Time (The "Important Data") */}
+      {effectiveTransit && (
+        <div className="pointer-events-none absolute bottom-4 right-4 animate-in fade-in slide-in-from-bottom-2 duration-700 delay-100">
+          <div className="flex flex-col items-end">
+             <div className="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-900/80 px-4 py-2 shadow-2xl backdrop-blur-md">
+                <div className="flex flex-col items-end">
+                   <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none mb-1">Transit Time</span>
+                   <div className="flex items-baseline gap-1.5">
+                      <span className="font-mono text-xl font-bold text-white tracking-tight leading-none">{effectiveTransit}</span>
+                      <span className="text-[10px] font-medium text-slate-400">DAYS</span>
+                   </div>
+                </div>
+                <div className="h-8 w-px bg-slate-700/50 mx-1"></div>
+                <Clock className="h-5 w-5 text-blue-400" />
+             </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
@@ -222,7 +250,7 @@ export function RouteSelector() {
   };
 
   return (
-    <Card className="p-4 bg-white">
+    <Card className="p-4 bg-white h-full flex flex-col">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2 font-bold text-slate-800">
           <div className="rounded-md border border-slate-200 bg-slate-100 p-1.5">{getTransportIcon()}</div>
@@ -233,7 +261,7 @@ export function RouteSelector() {
         </div>
       </div>
 
-      <div className="grid gap-5">
+      <div className="grid gap-5 flex-1">
         <WorldMap pol={pol} pod={pod} mode={mode} transitTime={transitTime} requestedDepartureDate={requestedDepartureDate} estimatedArrivalDate={estimatedArrivalDate} />
         
         <div className="grid grid-cols-2 gap-4">
@@ -285,7 +313,7 @@ export function RouteSelector() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200/60 bg-slate-50/80 p-3">
+        <div className="rounded-lg border border-slate-200/60 bg-slate-50/80 p-3 mt-auto">
           <div className="mb-3 flex items-center gap-2">
             <Calendar className="h-3.5 w-3.5 text-blue-600" />
             <span className="text-xs font-bold uppercase text-slate-700">Schedule Plan</span>
@@ -299,17 +327,6 @@ export function RouteSelector() {
               <Label className="mb-1 block text-[10px] text-slate-500">Est. Arrival (ETA)</Label>
               <Input type="date" className="h-7 border-slate-200 bg-white text-xs" value={estimatedArrivalDate ?? ""} onChange={(e) => setIdentity("estimatedArrivalDate", e.target.value)} />
             </div>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between border-t border-slate-100 pt-2">
-          <div className="flex items-center gap-2 text-slate-500">
-            <Clock className="h-4 w-4" />
-            <span className="text-xs font-medium">Transit Time</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Input type="number" className="h-7 w-16 bg-slate-50 text-right text-xs font-mono" value={transitTime} onChange={(e) => setIdentity("transitTime", parseInt(e.target.value) || 0)} />
-            <span className="text-xs text-slate-400">Days</span>
           </div>
         </div>
 
