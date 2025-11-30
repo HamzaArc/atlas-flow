@@ -13,6 +13,9 @@ interface CargoRow {
   weight: number;
 }
 
+// TEMPLATE TYPES
+type PricingTemplate = 'IMPORT_STD' | 'EXPORT_STD' | 'CROSS_TRADE' | 'CLEARANCE_ONLY';
+
 interface QuoteState {
   // --- DATABASE STATE ---
   quotes: Quote[];
@@ -97,6 +100,7 @@ interface QuoteState {
   addLineItem: (section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION') => void;
   updateLineItem: (id: string, field: keyof QuoteLineItem, value: any) => void;
   removeLineItem: (id: string) => void;
+  applyTemplate: (template: PricingTemplate) => void; // NEW ACTION
   
   addActivity: (text: string, category?: ActivityCategory, tone?: 'success' | 'neutral' | 'warning' | 'destructive') => void;
   
@@ -250,6 +254,39 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     const newItems = get().items.filter(i => i.id !== id);
     set({ items: newItems });
     get().updateLineItem('trigger', 'description', 'trigger'); 
+  },
+
+  // NEW: TEMPLATE LOGIC
+  applyTemplate: (template) => {
+      const newItems: QuoteLineItem[] = [];
+      const createItem = (section: any, desc: string, price: number, curr: Currency = 'MAD', markup = 20): QuoteLineItem => ({
+          id: Math.random().toString(36).substring(7),
+          quoteId: get().id,
+          section,
+          description: desc,
+          buyPrice: price,
+          buyCurrency: curr,
+          markupType: 'PERCENT',
+          markupValue: markup,
+          vatRule: section === 'FREIGHT' ? 'EXPORT_0_ART92' : 'STD_20'
+      });
+
+      if (template === 'IMPORT_STD') {
+          newItems.push(createItem('ORIGIN', 'EXW Charges (Pick up)', 150, 'EUR'));
+          newItems.push(createItem('ORIGIN', 'Export Customs Clearance', 65, 'EUR'));
+          newItems.push(createItem('FREIGHT', 'Ocean Freight (All In)', 1200, 'USD', 15));
+          newItems.push(createItem('DESTINATION', 'THC Destination', 1600, 'MAD'));
+          newItems.push(createItem('DESTINATION', 'Dossier Fee', 450, 'MAD'));
+      } else if (template === 'EXPORT_STD') {
+          newItems.push(createItem('ORIGIN', 'Trucking to Port', 1200, 'MAD'));
+          newItems.push(createItem('ORIGIN', 'Customs Clearance', 800, 'MAD'));
+          newItems.push(createItem('FREIGHT', 'Ocean Freight', 850, 'USD', 20));
+          newItems.push(createItem('DESTINATION', 'DTHC (Prepaid)', 120, 'EUR'));
+      }
+
+      set({ items: newItems });
+      get().updateLineItem('trigger', 'description', 'trigger');
+      useToast.getState().toast("Pricing template applied successfully.", "success");
   },
 
   updateLineItem: (id, field, value) => {

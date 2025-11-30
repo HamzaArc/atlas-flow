@@ -8,11 +8,15 @@ import {
 import { 
     Popover, PopoverContent, PopoverTrigger 
 } from "@/components/ui/popover";
-import { Save, ChevronLeft, CheckCircle, XCircle, Copy, Trash2, Coins, Settings2, User, Target, Calendar, Hash, Clock } from "lucide-react";
+import { Save, ArrowLeft, CheckCircle, XCircle, Copy, Trash2, Coins, Settings2, User, Target, Calendar, Hash, Clock } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { Currency, Probability } from "@/types/index";
 
-export function QuoteHeader() {
+interface QuoteHeaderProps {
+    onBack: () => void;
+}
+
+export function QuoteHeader({ onBack }: QuoteHeaderProps) {
   const { 
     reference, status, clientName, validityDate,
     salespersonName, probability, cargoReadyDate, competitorInfo, customerReference,
@@ -30,29 +34,33 @@ export function QuoteHeader() {
       }
   }
 
-  const getProbColor = (p: Probability) => {
-      if(p === 'HIGH') return 'bg-green-100 text-green-700 border-green-200';
-      if(p === 'MEDIUM') return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-      return 'bg-slate-100 text-slate-600';
-  };
-
   return (
     <div className="flex flex-col border-b bg-white shadow-sm z-20 relative">
       
       {/* 1. TOP BAR */}
       <div className="flex items-center justify-between px-6 h-16">
-        <div className="flex items-center gap-6">
-          <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-700 -ml-2">
-            <ChevronLeft className="h-5 w-5" />
+        <div className="flex items-center gap-4">
+          {/* Integrated Back Button - No Absolute Positioning */}
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={onBack}
+            className="text-slate-500 hover:text-slate-800 hover:bg-slate-100 pr-3"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            <span className="font-semibold text-xs">Back</span>
           </Button>
+
+          <div className="h-6 w-px bg-slate-200 mx-2"></div>
+
           <div className="flex flex-col">
               <div className="flex items-center gap-3">
-                <h1 className="font-bold text-2xl tracking-tight text-slate-900">{reference}</h1>
+                <h1 className="font-bold text-xl tracking-tight text-slate-900">{reference}</h1>
                 <Badge variant={status === 'ACCEPTED' ? 'default' : 'secondary'} className="uppercase text-[10px] tracking-wider font-bold">
                     {status}
                 </Badge>
               </div>
-              <span className="text-xs text-slate-400 font-medium mt-0.5">Created on {new Date().toLocaleDateString()}</span>
+              <span className="text-[10px] text-slate-400 font-medium mt-0.5">Created on {new Date().toLocaleDateString()}</span>
           </div>
         </div>
 

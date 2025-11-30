@@ -39,16 +39,8 @@ function App() {
         {/* 2. Quote Editor View */}
         {currentPage === 'create' && (
           <div className="absolute inset-0 z-20 bg-white">
-             {/* Back Button Overlay */}
-             <div className="absolute top-4 left-4 z-50">
-                <button 
-                  onClick={() => setCurrentPage('dashboard')}
-                  className="bg-white/90 backdrop-blur border shadow-sm px-3 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors flex items-center gap-1"
-                >
-                  ← Back to List
-                </button>
-             </div>
-             <QuoteWorkspace />
+             {/* PASSED NAV HANDLER DOWN */}
+             <QuoteWorkspace onBack={() => setCurrentPage('dashboard')} />
           </div>
         )}
 

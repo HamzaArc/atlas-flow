@@ -11,7 +11,11 @@ import { pdf } from '@react-pdf/renderer';
 import { QuotePDF } from './components/QuotePDF';
 import { Badge } from "@/components/ui/badge";
 
-export default function QuoteWorkspace() {
+interface QuoteWorkspaceProps {
+    onBack: () => void;
+}
+
+export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
   const { 
       // Financials
       totalSellMAD, totalMarginMAD, 
@@ -54,8 +58,8 @@ export default function QuoteWorkspace() {
   return (
     <div className="h-screen flex flex-col bg-slate-100 overflow-hidden font-sans">
       
-      {/* 1. TOP NAVIGATION */}
-      <QuoteHeader />
+      {/* 1. TOP NAVIGATION - Passed onBack */}
+      <QuoteHeader onBack={onBack} />
 
       {/* 2. SPLIT LAYOUT: Operations (Top) / Collaboration (Bottom) */}
       <div className="flex-1 flex flex-col overflow-hidden">
