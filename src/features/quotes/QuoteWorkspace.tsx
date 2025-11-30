@@ -58,24 +58,34 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
   return (
     <div className="h-screen flex flex-col bg-slate-100 overflow-hidden font-sans">
       
-      {/* 1. TOP NAVIGATION - Passed onBack */}
+      {/* 1. TOP NAVIGATION */}
       <QuoteHeader onBack={onBack} />
 
-      {/* 2. SPLIT LAYOUT: Operations (Top) / Collaboration (Bottom) */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-          
-          {/* TOP SECTION: OPERATIONS (65%) */}
-          <div className="h-[65%] p-6 pb-3 overflow-hidden">
-              <div className="grid grid-cols-12 gap-6 h-full">
+      {/* 2. MAIN WORKSPACE GRID */}
+      <div className="flex-1 p-6 overflow-hidden min-h-0">
+          <div className="grid grid-cols-12 gap-6 h-full min-h-0">
+              
+              {/* === LEFT COLUMN: LOGISTICS CONTEXT (3 Cols) === */}
+              {/* Layout: Top 60%, Bottom Rest. Ensures alignment with Right Column. */}
+              <div className="col-span-3 flex flex-col gap-6 h-full min-h-0">
                   
-                  {/* LEFT: Route */}
-                  <div className="col-span-3 flex flex-col h-full overflow-hidden">
+                  {/* TOP: Route & Schedule */}
+                  <div className="h-[60%] min-h-0">
                       <RouteSelector />
                   </div>
 
-                  {/* MIDDLE: Pricing */}
-                  <div className="col-span-6 flex flex-col h-full">
-                       <Card className="flex-1 flex flex-col overflow-hidden bg-white shadow-md ring-1 ring-slate-200/60 border-none">
+                  {/* BOTTOM: Cargo Specs */}
+                  <div className="flex-1 min-h-0">
+                      <CargoEngine />
+                  </div>
+              </div>
+
+              {/* === RIGHT COLUMN: COMMERCIAL & COMMUNICATION (9 Cols) === */}
+              {/* Layout: Top 60%, Bottom Rest. Matches Left Column split. */}
+              <div className="col-span-9 flex flex-col gap-6 h-full min-h-0">
+                   
+                   {/* TOP: Commercial Offer */}
+                   <Card className="h-[60%] flex flex-col overflow-hidden bg-white shadow-md ring-1 ring-slate-200/60 border-none min-h-0">
                           {/* Toolbar */}
                           <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
                              <div className="flex items-center gap-3">
@@ -97,14 +107,14 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
                              </div>
                           </div>
                           
-                          {/* Table */}
-                          <div className="flex-1 overflow-hidden relative bg-slate-50/30">
+                          {/* Table Area (Scrollable) */}
+                          <div className="flex-1 overflow-hidden relative bg-slate-50/30 min-h-0">
                               <PricingTable />
                           </div>
 
-                          {/* Footer */}
+                          {/* Financial Footer (Fixed) */}
                           <div className="h-20 border-t border-slate-100 flex z-10 bg-white shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)] shrink-0">
-                             {/* Internal Margin */}
+                             {/* Internal Margin Indicator */}
                              <div className="w-1/3 bg-slate-50/50 border-r border-slate-100 p-3 flex flex-col justify-center relative group">
                                  <div className="flex items-center gap-2 mb-1">
                                     <div className="p-1 rounded bg-slate-200/50"><Lock className="h-3 w-3 text-slate-500" /></div>
@@ -120,7 +130,7 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
                                  </div>
                              </div>
 
-                             {/* Totals */}
+                             {/* Client Totals */}
                              <div className="flex-1 flex items-center justify-end px-6 gap-6">
                                  <div className="text-right">
                                     <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Total Net</div>
@@ -139,21 +149,14 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
                                  </div>
                              </div>
                           </div>
-                       </Card>
-                  </div>
+                   </Card>
 
-                  {/* RIGHT: Cargo */}
-                  <div className="col-span-3 flex flex-col h-full overflow-hidden">
-                      <CargoEngine />
-                  </div>
+                   {/* BOTTOM: Collaboration Hub */}
+                   <div className="flex-1 min-h-0 overflow-hidden">
+                      <ActivityFeed />
+                   </div>
               </div>
           </div>
-
-          {/* BOTTOM SECTION: COLLABORATION (35%) */}
-          <div className="h-[35%] p-6 pt-0 overflow-hidden">
-              <ActivityFeed />
-          </div>
-
       </div>
     </div>
   );

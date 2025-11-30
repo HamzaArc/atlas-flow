@@ -16,9 +16,13 @@ import {
   Map as MapIcon,
   MapPin,
   Container,
-  AlertCircle
+  Clock,
+  Calendar,
+  Anchor
 } from "lucide-react";
 import { TransportMode, Incoterm } from "@/types/index";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 // -----------------------------------------------------------------------------
 // CONSTANTS & MAP
@@ -80,9 +84,18 @@ const WorldMap = ({ pol, pod, mode, transitTime }: any) => {
   const pathD = `M${start.x},${start.y} Q${cx},${cy} ${end.x},${end.y}`;
   const routeColor = mode === "AIR" ? "#fbbf24" : mode === "ROAD" ? "#22c55e" : "#3b82f6";
   
+  // Extract Clean Names for the HUD
+  const polName = pol.split('(')[0].trim().substring(0, 15);
+  const podName = pod.split('(')[0].trim().substring(0, 15);
+  const polCode = pol.match(/\((.*?)\)/)?.[1] || "ORIGIN";
+  const podCode = pod.match(/\((.*?)\)/)?.[1] || "DEST";
+
   return (
-    <div className="relative w-full h-48 rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-inner group mb-4">
+    <div className="relative w-full h-48 rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-inner group shrink-0">
+      {/* Background Gradient */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.15),_transparent_70%),radial-gradient(circle_at_bottom,_rgba(15,23,42,0.95),_transparent_65%)]" />
+      
+      {/* SVG Map Layer - Clean visibility */}
       <svg viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid slice">
         <defs>
           <linearGradient id="darkenOverlay" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -94,6 +107,8 @@ const WorldMap = ({ pol, pod, mode, transitTime }: any) => {
             <stop offset="100%" stopColor={routeColor} stopOpacity="0.8" />
           </linearGradient>
         </defs>
+        
+        {/* World Map Image */}
         <image x="0" y="0" width={MAP_WIDTH} height={MAP_HEIGHT} preserveAspectRatio="xMidYMid slice" xlinkHref={WORLD_MAP_URL} />
         <rect x="0" y="0" width={MAP_WIDTH} height={MAP_HEIGHT} fill="url(#darkenOverlay)" />
         
@@ -106,9 +121,38 @@ const WorldMap = ({ pol, pod, mode, transitTime }: any) => {
         <circle cx={start.x} cy={start.y} r="3" fill="#3b82f6" />
         <circle cx={end.x} cy={end.y} r="3" fill="#22c55e" />
       </svg>
+
+      {/* --- HUD OVERLAY (Floating Info) --- */}
+      <div className="absolute top-4 left-4 right-4 flex justify-between pointer-events-none">
+          {/* Origin Badge */}
+          <div className="flex flex-col items-start bg-slate-900/90 backdrop-blur-md border border-slate-700/60 rounded-lg px-3 py-2 shadow-2xl">
+              <span className="text-[9px] text-slate-400 font-bold tracking-wider mb-0.5">POL</span>
+              <div className="flex items-baseline gap-2">
+                  <span className="text-lg font-black text-white tracking-tight leading-none">{polCode}</span>
+                  <span className="text-[10px] text-slate-400 font-medium truncate max-w-[80px] border-l border-slate-700 pl-2">{polName}</span>
+              </div>
+          </div>
+
+          {/* Mode Icon (Center) */}
+          <div className="mt-2 flex items-center justify-center w-8 h-8 rounded-full bg-slate-800/90 border border-slate-600 shadow-xl backdrop-blur-sm">
+             {mode === 'AIR' ? <Plane className="h-4 w-4 text-amber-400" /> : mode === 'ROAD' ? <Truck className="h-4 w-4 text-emerald-400" /> : <Ship className="h-4 w-4 text-blue-400" />}
+          </div>
+
+          {/* Dest Badge */}
+          <div className="flex flex-col items-end bg-slate-900/90 backdrop-blur-md border border-slate-700/60 rounded-lg px-3 py-2 shadow-2xl">
+              <span className="text-[9px] text-slate-400 font-bold tracking-wider mb-0.5 text-right">POD</span>
+              <div className="flex flex-row-reverse items-baseline gap-2">
+                  <span className="text-lg font-black text-white tracking-tight leading-none">{podCode}</span>
+                  <span className="text-[10px] text-slate-400 font-medium truncate max-w-[80px] border-r border-slate-700 pr-2">{podName}</span>
+              </div>
+          </div>
+      </div>
+
+      {/* Transit Time Badge (Bottom Right) */}
       {transitTime > 0 && (
-        <div className="absolute bottom-2 right-2 bg-slate-900/80 px-2 py-1 rounded border border-slate-700 text-white text-[10px] font-mono">
-            {transitTime} DAYS
+        <div className="absolute bottom-3 right-3 flex items-center gap-2 bg-emerald-950/80 backdrop-blur-md px-2.5 py-1 rounded border border-emerald-500/30 text-emerald-400 shadow-lg">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+            <span className="text-[10px] font-bold font-mono tracking-wide">{transitTime} DAYS</span>
         </div>
       )}
     </div>
@@ -129,220 +173,226 @@ export function RouteSelector() {
   // --- LOGIC HELPERS ---
   const isAir = mode === 'AIR';
   const isSeaFCL = mode === 'SEA_FCL';
+  const isSeaLCL = mode === 'SEA_LCL';
   const isRoad = mode === 'ROAD';
   
-  // Incoterm Logic
   const showPlaceOfLoading = incoterm === 'EXW';
-  // DPU is the new DAT in 2020 rules
   const showPlaceOfDelivery = ['DAP', 'DPU', 'DDP'].includes(incoterm);
   
-  // Label Logic
-  const getOriginLabel = () => isAir ? "Airport of Departure (AOD)" : "Port of Loading (POL)";
-  const getDestLabel = () => isAir ? "Airport of Destination (AOD)" : "Port of Discharge (POD)";
+  const getOriginLabel = () => isAir ? "Airport of Departure" : "Port of Loading";
+  const getDestLabel = () => isAir ? "Airport of Destination" : "Port of Discharge";
   const getPlacePlaceholder = () => isRoad ? "City, Zip Code" : "City / Port";
 
-  // Filter Incoterms based on mode
   const getAvailableIncoterms = (): Incoterm[] => {
-      // 2020 Rules: FAS, FOB, CFR, CIF are strictly Sea/Waterway
       if (isAir || isRoad) return ['EXW', 'FCA', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'] as any; 
-      // Sea has access to all
       return ['EXW', 'FCA', 'FAS', 'FOB', 'CPT', 'CFR', 'CIF', 'CIP', 'DAP', 'DPU', 'DDP'];
   };
 
   const showEquipment = isSeaFCL || isRoad;
   const showContainerCount = isSeaFCL;
-  // BUSINESS RULE: LCL does not usually have detention free time (it's storage)
-  const showFreeTime = isSeaFCL; 
+  // UPDATED: Free Time for both FCL and LCL
+  const showFreeTime = isSeaFCL || isSeaLCL; 
 
   const handleLocationChange = (field: 'pol' | 'pod', value: string) => {
-      // This ensures we always pass uppercase to match map keys
       setRouteLocations(field, value.toUpperCase());
   }
 
   return (
-    <Card className="p-4 bg-white h-full flex flex-col overflow-y-auto">
+    <Card className="h-full flex flex-col bg-white overflow-hidden border-none shadow-sm ring-1 ring-slate-100">
       
-      {/* 1. Header & Map */}
-      <div className="mb-2 flex items-center justify-between">
-        <div className="flex items-center gap-2 font-bold text-slate-800">
-          <div className="rounded-md border border-slate-200 bg-slate-100 p-1.5">
-             {isAir ? <Plane className="h-4 w-4 text-amber-500" /> : isRoad ? <Truck className="h-4 w-4 text-emerald-500" /> : <Ship className="h-4 w-4 text-blue-600" />}
-          </div>
-          <span className="text-sm">Route & Schedule</span>
+      {/* 1. Header (Matching Cargo Engine Style) */}
+      <div className="px-4 py-3 border-b border-slate-100 shrink-0 bg-slate-50/50">
+        <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 font-bold text-slate-800">
+                <div className="p-1.5 rounded-md bg-blue-50 text-blue-600">
+                    <MapIcon className="h-4 w-4" />
+                </div>
+                <span className="text-sm tracking-tight">Route & Schedule</span>
+            </div>
+            <Badge variant="outline" className="text-[9px] h-5 bg-white text-slate-500 border-slate-200">
+                GEO-LINK™
+            </Badge>
         </div>
-        <div className="flex items-center gap-1 rounded border border-slate-100 bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-400">
-          <MapIcon className="h-3 w-3" /> GEO-LINK™
-        </div>
       </div>
 
-      <WorldMap pol={pol} pod={pod} mode={mode} transitTime={transitTime} />
-
-      {/* 2. LEVEL 1: MODE & INCOTERM (The Drivers) */}
-      <div className="grid grid-cols-2 gap-3 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
-          <div className="space-y-1.5">
-            <Label className="text-[10px] font-bold text-slate-500 uppercase">Transport Mode</Label>
-            <Select value={mode} onValueChange={(val) => setMode(val as TransportMode)}>
-              <SelectTrigger className="h-8 border-slate-200 bg-white font-bold text-xs shadow-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="SEA_FCL">Sea FCL</SelectItem>
-                <SelectItem value="SEA_LCL">Sea LCL</SelectItem>
-                <SelectItem value="AIR">Air Freight</SelectItem>
-                <SelectItem value="ROAD">Road Freight</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+      {/* 2. Scrollable Content */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-5">
           
-          <div className="space-y-1.5">
-            <Label className="text-[10px] font-bold text-slate-500 uppercase">Incoterm (2020)</Label>
-            <Select value={incoterm} onValueChange={(val) => setIncoterm(val as Incoterm)}>
-              <SelectTrigger className="h-8 border-slate-200 bg-white font-bold text-xs shadow-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {getAvailableIncoterms().map(i => (
-                    <SelectItem key={i} value={i}>{i}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-      </div>
+          {/* Map Visualization */}
+          <WorldMap pol={pol} pod={pod} mode={mode} transitTime={transitTime} />
 
-      {/* 3. LEVEL 2: LOCATIONS (Dynamic) */}
-      <div className="space-y-3 mb-4">
-          
-          {/* Conditional: Place of Loading (EXW) */}
-          {showPlaceOfLoading && (
-              <div className="space-y-1 animate-in slide-in-from-top-2">
-                  <Label className="text-[10px] font-bold text-slate-500 uppercase">Pickup Address (Factory)</Label>
-                  <div className="relative">
-                      <Input className="h-8 bg-amber-50/50 border-amber-200 text-xs pl-7" placeholder="City, Zip, Street" 
-                          value={placeOfLoading} onChange={(e) => setRouteLocations('placeOfLoading', e.target.value)} 
-                      />
-                      <MapPin className="absolute left-2 top-2 h-4 w-4 text-amber-500" />
-                  </div>
-              </div>
-          )}
-
-          {/* Standard POL/POD */}
-          <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                  <Label className="text-[10px] font-bold text-slate-500 uppercase">{getOriginLabel()}</Label>
-                  <div className="group relative">
-                    <Input 
-                        list="ports"
-                        className="h-8 text-xs font-semibold uppercase" 
-                        placeholder={getPlacePlaceholder()} 
-                        value={pol} 
-                        onChange={(e) => handleLocationChange('pol', e.target.value)}
-                    />
-                    <MapPin className="absolute left-2.5 top-2.5 h-3 w-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-              </div>
-              <div className="space-y-1">
-                  <Label className="text-[10px] font-bold text-slate-500 uppercase">{getDestLabel()}</Label>
-                  <div className="group relative">
-                    <Input 
-                        list="ports"
-                        className="h-8 text-xs font-semibold uppercase" 
-                        placeholder={getPlacePlaceholder()} 
-                        value={pod} 
-                        onChange={(e) => handleLocationChange('pod', e.target.value)}
-                    />
-                    <MapPin className="absolute left-2.5 top-2.5 h-3 w-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-              </div>
-          </div>
-
-          {/* Conditional: Place of Delivery (DAP/DPU/DDP) */}
-          {showPlaceOfDelivery && (
-              <div className="space-y-1 animate-in slide-in-from-bottom-2">
-                  <Label className="text-[10px] font-bold text-slate-500 uppercase">Final Delivery Address</Label>
-                  <div className="relative">
-                      <Input className="h-8 bg-blue-50/50 border-blue-200 text-xs pl-7" placeholder="City, Zip, Street" 
-                          value={placeOfDelivery} onChange={(e) => setRouteLocations('placeOfDelivery', e.target.value)}
-                      />
-                      <MapPin className="absolute left-2 top-2 h-4 w-4 text-blue-500" />
-                  </div>
-              </div>
-          )}
-      </div>
-
-      {/* 4. LEVEL 3: LOGISTICS DETAILS (Grid) */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
-          {/* Equipment Selector */}
-          {showEquipment && (
-              <div className="space-y-1">
-                  <Label className="text-[10px] font-bold text-slate-500 uppercase">Equipment</Label>
-                  <Select value={equipmentType} onValueChange={(val) => setEquipment(val, containerCount)}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select Type" /></SelectTrigger>
+          {/* Configuration Group */}
+          <div className="bg-slate-50/50 rounded-lg p-3 border border-slate-100 space-y-3">
+              
+              {/* LEVEL 1: MODE & INCOTERM */}
+              <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Transport Mode</Label>
+                    <Select value={mode} onValueChange={(val) => setMode(val as TransportMode)}>
+                      <SelectTrigger className="h-9 border-slate-200 bg-white font-semibold text-xs shadow-sm hover:border-blue-300 transition-colors">
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
-                          {(isRoad ? EQUIP_ROAD : EQUIP_SEA).map(eq => <SelectItem key={eq} value={eq}>{eq}</SelectItem>)}
+                        <SelectItem value="SEA_FCL">Sea FCL</SelectItem>
+                        <SelectItem value="SEA_LCL">Sea LCL</SelectItem>
+                        <SelectItem value="AIR">Air Freight</SelectItem>
+                        <SelectItem value="ROAD">Road Freight</SelectItem>
                       </SelectContent>
-                  </Select>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Incoterm (2020)</Label>
+                    <Select value={incoterm} onValueChange={(val) => setIncoterm(val as Incoterm)}>
+                      <SelectTrigger className="h-9 border-slate-200 bg-white font-semibold text-xs shadow-sm hover:border-blue-300 transition-colors">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getAvailableIncoterms().map(i => (
+                            <SelectItem key={i} value={i}>{i}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
               </div>
-          )}
 
-          {/* Container Count */}
-          {showContainerCount && (
+              {/* LEVEL 2: LOCATIONS */}
+              <div className="space-y-3">
+                  {showPlaceOfLoading && (
+                      <div className="space-y-1 animate-in slide-in-from-top-1 fade-in duration-300">
+                          <Label className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Pickup Address</Label>
+                          <div className="relative group">
+                              <Input className="h-8 bg-white border-amber-200 text-xs pl-8 focus:border-amber-400 transition-all shadow-sm" placeholder="Factory Address" 
+                                  value={placeOfLoading} onChange={(e) => setRouteLocations('placeOfLoading', e.target.value)} 
+                              />
+                              <Truck className="absolute left-2.5 top-2 h-4 w-4 text-amber-500" />
+                          </div>
+                      </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                          <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{getOriginLabel()}</Label>
+                          <div className="relative group">
+                            <Input 
+                                list="ports"
+                                className="h-9 text-xs font-bold uppercase bg-white border-slate-200 pl-9 focus:ring-blue-100 transition-all shadow-sm" 
+                                placeholder={getPlacePlaceholder()} 
+                                value={pol} 
+                                onChange={(e) => handleLocationChange('pol', e.target.value)}
+                            />
+                            <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
+                          </div>
+                      </div>
+                      <div className="space-y-1">
+                          <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{getDestLabel()}</Label>
+                          <div className="relative group">
+                            <Input 
+                                list="ports"
+                                className="h-9 text-xs font-bold uppercase bg-white border-slate-200 pl-9 focus:ring-blue-100 transition-all shadow-sm" 
+                                placeholder={getPlacePlaceholder()} 
+                                value={pod} 
+                                onChange={(e) => handleLocationChange('pod', e.target.value)}
+                            />
+                            <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
+                          </div>
+                      </div>
+                  </div>
+
+                  {showPlaceOfDelivery && (
+                      <div className="space-y-1 animate-in slide-in-from-bottom-1 fade-in duration-300">
+                          <Label className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Final Delivery Address</Label>
+                          <div className="relative group">
+                              <Input className="h-8 bg-white border-blue-200 text-xs pl-8 focus:border-blue-400 transition-all shadow-sm" placeholder="Warehouse Address" 
+                                  value={placeOfDelivery} onChange={(e) => setRouteLocations('placeOfDelivery', e.target.value)}
+                              />
+                              <MapPin className="absolute left-2.5 top-2 h-4 w-4 text-blue-500" />
+                          </div>
+                      </div>
+                  )}
+              </div>
+          </div>
+
+          {/* LEVEL 3: LOGISTICS DETAILS */}
+          <div className="grid grid-cols-2 gap-4">
+              {showEquipment && (
+                  <div className="space-y-1">
+                      <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Equipment</Label>
+                      <Select value={equipmentType} onValueChange={(val) => setEquipment(val, containerCount)}>
+                          <SelectTrigger className="h-8 text-xs bg-slate-50 border-transparent hover:bg-white hover:border-slate-200 transition-all"><SelectValue placeholder="Select Type" /></SelectTrigger>
+                          <SelectContent>
+                              {(isRoad ? EQUIP_ROAD : EQUIP_SEA).map(eq => <SelectItem key={eq} value={eq}>{eq}</SelectItem>)}
+                          </SelectContent>
+                      </Select>
+                  </div>
+              )}
+
+              {showContainerCount && (
+                  <div className="space-y-1">
+                      <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Units</Label>
+                      <div className="relative">
+                          <Input type="number" min={1} className="h-8 text-xs pl-8 bg-slate-50 border-transparent hover:bg-white hover:border-slate-200 transition-all" 
+                              value={containerCount} onChange={(e) => setEquipment(equipmentType, parseInt(e.target.value))}
+                          />
+                          <Container className="absolute left-2.5 top-2 h-4 w-4 text-slate-400" />
+                      </div>
+                  </div>
+              )}
+
+              {showFreeTime && (
+                  <div className="space-y-1">
+                      <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Free Time</Label>
+                      <div className="relative">
+                          <Input type="number" className="h-8 text-xs pl-8 bg-slate-50 border-transparent hover:bg-white hover:border-slate-200 transition-all" placeholder="0" 
+                              value={freeTime} onChange={(e) => setIdentity('freeTime', parseInt(e.target.value))}
+                          />
+                          <Anchor className="absolute left-2.5 top-2 h-4 w-4 text-slate-400" />
+                          <span className="absolute right-3 top-2 text-[10px] text-slate-400 font-medium">Days</span>
+                      </div>
+                  </div>
+              )}
+
+              {/* Transit Time (Always Visible) */}
               <div className="space-y-1">
-                  <Label className="text-[10px] font-bold text-slate-500 uppercase">Units</Label>
+                  <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Est. Transit</Label>
                   <div className="relative">
-                      <Input type="number" min={1} className="h-8 text-xs pl-7" 
-                          value={containerCount} onChange={(e) => setEquipment(equipmentType, parseInt(e.target.value))}
+                      <Input type="number" className="h-8 text-xs pl-8 bg-slate-50 border-transparent hover:bg-white hover:border-slate-200 transition-all" placeholder="0" 
+                          value={transitTime} onChange={(e) => setIdentity('transitTime', parseInt(e.target.value))}
                       />
-                      <Container className="absolute left-2 top-2 h-3.5 w-3.5 text-slate-400" />
+                      <Clock className="absolute left-2.5 top-2 h-4 w-4 text-slate-400" />
+                      <span className="absolute right-3 top-2 text-[10px] text-slate-400 font-medium">Days</span>
                   </div>
-              </div>
-          )}
-
-          {/* Franchise */}
-          {showFreeTime && (
-              <div className="space-y-1">
-                  <Label className="text-[10px] font-bold text-slate-500 uppercase">Free Time</Label>
-                  <div className="flex items-center gap-1">
-                      <Input type="number" className="h-8 text-xs" placeholder="0" 
-                          value={freeTime} onChange={(e) => setIdentity('freeTime', parseInt(e.target.value))}
-                      />
-                      <span className="text-[10px] text-slate-400 font-medium">Days</span>
-                  </div>
-              </div>
-          )}
-
-          {/* Transit Time (Always Visible) */}
-          <div className="space-y-1">
-              <Label className="text-[10px] font-bold text-slate-500 uppercase">Est. Transit</Label>
-              <div className="flex items-center gap-1">
-                  <Input type="number" className="h-8 text-xs" placeholder="0" 
-                      value={transitTime} onChange={(e) => setIdentity('transitTime', parseInt(e.target.value))}
-                  />
-                  <span className="text-[10px] text-slate-400 font-medium">Days</span>
               </div>
           </div>
+
+          {/* Validation Warning */}
+          {isAir && (totalWeight === 0 || totalVolume === 0) && (
+              <div className="p-2 bg-red-50 border border-red-100 rounded-md flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-500" />
+                  <span className="text-[10px] text-red-600 font-medium">Air Freight requires valid Weight & Volume.</span>
+              </div>
+          )}
       </div>
 
-      {/* 5. VALIDATION WARNING */}
-      {isAir && (totalWeight === 0 || totalVolume === 0) && (
-          <div className="mt-auto p-2 bg-red-50 border border-red-100 rounded-md flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-red-500" />
-              <span className="text-[10px] text-red-600 font-medium">Air Freight requires valid Weight & Volume.</span>
-          </div>
-      )}
-
-      {/* 6. DATES FOOTER */}
-      <div className="mt-auto pt-3 border-t border-slate-100 grid grid-cols-2 gap-3">
-        <div>
-            <Label className="text-[9px] text-slate-400 mb-1 block">Requested Dep.</Label>
-            <Input type="date" className="h-7 text-[10px]" value={requestedDepartureDate || ''} onChange={(e) => setIdentity('requestedDepartureDate', e.target.value)} />
+      {/* 4. Dates Footer */}
+      <div className="mt-auto px-4 py-3 border-t border-slate-100 bg-slate-50/50 grid grid-cols-2 gap-4 shrink-0">
+        <div className="space-y-1">
+            <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Requested Dep.</Label>
+            <div className="relative">
+                <Input type="date" className="h-7 text-[10px] pl-7 bg-white border-slate-200" value={requestedDepartureDate || ''} onChange={(e) => setIdentity('requestedDepartureDate', e.target.value)} />
+                <Calendar className="absolute left-2 top-1.5 h-3.5 w-3.5 text-slate-400" />
+            </div>
         </div>
-        <div>
-            <Label className="text-[9px] text-slate-400 mb-1 block">Est. Arrival</Label>
-            <Input type="date" className="h-7 text-[10px]" value={estimatedArrivalDate || ''} onChange={(e) => setIdentity('estimatedArrivalDate', e.target.value)} />
+        <div className="space-y-1">
+            <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Est. Arrival</Label>
+            <div className="relative">
+                <Input type="date" className="h-7 text-[10px] pl-7 bg-white border-slate-200" value={estimatedArrivalDate || ''} onChange={(e) => setIdentity('estimatedArrivalDate', e.target.value)} />
+                <Calendar className="absolute left-2 top-1.5 h-3.5 w-3.5 text-slate-400" />
+            </div>
         </div>
       </div>
 
-      {/* FIXED: Datalist for Map Coordination */}
+      {/* Datalist for Map Coordination */}
       <datalist id="ports">
           {Object.keys(PORT_GEO).map((p) => (
             <option key={p} value={p} />

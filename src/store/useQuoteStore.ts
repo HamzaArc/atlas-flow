@@ -3,14 +3,17 @@ import { supabase } from '@/lib/supabase';
 import { Quote, QuoteLineItem, TransportMode, Incoterm, Currency, Probability, PackagingType, ActivityItem, ActivityCategory, QuoteApproval } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 
-// --- TYPES ---
+// --- UPDATED TYPES ---
+// Expert Update: added pkgType and isStackable to the row definition
 interface CargoRow {
   id: string;
   qty: number;
+  pkgType: PackagingType; // granular control
   length: number;
   width: number;
   height: number;
   weight: number;
+  isStackable: boolean; // crucial for load planning
 }
 
 // TEMPLATE TYPES
@@ -39,24 +42,24 @@ interface QuoteState {
   requestedDepartureDate: string;
   estimatedDepartureDate: string;
   estimatedArrivalDate: string;
-  transitTime: number; // Days
-  freeTime: number;    // Days (Franchise)
+  transitTime: number; 
+  freeTime: number;    
   probability: Probability;
   competitorInfo: string;
   
   // Cargo Specifics
   goodsDescription: string; 
   hsCode: string;
-  packagingType: PackagingType;
+  // packagingType: PackagingType; // REMOVED: Now handled per row
   isHazmat: boolean;
-  isStackable: boolean;
+  // isStackable: boolean; // REMOVED: Now handled per row
   isReefer: boolean;
   temperature: string;
   cargoValue: number;
   insuranceRequired: boolean;
   internalNotes: string;
 
-  // Route & Equipment (Refactored)
+  // Route & Equipment
   mode: TransportMode;
   incoterm: Incoterm;
   pol: string;
@@ -83,7 +86,9 @@ interface QuoteState {
   // Calculated Fields
   totalVolume: number;
   totalWeight: number;
+  totalPackages: number; // New KPI
   chargeableWeight: number;
+  densityRatio: number; // New KPI
   
   // Internal Reporting (MAD)
   totalCostMAD: number;
@@ -101,7 +106,6 @@ interface QuoteState {
   setIdentity: (field: string, value: any) => void;
   setStatus: (status: QuoteState['status']) => void;
   
-  // Reactive Logistics Setters
   setMode: (mode: TransportMode) => void; 
   setIncoterm: (incoterm: Incoterm) => void;
   setRouteLocations: (field: 'pol' | 'pod' | 'placeOfLoading' | 'placeOfDelivery', value: string) => void;
@@ -118,7 +122,6 @@ interface QuoteState {
   
   addActivity: (text: string, category?: ActivityCategory, tone?: 'success' | 'neutral' | 'warning' | 'destructive') => void;
   
-  // Workflow Actions
   attemptSubmission: () => Promise<void>;
   submitForApproval: () => Promise<void>;
   approveQuote: (comment?: string) => Promise<void>;
@@ -155,16 +158,14 @@ const DEFAULT_STATE = {
 
   goodsDescription: '',
   hsCode: '',
-  packagingType: 'PALLETS' as PackagingType,
+  // Default Removed
   isHazmat: false,
-  isStackable: true,
   isReefer: false,
   temperature: '',
   cargoValue: 0,
   insuranceRequired: false,
   internalNotes: '',
   
-  // Default to clean state
   mode: 'SEA_LCL' as TransportMode,
   incoterm: 'FOB' as Incoterm,
   pol: 'CASABLANCA (MAP)',
@@ -174,11 +175,14 @@ const DEFAULT_STATE = {
   equipmentType: '',
   containerCount: 1,
 
-  cargoRows: [{ id: '1', qty: 1, length: 0, width: 0, height: 0, weight: 0 }],
+  cargoRows: [{ id: '1', qty: 1, pkgType: 'PALLETS' as PackagingType, length: 120, width: 80, height: 100, weight: 500, isStackable: true }],
   
   totalVolume: 0,
   totalWeight: 0,
+  totalPackages: 0,
   chargeableWeight: 0,
+  densityRatio: 0,
+
   items: [],
   exchangeRates: { MAD: 1, USD: 9.80, EUR: 10.75, GBP: 12.50 }, 
   marginBuffer: 1.02,
@@ -221,28 +225,22 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       await get().saveQuote(); 
   },
 
-  // --- STRICT LOGISTICS SETTERS ---
-  
   setMode: (mode) => {
-      // RESET LOGIC: Enforce a clean slate when mode changes
       set({ 
           mode,
-          incoterm: mode === 'AIR' ? 'FCA' : 'FOB', // Default to mode-appropriate incoterm
-          equipmentType: '', // Reset equipment
+          incoterm: mode === 'AIR' ? 'FCA' : 'FOB', 
+          equipmentType: '', 
           containerCount: 1,
-          freeTime: 0, // Always reset free time on mode change (user must re-enter if applicable)
+          freeTime: 0, 
           placeOfLoading: '',
           placeOfDelivery: ''
       });
-      // Recalculate chargeable weight based on new mode factor
       get().updateCargo(get().cargoRows);
   },
 
   setIncoterm: (incoterm) => {
-      // RESET LOGIC: Clear addresses if they aren't required by the term
       const isExw = incoterm === 'EXW';
       const isDoorDelivery = ['DAP', 'DPU', 'DDP'].includes(incoterm);
-      
       set({ 
           incoterm,
           placeOfLoading: isExw ? get().placeOfLoading : '', 
@@ -258,8 +256,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       set({ equipmentType: type, containerCount: count });
   },
 
-  // ------------------------------
-
   setExchangeRate: (currency, rate) => {
     const newRates = { ...get().exchangeRates, [currency]: rate };
     set({ exchangeRates: newRates });
@@ -271,27 +267,37 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     get().updateLineItem('trigger', 'description', 'trigger');
   },
 
+  // --- UPDATED CALCULATION LOGIC ---
   updateCargo: (rows) => {
     const { mode } = get();
     let vol = 0;
     let weight = 0;
+    let pkgs = 0;
+
     rows.forEach(r => {
+      // Calculate volume in m3
       const rowVol = (r.length * r.width * r.height * r.qty) / 1000000;
       vol += rowVol;
       weight += (r.weight * r.qty);
+      pkgs += r.qty;
     });
     
+    // Expert Chargeable Weight Logic
     let chargeable = 0;
-    if (mode === 'AIR') chargeable = Math.max(weight, (vol * 1000000) / 6000); // 1:6 Ratio
+    if (mode === 'AIR') chargeable = Math.max(weight, (vol * 1000000) / 6000); // IATA Standard 1:6
     else if (mode === 'SEA_LCL') chargeable = Math.max(weight, vol * 1000); // 1:1 Ratio
-    else if (mode === 'ROAD') chargeable = Math.max(weight, vol * 333); // 1:3 Ratio
-    else chargeable = weight; // FCL
+    else if (mode === 'ROAD') chargeable = Math.max(weight, vol * 333); // 1:3 Ratio (common in Morocco/Europe)
+    else chargeable = weight; // FCL (Flat rates usually, but tracking weight is vital)
     
+    const densityRatio = vol > 0 ? weight / vol : 0;
+
     set({
       cargoRows: rows,
       totalVolume: parseFloat(vol.toFixed(3)),
       totalWeight: parseFloat(weight.toFixed(2)),
-      chargeableWeight: parseFloat(chargeable.toFixed(2))
+      totalPackages: pkgs,
+      chargeableWeight: parseFloat(chargeable.toFixed(2)),
+      densityRatio: parseFloat(densityRatio.toFixed(0))
     });
   },
 
@@ -510,17 +516,20 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           activities: row.data.activities || [],
           cargoReadyDate: new Date(row.data.cargoReadyDate || new Date()),
           probability: row.data.probability || 'MEDIUM',
-          packagingType: row.data.packagingType || 'PALLETS',
+          // packagingType removed
           isReefer: row.data.isReefer || false,
           temperature: row.data.temperature || '',
           cargoValue: row.data.cargoValue || 0,
           insuranceRequired: row.data.insuranceRequired || false,
           isHazmat: row.data.isHazmat || false,
-          isStackable: row.data.isStackable ?? true,
+          // isStackable removed from global
           goodsDescription: row.data.goodsDescription || '',
           hsCode: row.data.hsCode || '',
           approval: row.data.approval || { requiresApproval: false, reason: null },
           totalTTC: row.total_ttc || 0,
+          // Missing type mapping for packageType would default to PALLET if not in DB
+          packagingType: 'PALLETS', 
+          isStackable: true,
       }));
 
       set({ quotes: mappedQuotes, isLoading: false });
@@ -533,7 +542,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       set({ isLoading: true });
       
       const jsonPayload = {
-          // Logistics Fields
           mode: state.mode,
           incoterm: state.incoterm,
           pol: state.pol,
@@ -563,9 +571,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           competitorInfo: state.competitorInfo,
           customerReference: state.customerReference,
           hsCode: state.hsCode,
-          packagingType: state.packagingType,
           isHazmat: state.isHazmat,
-          isStackable: state.isStackable,
           isReefer: state.isReefer,
           temperature: state.temperature,
           cargoValue: state.cargoValue,
@@ -644,9 +650,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           estimatedArrivalDate: json.estimatedArrivalDate || '',
           competitorInfo: json.competitorInfo || '',
           hsCode: json.hsCode || '',
-          packagingType: json.packagingType || 'PALLETS',
           isHazmat: json.isHazmat || false,
-          isStackable: json.isStackable ?? true,
           isReefer: json.isReefer || false,
           temperature: json.temperature || '',
           cargoValue: json.cargoValue || 0,
