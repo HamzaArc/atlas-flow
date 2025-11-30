@@ -139,7 +139,9 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
               
               {/* Client Section */}
               <div className="col-span-3 space-y-1.5">
-                  <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Customer Account</Label>
+                  <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1">
+                      <XCircle className="h-3 w-3" /> Customer Account
+                  </Label>
                   <Select 
                       disabled={isReadOnly}
                       value={clientName} 
@@ -214,7 +216,6 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                       </SelectContent>
                   </Select>
               </div>
-
           </div>
       </div>
     </div>
