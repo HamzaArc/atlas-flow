@@ -6,15 +6,25 @@ export type Probability = 'LOW' | 'MEDIUM' | 'HIGH';
 export type PackagingType = 'PALLETS' | 'CARTONS' | 'CRATES' | 'DRUMS' | 'LOOSE';
 
 // --- 2. QUOTE ENGINE MODELS ---
-export type ActivityCategory = 'NOTE' | 'SYSTEM' | 'EMAIL' | 'ALERT';
+export type ActivityCategory = 'NOTE' | 'SYSTEM' | 'EMAIL' | 'ALERT' | 'APPROVAL';
 
 export interface ActivityItem {
   id: string;
-  category: ActivityCategory; // New Smart Category
+  category: ActivityCategory;
   tone?: "success" | "neutral" | "warning" | "destructive";
   text: string;
   meta: string; 
   timestamp: Date;
+}
+
+export interface QuoteApproval {
+    requiresApproval: boolean;
+    reason: string | null;
+    requestedBy?: string;
+    requestedAt?: Date;
+    approvedBy?: string;
+    approvedAt?: Date;
+    rejectionReason?: string;
 }
 
 export interface Quote {
@@ -66,6 +76,12 @@ export interface Quote {
   quoteCurrency: Currency; 
   exchangeRates: Record<string, number>; 
   items: QuoteLineItem[];
+  
+  // KPI Data (Added for Dashboard)
+  totalTTC: number; 
+  
+  // Workflow Engine
+  approval: QuoteApproval;
 }
 
 export interface QuoteLineItem {

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase'; 
-import { Quote, QuoteLineItem, TransportMode, Incoterm, Currency, Probability, PackagingType, ActivityItem, ActivityCategory } from '@/types/index';
+import { Quote, QuoteLineItem, TransportMode, Incoterm, Currency, Probability, PackagingType, ActivityItem, ActivityCategory, QuoteApproval } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 
 // --- TYPES ---
@@ -67,6 +67,9 @@ interface QuoteState {
   marginBuffer: number;
   quoteCurrency: Currency; 
   
+  // Workflow Engine
+  approval: QuoteApproval;
+  
   // Activity Feed
   activities: ActivityItem[];
 
@@ -100,10 +103,16 @@ interface QuoteState {
   addLineItem: (section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION') => void;
   updateLineItem: (id: string, field: keyof QuoteLineItem, value: any) => void;
   removeLineItem: (id: string) => void;
-  applyTemplate: (template: PricingTemplate) => void; // NEW ACTION
+  applyTemplate: (template: PricingTemplate) => void;
   
   addActivity: (text: string, category?: ActivityCategory, tone?: 'success' | 'neutral' | 'warning' | 'destructive') => void;
   
+  // Workflow Actions
+  attemptSubmission: () => Promise<void>;
+  submitForApproval: () => Promise<void>;
+  approveQuote: (comment?: string) => Promise<void>;
+  rejectQuote: (reason: string) => Promise<void>;
+
   fetchQuotes: () => Promise<void>;
   saveQuote: () => Promise<void>;
   loadQuote: (id: string) => void; 
@@ -157,9 +166,10 @@ const DEFAULT_STATE = {
   marginBuffer: 1.02,
   quoteCurrency: 'MAD' as Currency,
   
+  approval: { requiresApproval: false, reason: null },
+  
   activities: [
       { id: '1', category: 'SYSTEM', text: 'Quote initialized', meta: 'System', tone: 'neutral', timestamp: new Date() },
-      { id: '2', category: 'ALERT', text: 'Pricing margin below 15%', meta: 'System Alert', tone: 'warning', timestamp: new Date() }
   ] as ActivityItem[],
 
   totalCostMAD: 0,
@@ -187,9 +197,10 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   ...DEFAULT_STATE,
 
   setIdentity: (field, value) => set((state) => ({ ...state, [field]: value })),
-  setStatus: (status) => {
+  setStatus: async (status) => {
       set({ status });
-      get().addActivity(`Status changed to ${status}`, 'SYSTEM', 'success');
+      get().addActivity(`Status manually changed to ${status}`, 'SYSTEM', 'neutral');
+      await get().saveQuote(); // AUTO-SAVE TRIGGER
   },
 
   setRoute: (pol, pod, mode) => {
@@ -256,7 +267,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     get().updateLineItem('trigger', 'description', 'trigger'); 
   },
 
-  // NEW: TEMPLATE LOGIC
   applyTemplate: (template) => {
       const newItems: QuoteLineItem[] = [];
       const createItem = (section: any, desc: string, price: number, curr: Currency = 'MAD', markup = 20): QuoteLineItem => ({
@@ -325,16 +335,24 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     const totalSellTarget = quoteCurrency === 'MAD' ? totalSellMAD : totalSellMAD / targetRate;
     const totalTaxTarget = quoteCurrency === 'MAD' ? totalTaxMAD : totalTaxMAD / targetRate;
 
+    // --- SMART POLICY ENGINE ---
+    const totalMarginMAD = totalSellMAD - totalCostMAD;
+    const marginPercent = totalSellMAD > 0 ? (totalMarginMAD / totalSellMAD) * 100 : 0;
+    
+    const requiresApproval = marginPercent < 15;
+    const approvalReason = requiresApproval ? `Margin ${marginPercent.toFixed(1)}% is below 15% threshold` : null;
+
     set({ 
         items: updatedItems, 
         totalCostMAD: parseFloat(totalCostMAD.toFixed(2)),
         totalSellMAD: parseFloat(totalSellMAD.toFixed(2)),
-        totalMarginMAD: parseFloat((totalSellMAD - totalCostMAD).toFixed(2)),
+        totalMarginMAD: parseFloat(totalMarginMAD.toFixed(2)),
         totalTaxMAD: parseFloat(totalTaxMAD.toFixed(2)),
         totalTTCMAD: parseFloat((totalSellMAD + totalTaxMAD).toFixed(2)),
         totalSellTarget: parseFloat(totalSellTarget.toFixed(2)),
         totalTaxTarget: parseFloat(totalTaxTarget.toFixed(2)),
         totalTTCTarget: parseFloat((totalSellTarget + totalTaxTarget).toFixed(2)),
+        approval: { ...get().approval, requiresApproval, reason: approvalReason }
     });
   },
 
@@ -344,11 +362,68 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           text,
           tone,
           category,
-          meta: category === 'NOTE' ? 'You' : 'System',
+          meta: category === 'NOTE' ? 'You' : category === 'APPROVAL' ? 'Workflow' : 'System',
           timestamp: new Date()
       };
       set((state) => ({ activities: [newItem, ...state.activities] }));
   },
+
+  // --- WORKFLOW ACTIONS WITH AUTO-SAVE ---
+  
+  attemptSubmission: async () => {
+      const { approval } = get();
+      if (approval.requiresApproval) {
+          useToast.getState().toast("Approval required before sending.", "error");
+      } else {
+          set({ status: 'SENT' });
+          get().addActivity('Quote sent to client', 'SYSTEM', 'success');
+          await get().saveQuote(); // AUTO-SAVE
+          useToast.getState().toast("Quote marked as SENT.", "success");
+      }
+  },
+
+  submitForApproval: async () => {
+      const { approval } = get();
+      set({ 
+          status: 'VALIDATION',
+          approval: { 
+              ...approval, 
+              requestedBy: 'Youssef (Sales)',
+              requestedAt: new Date()
+          }
+      });
+      get().addActivity(`Requested approval: ${approval.reason}`, 'APPROVAL', 'warning');
+      await get().saveQuote(); // AUTO-SAVE
+      useToast.getState().toast("Submitted for Manager Approval", "success");
+  },
+
+  approveQuote: async (comment) => {
+      const { approval } = get();
+      set({ 
+          status: 'SENT', 
+          approval: {
+              ...approval,
+              requiresApproval: false, 
+              approvedBy: 'Fatima (Manager)',
+              approvedAt: new Date()
+          }
+      });
+      get().addActivity(`Manager approved quote.${comment ? ` Note: ${comment}` : ''}`, 'APPROVAL', 'success');
+      await get().saveQuote(); // AUTO-SAVE
+      useToast.getState().toast("Quote Approved & Validated", "success");
+  },
+
+  rejectQuote: async (reason) => {
+      set({ 
+          status: 'DRAFT', 
+          approval: { ...get().approval, rejectionReason: reason }
+      });
+      get().addActivity(`Approval rejected: ${reason}`, 'APPROVAL', 'destructive');
+      await get().saveQuote(); // AUTO-SAVE
+      useToast.getState().toast("Quote Rejected and reset to Draft", "info");
+  },
+
+  // --- DATABASE ACTIONS ---
 
   fetchQuotes: async () => {
       set({ isLoading: true });
@@ -386,7 +461,9 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           isHazmat: row.data.isHazmat || false,
           isStackable: row.data.isStackable ?? true,
           goodsDescription: row.data.goodsDescription || '',
-          hsCode: row.data.hsCode || ''
+          hsCode: row.data.hsCode || '',
+          approval: row.data.approval || { requiresApproval: false, reason: null },
+          totalTTC: row.total_ttc || 0, // MAP THE KPI FIELD
       }));
 
       set({ quotes: mappedQuotes, isLoading: false });
@@ -427,7 +504,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           isReefer: state.isReefer,
           temperature: state.temperature,
           cargoValue: state.cargoValue,
-          insuranceRequired: state.insuranceRequired
+          insuranceRequired: state.insuranceRequired,
+          approval: state.approval 
       };
 
       const dbRow = {
@@ -452,7 +530,9 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           }
           await get().fetchQuotes();
           set({ isLoading: false });
-          useToast.getState().toast(`Quote saved!`, "success");
+          // Only show toast if explicitly saving manually (not via auto-save trigger), 
+          // or we can leave it to confirm the status change action.
+          // For now, we leave it to provide feedback.
       } catch (error: any) {
           console.error(error);
           set({ isLoading: false });
@@ -502,7 +582,9 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           isReefer: json.isReefer || false,
           temperature: json.temperature || '',
           cargoValue: json.cargoValue || 0,
-          insuranceRequired: json.insuranceRequired || false
+          insuranceRequired: json.insuranceRequired || false,
+          approval: json.approval || { requiresApproval: false, reason: null },
+          totalTTCMAD: data.total_ttc || 0,
       });
       get().updateLineItem('trigger', 'description', 'trigger');
   },
