@@ -3,7 +3,7 @@ import { Sidebar } from "@/components/ui/layout/Sidebar";
 import QuoteWorkspace from "@/features/quotes/QuoteWorkspace";
 import QuoteDashboard from "@/features/quotes/pages/QuoteDashboard";
 import DossierWorkspace from "@/features/dossier/DossierWorkspace";
-import DossierDashboard from "@/features/dossier/pages/DossierDashboard"; // NEW
+import DossierDashboard from "@/features/dossier/pages/DossierDashboard";
 import ClientDetailsPage from "@/features/crm/pages/ClientDetailsPage";
 import ClientListPage from "@/features/crm/pages/ClientListPage";
 import { Toaster } from "@/components/ui/use-toast";
@@ -15,7 +15,7 @@ function App() {
   
   // Sub-Navigation States
   const [crmView, setCrmView] = useState<'list' | 'details'>('list');
-  const [dossierView, setDossierView] = useState<'dashboard' | 'dossier'>('dashboard'); // NEW
+  const [dossierView, setDossierView] = useState<'dashboard' | 'dossier'>('dashboard'); 
 
   const { createNewQuote } = useQuoteStore();
 
@@ -53,14 +53,8 @@ function App() {
                 <DossierDashboard onNavigate={setDossierView} />
             ) : (
                 <div className="absolute inset-0 z-20 bg-white">
-                    <DossierWorkspace />
-                    {/* Back Button Overlay for Dossier Workspace */}
-                    <button 
-                        onClick={() => setDossierView('dashboard')} 
-                        className="absolute top-[18px] right-20 z-30 text-xs font-bold text-slate-500 hover:text-slate-800 bg-white/80 px-3 py-1 rounded-full border border-slate-200 shadow-sm"
-                    >
-                        CLOSE FILE ✕
-                    </button>
+                    {/* Passed the back handler down explicitly */}
+                    <DossierWorkspace onBack={() => setDossierView('dashboard')} />
                 </div>
             )
         )}

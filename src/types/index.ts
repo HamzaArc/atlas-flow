@@ -106,16 +106,25 @@ export interface DossierContainer {
   seal: string;
   weight: number; // kg
   packages: number;
-  packageType: PackagingType; // <--- ADDED REQUIRED PROPERTY
+  packageType: PackagingType;
   volume: number; // cbm
   status: 'GATE_IN' | 'LOADED' | 'ON_WATER' | 'DISCHARGED' | 'DELIVERED' | 'EMPTY_RETURN';
   pickupDate?: string;
   returnDate?: string;
 }
 
+// NEW: Smart Alerts Interface
+export interface DossierAlert {
+    id: string;
+    type: 'BLOCKER' | 'WARNING' | 'INFO';
+    message: string;
+    actionRequired?: string;
+}
+
 export interface Dossier {
   id: string;
   ref: string; // Internal File Ref (e.g., IMP-24-001)
+  bookingRef: string; // Carrier Booking Reference <--- ADDED THIS FIELD
   status: ShipmentStatus;
   
   // Linked Entities
@@ -124,8 +133,8 @@ export interface Dossier {
   quoteId?: string;
 
   // Master Data
-  mblNumber: string; // Master Bill of Lading
-  hblNumber: string; // House Bill of Lading
+  mblNumber: string; 
+  hblNumber: string; 
   carrier: string;
   vesselName: string;
   voyageNumber: string;
@@ -135,7 +144,7 @@ export interface Dossier {
   pod: string;
   etd: Date;
   eta: Date;
-  ata?: Date; // Actual Time of Arrival
+  ata?: Date; 
 
   // Parties
   shipper: ShipmentParty;
@@ -147,11 +156,20 @@ export interface Dossier {
   mode: TransportMode;
   freeTimeDays: number; // Demurrage allowance
   
+  // Logistics Ops
+  vgmCutOff?: Date;
+  portCutOff?: Date;
+  docCutOff?: Date;
+  
   // Sub-Resources
   containers: DossierContainer[];
   activities: ActivityItem[];
   
-  // Financial Snapshot (Derived from P&L)
+  // Computed Intelligence
+  alerts: DossierAlert[];
+  nextAction: string;
+  
+  // Financial Snapshot
   totalRevenue: number;
   totalCost: number;
   currency: Currency;
