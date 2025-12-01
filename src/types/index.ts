@@ -106,6 +106,7 @@ export interface DossierContainer {
   seal: string;
   weight: number; // kg
   packages: number;
+  packageType: PackagingType; // <--- ADDED REQUIRED PROPERTY
   volume: number; // cbm
   status: 'GATE_IN' | 'LOADED' | 'ON_WATER' | 'DISCHARGED' | 'DELIVERED' | 'EMPTY_RETURN';
   pickupDate?: string;

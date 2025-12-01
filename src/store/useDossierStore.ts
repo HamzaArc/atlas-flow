@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Dossier, DossierContainer, ShipmentStatus, ActivityItem } from '@/types/index';
+import { Dossier, DossierContainer, ShipmentStatus, ActivityItem, ActivityCategory } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 
 interface DossierState {
@@ -28,7 +28,8 @@ interface DossierState {
   removeContainer: (id: string) => void;
 
   // Collaboration
-  addActivity: (text: string, category: 'SYSTEM' | 'NOTE') => void;
+  // [ARCHITECT NOTE]: Updated signature to match ClientStore and support UI 'tone'
+  addActivity: (text: string, category: ActivityCategory, tone?: 'success' | 'neutral' | 'warning' | 'destructive') => void;
 }
 
 // --- MOCK DATA GENERATOR ---
@@ -40,7 +41,7 @@ const generateMockDossiers = (): Dossier[] => [
         pol: 'SHANGHAI (CN)', pod: 'CASABLANCA (MAP)', etd: new Date('2024-11-20'), eta: new Date('2024-12-05'),
         incoterm: 'FOB', mode: 'SEA_FCL', freeTimeDays: 7,
         shipper: { name: 'Shanghai Textiles Ltd' }, consignee: { name: 'TexNord SARL' },
-        containers: [{ id: 'c1', number: 'MSKU9012345', type: '40HC', seal: '123456', weight: 12500, packages: 500, volume: 65, status: 'ON_WATER' }],
+        containers: [{ id: 'c1', number: 'MSKU9012345', type: '40HC', seal: '123456', weight: 12500, packages: 500, packageType: 'CARTONS', volume: 65, status: 'ON_WATER' }],
         activities: [], totalRevenue: 45000, totalCost: 32000, currency: 'MAD'
     },
     {
@@ -118,7 +119,14 @@ export const useDossierStore = create<DossierState>((set, get) => ({
   addContainer: () => {
       const newContainer: DossierContainer = {
           id: Math.random().toString(36).substr(2,9),
-          number: '', type: '40HC', seal: '', weight: 0, packages: 0, volume: 0, status: 'GATE_IN'
+          number: '', 
+          type: '40HC', 
+          seal: '', 
+          weight: 0, 
+          packages: 0, 
+          packageType: 'PALLETS',
+          volume: 0, 
+          status: 'GATE_IN'
       };
       set((state) => ({
           dossier: { ...state.dossier, containers: [...state.dossier.containers, newContainer] }
@@ -162,10 +170,18 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       useToast.getState().toast("Shipment archived.", "info");
   },
 
-  addActivity: (text, category) => set((state) => ({
+  // [ARCHITECT NOTE]: Implementation updated to handle optional 'tone'
+  addActivity: (text, category, tone = 'neutral') => set((state) => ({
       dossier: {
           ...state.dossier,
-          activities: [{ id: Math.random().toString(36), category, text, meta: 'User', timestamp: new Date() }, ...state.dossier.activities]
+          activities: [{ 
+              id: Math.random().toString(36), 
+              category, 
+              text, 
+              tone, 
+              meta: 'User', 
+              timestamp: new Date() 
+          }, ...state.dossier.activities]
       }
   })),
 }));

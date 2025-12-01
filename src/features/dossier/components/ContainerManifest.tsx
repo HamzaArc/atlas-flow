@@ -9,7 +9,16 @@ import {
 } from "@/components/ui/select";
 import { useDossierStore } from "@/store/useDossierStore";
 import { Container, Plus, Trash2, Package, Weight } from "lucide-react";
-import { DossierContainer } from "@/types/index";
+import { DossierContainer, PackagingType } from "@/types/index";
+
+// Local constant for dropdown, derived from type
+const PACKAGE_TYPES: { value: PackagingType; label: string }[] = [
+    { value: 'PALLETS', label: 'Pallets' },
+    { value: 'CARTONS', label: 'Cartons' },
+    { value: 'CRATES', label: 'Crates' },
+    { value: 'DRUMS', label: 'Drums' },
+    { value: 'LOOSE', label: 'Loose' },
+];
 
 export function ContainerManifest() {
   const { dossier, isEditing, addContainer, updateContainer, removeContainer } = useDossierStore();
@@ -35,10 +44,10 @@ export function ContainerManifest() {
             <Table>
                 <TableHeader className="bg-slate-50/80 sticky top-0 z-10">
                     <TableRow className="hover:bg-transparent border-b border-slate-200">
-                        <TableHead className="w-[30%] text-[10px] font-bold uppercase text-slate-500 h-9">Container No. / Type</TableHead>
-                        <TableHead className="w-[20%] text-[10px] font-bold uppercase text-slate-500 h-9">Seal No.</TableHead>
+                        <TableHead className="w-[25%] text-[10px] font-bold uppercase text-slate-500 h-9">Container No. / Type</TableHead>
+                        <TableHead className="w-[15%] text-[10px] font-bold uppercase text-slate-500 h-9">Seal No.</TableHead>
                         <TableHead className="w-[15%] text-[10px] font-bold uppercase text-slate-500 h-9 text-right">Weight (kg)</TableHead>
-                        <TableHead className="w-[15%] text-[10px] font-bold uppercase text-slate-500 h-9 text-right">Pkgs</TableHead>
+                        <TableHead className="w-[20%] text-[10px] font-bold uppercase text-slate-500 h-9">Packages</TableHead>
                         <TableHead className="w-[15%] text-[10px] font-bold uppercase text-slate-500 h-9">Status</TableHead>
                         {isEditing && <TableHead className="w-[5%] h-9"></TableHead>}
                     </TableRow>
@@ -84,14 +93,24 @@ export function ContainerManifest() {
                                     className="h-7 text-xs text-right bg-transparent border-transparent hover:border-slate-200 focus:border-blue-300 focus:bg-white p-1"
                                 />
                             </TableCell>
-                            <TableCell className="py-2 text-right">
-                                <Input 
-                                    type="number"
-                                    value={c.packages} 
-                                    disabled={!isEditing} 
-                                    onChange={(e) => updateContainer(c.id, 'packages', parseFloat(e.target.value))}
-                                    className="h-7 text-xs text-right bg-transparent border-transparent hover:border-slate-200 focus:border-blue-300 focus:bg-white p-1"
-                                />
+                            <TableCell className="py-2">
+                                <div className="flex items-center gap-1">
+                                    <Input 
+                                        type="number"
+                                        value={c.packages} 
+                                        disabled={!isEditing} 
+                                        onChange={(e) => updateContainer(c.id, 'packages', parseFloat(e.target.value))}
+                                        className="h-7 w-16 text-xs text-right bg-transparent border-transparent hover:border-slate-200 focus:border-blue-300 focus:bg-white p-1"
+                                    />
+                                    <Select disabled={!isEditing} value={c.packageType} onValueChange={(v: any) => updateContainer(c.id, 'packageType', v)}>
+                                        <SelectTrigger className="h-7 text-[10px] border-transparent bg-transparent hover:bg-slate-100 focus:ring-0 min-h-0 px-1">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {PACKAGE_TYPES.map(t => <SelectItem key={t.value} value={t.value} className="text-xs">{t.label}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </TableCell>
                             <TableCell className="py-2">
                                 <Select disabled={!isEditing} value={c.status} onValueChange={(v: any) => updateContainer(c.id, 'status', v)}>
