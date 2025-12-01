@@ -3,8 +3,9 @@ import { Sidebar } from "@/components/ui/layout/Sidebar";
 import QuoteWorkspace from "@/features/quotes/QuoteWorkspace";
 import QuoteDashboard from "@/features/quotes/pages/QuoteDashboard";
 import DossierWorkspace from "@/features/dossier/DossierWorkspace";
+import DossierDashboard from "@/features/dossier/pages/DossierDashboard"; // NEW
 import ClientDetailsPage from "@/features/crm/pages/ClientDetailsPage";
-import ClientListPage from "@/features/crm/pages/ClientListPage"; // <--- NEW IMPORT
+import ClientListPage from "@/features/crm/pages/ClientListPage";
 import { Toaster } from "@/components/ui/use-toast";
 import { useQuoteStore } from "@/store/useQuoteStore"; 
 
@@ -14,6 +15,7 @@ function App() {
   
   // Sub-Navigation States
   const [crmView, setCrmView] = useState<'list' | 'details'>('list');
+  const [dossierView, setDossierView] = useState<'dashboard' | 'dossier'>('dashboard'); // NEW
 
   const { createNewQuote } = useQuoteStore();
 
@@ -21,11 +23,7 @@ function App() {
       setCurrentPage(page);
       // Reset sub-views when navigating main menu
       if (page === 'crm') setCrmView('list');
-  };
-
-  const handleNewQuote = () => {
-      createNewQuote();
-      setCurrentPage('create');
+      if (page === 'dossier') setDossierView('dashboard');
   };
 
   return (
@@ -49,9 +47,22 @@ function App() {
           </div>
         )}
 
-        {/* 2. Operations Module */}
+        {/* 2. Operations Module (UPDATED) */}
         {currentPage === 'dossier' && (
-            <DossierWorkspace />
+            dossierView === 'dashboard' ? (
+                <DossierDashboard onNavigate={setDossierView} />
+            ) : (
+                <div className="absolute inset-0 z-20 bg-white">
+                    <DossierWorkspace />
+                    {/* Back Button Overlay for Dossier Workspace */}
+                    <button 
+                        onClick={() => setDossierView('dashboard')} 
+                        className="absolute top-[18px] right-20 z-30 text-xs font-bold text-slate-500 hover:text-slate-800 bg-white/80 px-3 py-1 rounded-full border border-slate-200 shadow-sm"
+                    >
+                        CLOSE FILE ✕
+                    </button>
+                </div>
+            )
         )}
 
         {/* 3. CRM Module (Client Management) */}
@@ -60,7 +71,6 @@ function App() {
                 <ClientListPage onNavigate={setCrmView} />
             ) : (
                 <div className="absolute inset-0 z-20 bg-white">
-                    {/* Add back button logic inside ClientDetailsPage or wrap it here */}
                     <div className="h-full flex flex-col">
                         <div className="bg-white border-b px-4 py-2">
                             <button onClick={() => setCrmView('list')} className="text-xs text-blue-600 hover:underline">← Back to List</button>
