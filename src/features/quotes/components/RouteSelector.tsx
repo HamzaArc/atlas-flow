@@ -368,7 +368,7 @@ export function RouteSelector() {
           {/* Validation Warning */}
           {isAir && (totalWeight === 0 || totalVolume === 0) && (
               <div className="p-2 bg-red-50 border border-red-100 rounded-md flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-red-500" />
+                  <MapPin className="h-4 w-4 text-red-500" />
                   <span className="text-[10px] text-red-600 font-medium">Air Freight requires valid Weight & Volume.</span>
               </div>
           )}
