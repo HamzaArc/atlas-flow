@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { useToast } from "@/components/ui/use-toast";
-import { ActivityItem, ActivityCategory } from "@/types/index"; // Ensure this import exists or define locally if needed
+import { ActivityItem, ActivityCategory } from "@/types/index";
 
 // --- DOMAIN TYPES ---
 export type ClientStatus = 'ACTIVE' | 'PROSPECT' | 'SUSPENDED' | 'BLACKLISTED';
@@ -20,7 +20,20 @@ export interface ClientRoute {
   origin: string;
   destination: string;
   mode: 'SEA' | 'AIR' | 'ROAD';
-  volume: string;
+  incoterm: 'EXW' | 'FOB' | 'CIF' | 'DAP' | 'DDP' | 'OTHER';
+  equipment: '20DV' | '40HC' | 'LCL' | 'AIR' | 'FTL' | 'LTL';
+  volume: number;
+  volumeUnit: 'TEU' | 'KG' | 'TRK';
+  frequency: 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'ADHOC';
+}
+
+export interface ClientDocument {
+  id: string;
+  name: string;
+  type: 'CONTRACT' | 'KYC' | 'NDA' | 'OTHER';
+  uploadDate: Date;
+  size: string;
+  url: string;
 }
 
 export interface ClientFinancials {
@@ -29,44 +42,79 @@ export interface ClientFinancials {
   currency: string;
   ice?: string;
   rc?: string;
+  taxId?: string;
+}
+
+// --- NEW INTELLIGENT TYPES ---
+export type SupplierRole = 'SEA_LINE' | 'AIRLINE' | 'HAULIER' | 'FORWARDER';
+export type SupplierTier = 'STRATEGIC' | 'APPROVED' | 'BACKUP' | 'BLOCKED';
+
+export interface ClientSupplier {
+  id: string;
+  name: string;
+  role: SupplierRole;
+  tier: SupplierTier;
+}
+
+export type CommoditySector = 'AUTOMOTIVE' | 'TEXTILE' | 'PERISHABLE' | 'RETAIL' | 'INDUSTRIAL' | 'TECH';
+
+export interface ClientCommodity {
+  id: string;
+  name: string;
+  sector: CommoditySector;
+  isHazmat: boolean;
+}
+
+// OPERATIONAL PROFILE
+export interface OperationalProfile {
+  hsCodes: string[];
+  requiresHazmat: boolean;
+  requiresReefer: boolean;
+  requiresOOG: boolean;
+  customsRegime: 'STANDARD' | 'TEMPORARY' | 'FREE_ZONE';
+  // Removed old string arrays, now handled by root collections
 }
 
 export interface Client {
   id: string;
-  created_at: string; // Made mandatory for "Customer From" logic
+  created_at: string;
   updated_at?: string;
   entityName: string;
   status: ClientStatus;
   type: ClientType;
   email: string;
   phone: string;
+  website?: string;
   city: string;
   country: string;
   address?: string;
+  
+  // Financials
   creditLimit: number;
   creditUsed: number;
-  salesRepId: string;
-  
-  // Segmentation
-  tags: string[];
-  
-  // Nested Data
-  contacts: ClientContact[];
-  routes: ClientRoute[];
   financials: ClientFinancials;
   
-  // Enhanced Logistics
-  preferredSuppliers: string[];
-  preferredGoods: string[];
+  // Sales & CRM
+  salesRepId: string;
+  tags: string[];
   
-  // Collaboration Hub
+  // Sub-Resources
+  contacts: ClientContact[];
+  routes: ClientRoute[];
+  documents: ClientDocument[];
+  
+  // NEW: Rich Collections
+  suppliers: ClientSupplier[];
+  commodities: ClientCommodity[];
+  
+  // Logistics Intelligence
+  operational: OperationalProfile;
+  
+  // Collaboration
   activities: ActivityItem[];
-  
-  internalNotes?: string; // Legacy field, kept for backward compat
 }
 
 interface ClientState {
-  // State
   clients: Client[];
   activeClient: Client | null;
   isLoading: boolean;
@@ -75,7 +123,6 @@ interface ClientState {
     status: string;
   };
 
-  // Actions
   setSearch: (term: string) => void;
   setFilterStatus: (status: string) => void;
   
@@ -85,31 +132,29 @@ interface ClientState {
   saveClient: (client: Client) => Promise<void>;
   deleteClient: (id: string) => Promise<void>;
 
-  // Granular State Mutations
   updateActiveField: (field: keyof Client, value: any) => void;
   updateActiveFinancials: (field: keyof ClientFinancials, value: any) => void;
+  updateOperationalProfile: (field: keyof OperationalProfile, value: any) => void;
   
-  // Contact Actions
   addContact: (contact: ClientContact) => void;
   removeContact: (contactId: string) => void;
-  
-  // Route Actions
   addRoute: (route: ClientRoute) => void;
   removeRoute: (routeId: string) => void;
+  addDocument: (doc: ClientDocument) => void;
+  removeDocument: (docId: string) => void;
 
-  // Tag Actions
   addTag: (tag: string) => void;
   removeTag: (tag: string) => void;
-
-  // Logistics Preference Actions
-  addPreference: (type: 'preferredSuppliers' | 'preferredGoods', value: string) => void;
-  removePreference: (type: 'preferredSuppliers' | 'preferredGoods', value: string) => void;
-
-  // Activity Actions
+  
+  // NEW ACTIONS
+  addSupplier: (supplier: ClientSupplier) => void;
+  removeSupplier: (id: string) => void;
+  addCommodity: (commodity: ClientCommodity) => void;
+  removeCommodity: (id: string) => void;
+  
   addActivity: (text: string, category: ActivityCategory, tone?: 'success' | 'neutral' | 'warning' | 'destructive') => void;
 }
 
-// --- DEFAULT FACTORY ---
 const createEmptyClient = (): Client => ({
   id: `new-${Date.now()}`,
   created_at: new Date().toISOString(),
@@ -126,8 +171,16 @@ const createEmptyClient = (): Client => ({
   tags: [],
   contacts: [],
   routes: [],
-  preferredSuppliers: [],
-  preferredGoods: [],
+  documents: [],
+  suppliers: [],
+  commodities: [],
+  operational: {
+      hsCodes: [],
+      requiresHazmat: false,
+      requiresReefer: false,
+      requiresOOG: false,
+      customsRegime: 'STANDARD',
+  },
   activities: [
     { 
         id: 'init', 
@@ -147,6 +200,46 @@ const createEmptyClient = (): Client => ({
   }
 });
 
+const MOCK_DB_CLIENTS: Client[] = [
+    {
+        id: 'cli_1', created_at: '2023-01-15T10:00:00Z', entityName: 'TexNord SARL', status: 'ACTIVE', type: 'SHIPPER',
+        email: 'logistics@texnord.ma', phone: '+212 522 00 00 00', website: 'www.texnord.ma',
+        city: 'Casablanca', country: 'Morocco', address: '123 Ind. Zone Sidi Maarouf',
+        creditLimit: 500000, creditUsed: 125000,
+        salesRepId: 'Youssef (Sales)', tags: ['VIP', 'Textile', 'Export'],
+        contacts: [
+            { id: 'ct_1', name: 'Ahmed Bennani', role: 'Logistics Manager', email: 'ahmed@texnord.ma', phone: '+212 600 11 22 33', isPrimary: true }
+        ], 
+        routes: [
+            { id: 'rt_1', origin: 'CASABLANCA', destination: 'LE HAVRE', mode: 'SEA', incoterm: 'CIF', equipment: '40HC', volume: 50, volumeUnit: 'TEU', frequency: 'WEEKLY' },
+            { id: 'rt_2', origin: 'CASABLANCA', destination: 'BARCELONA', mode: 'ROAD', incoterm: 'DAP', equipment: 'FTL', volume: 12, volumeUnit: 'TRK', frequency: 'MONTHLY' }
+        ],
+        documents: [
+            { id: 'doc_1', name: 'Commercial Contract 2024.pdf', type: 'CONTRACT', uploadDate: new Date('2024-01-01'), size: '2.4 MB', url: '#' }
+        ],
+        suppliers: [
+            { id: 'sup_1', name: 'Maersk', role: 'SEA_LINE', tier: 'STRATEGIC' },
+            { id: 'sup_2', name: 'CMA CGM', role: 'SEA_LINE', tier: 'APPROVED' },
+            { id: 'sup_3', name: 'DHL Aviation', role: 'AIRLINE', tier: 'BACKUP' }
+        ],
+        commodities: [
+            { id: 'com_1', name: 'Raw Cotton Fabric', sector: 'TEXTILE', isHazmat: false },
+            { id: 'com_2', name: 'Industrial Dyes', sector: 'INDUSTRIAL', isHazmat: true }
+        ],
+        operational: {
+            hsCodes: ['5208.10', '5209.42'],
+            requiresHazmat: true,
+            requiresReefer: false,
+            requiresOOG: false,
+            customsRegime: 'STANDARD',
+        },
+        activities: [
+            { id: 'a1', category: 'NOTE', text: 'Meeting with CEO next Tuesday regarding Q3 targets.', meta: 'Youssef', timestamp: new Date('2024-01-20'), tone: 'neutral' }
+        ], 
+        financials: { paymentTerms: 'NET_60', vatNumber: '12345', currency: 'MAD', ice: '001528829000054', rc: '34992' }
+    }
+];
+
 export const useClientStore = create<ClientState>((set, get) => ({
   clients: [],
   activeClient: null,
@@ -156,13 +249,13 @@ export const useClientStore = create<ClientState>((set, get) => ({
   setSearch: (search) => set((state) => ({ filters: { ...state.filters, search } })),
   setFilterStatus: (status) => set((state) => ({ filters: { ...state.filters, status } })),
 
-  // --- DATABASE INTERACTIONS ---
   fetchClients: async () => {
+    // PRESERVE STATE: Only fetch if empty to avoid wiping new local creations
+    if (get().clients.length > 0) return;
+
     set({ isLoading: true });
-    // Simulate DB fetch
     setTimeout(() => {
-        set({ isLoading: false });
-        if (get().clients.length === 0) set({ clients: MOCK_DB_CLIENTS });
+        set({ isLoading: false, clients: MOCK_DB_CLIENTS });
     }, 600);
   },
 
@@ -174,7 +267,6 @@ export const useClientStore = create<ClientState>((set, get) => ({
     set({ isLoading: true });
     const found = get().clients.find(c => c.id === id);
     setTimeout(() => {
-        // Deep copy to avoid mutating the list directly during edit
         set({ activeClient: found ? JSON.parse(JSON.stringify(found)) : null, isLoading: false });
     }, 300);
   },
@@ -183,26 +275,25 @@ export const useClientStore = create<ClientState>((set, get) => ({
     set({ isLoading: true });
     setTimeout(() => {
         const { clients } = get();
-        const exists = clients.find(c => c.id === client.id);
-        let updatedList;
+        const existsIndex = clients.findIndex(c => c.id === client.id);
+        let updatedList = [...clients];
 
-        if (exists) {
-            updatedList = clients.map(c => c.id === client.id ? { ...client, updated_at: new Date().toISOString() } : c);
+        if (existsIndex >= 0) {
+            updatedList[existsIndex] = { ...client, updated_at: new Date().toISOString() };
         } else {
-            updatedList = [{ ...client, id: `cli_${Date.now()}`, created_at: new Date().toISOString() }, ...clients];
+            updatedList = [{ ...client, id: client.id, created_at: new Date().toISOString() }, ...clients];
         }
 
         set({ clients: updatedList, activeClient: client, isLoading: false });
-        useToast.getState().toast("Client saved successfully", "success");
+        useToast.getState().toast("Client profile saved successfully", "success");
     }, 600);
   },
 
   deleteClient: async (id) => {
     set({ clients: get().clients.filter(c => c.id !== id) });
-    useToast.getState().toast("Client permanently removed", "info");
+    useToast.getState().toast("Client removed from directory", "info");
   },
 
-  // --- GRANULAR EDITORS ---
   updateActiveField: (field, value) => set(state => ({
       activeClient: state.activeClient ? { ...state.activeClient, [field]: value } : null
   })),
@@ -214,11 +305,16 @@ export const useClientStore = create<ClientState>((set, get) => ({
       } : null
   })),
 
-  // --- SUB-RESOURCE ACTIONS ---
+  updateOperationalProfile: (field, value) => set(state => ({
+      activeClient: state.activeClient ? {
+          ...state.activeClient,
+          operational: { ...state.activeClient.operational, [field]: value }
+      } : null
+  })),
+
   addContact: (contact) => set(state => {
       if (!state.activeClient) return {};
       const newContacts = [...state.activeClient.contacts, contact];
-      // Logic: if new contact is primary, unset others
       if(contact.isPrimary) {
           newContacts.forEach(c => { if(c.id !== contact.id) c.isPrimary = false });
       }
@@ -246,6 +342,20 @@ export const useClientStore = create<ClientState>((set, get) => ({
       } : null
   })),
 
+  addDocument: (doc) => set(state => ({
+      activeClient: state.activeClient ? {
+          ...state.activeClient,
+          documents: [doc, ...state.activeClient.documents]
+      } : null
+  })),
+
+  removeDocument: (id) => set(state => ({
+      activeClient: state.activeClient ? {
+          ...state.activeClient,
+          documents: state.activeClient.documents.filter(d => d.id !== id)
+      } : null
+  })),
+
   addTag: (tag) => set(state => {
       if(!state.activeClient || state.activeClient.tags.includes(tag)) return {};
       return { activeClient: { ...state.activeClient, tags: [...state.activeClient.tags, tag] } };
@@ -258,17 +368,32 @@ export const useClientStore = create<ClientState>((set, get) => ({
       } : null
   })),
 
-  addPreference: (type, value) => set(state => {
-      if(!state.activeClient) return {};
-      const list = state.activeClient[type];
-      if(list.includes(value)) return {};
-      return { activeClient: { ...state.activeClient, [type]: [...list, value] } };
-  }),
-
-  removePreference: (type, value) => set(state => ({
+  // --- NEW RICH ACTIONS ---
+  addSupplier: (supplier) => set(state => ({
       activeClient: state.activeClient ? {
           ...state.activeClient,
-          [type]: state.activeClient[type].filter(item => item !== value)
+          suppliers: [...state.activeClient.suppliers, supplier]
+      } : null
+  })),
+
+  removeSupplier: (id) => set(state => ({
+      activeClient: state.activeClient ? {
+          ...state.activeClient,
+          suppliers: state.activeClient.suppliers.filter(s => s.id !== id)
+      } : null
+  })),
+
+  addCommodity: (commodity) => set(state => ({
+      activeClient: state.activeClient ? {
+          ...state.activeClient,
+          commodities: [...state.activeClient.commodities, commodity]
+      } : null
+  })),
+
+  removeCommodity: (id) => set(state => ({
+      activeClient: state.activeClient ? {
+          ...state.activeClient,
+          commodities: state.activeClient.commodities.filter(c => c.id !== id)
       } : null
   })),
 
@@ -284,47 +409,4 @@ export const useClientStore = create<ClientState>((set, get) => ({
       };
       return { activeClient: { ...state.activeClient, activities: [newActivity, ...state.activeClient.activities] } };
   }),
-
 }));
-
-// --- SEED DATA ---
-const MOCK_DB_CLIENTS: Client[] = [
-    {
-        id: 'cli_1', created_at: '2023-01-15T10:00:00Z', entityName: 'TexNord SARL', status: 'ACTIVE', type: 'SHIPPER',
-        email: 'logistics@texnord.ma', phone: '+212 522 00 00 00',
-        city: 'Casablanca', country: 'Morocco',
-        creditLimit: 500000, creditUsed: 125000,
-        salesRepId: 'Youssef (Sales)', tags: ['VIP', 'Textile'],
-        contacts: [
-            { id: 'ct_1', name: 'Ahmed Bennani', role: 'Logistics Manager', email: 'ahmed@texnord.ma', phone: '+212 600 11 22 33', isPrimary: true }
-        ], 
-        routes: [
-            { id: 'rt_1', origin: 'CASABLANCA', destination: 'LE HAVRE', mode: 'SEA', volume: '50 TEU/yr' }
-        ],
-        preferredSuppliers: ['Maersk', 'CMA CGM'],
-        preferredGoods: ['Fabrics', 'Yarn'],
-        activities: [
-            { id: 'a1', category: 'NOTE', text: 'Meeting with CEO next Tuesday.', meta: 'Youssef', timestamp: new Date('2024-01-20'), tone: 'neutral' },
-            { id: 'a2', category: 'SYSTEM', text: 'Credit limit increased to 500k', meta: 'System', timestamp: new Date('2023-12-01'), tone: 'success' }
-        ], 
-        financials: { paymentTerms: 'NET_60', vatNumber: '12345', currency: 'MAD', ice: '001528829000054' }
-    },
-    {
-        id: 'cli_2', created_at: '2023-06-20T14:30:00Z', entityName: 'Global Fruits Exp', status: 'ACTIVE', type: 'SHIPPER',
-        email: 'ops@globalfruits.com', phone: '+212 661 99 88 77',
-        city: 'Agadir', country: 'Morocco',
-        creditLimit: 200000, creditUsed: 195000,
-        salesRepId: 'Fatima (Ops)', tags: ['Perishable', 'Reefer'],
-        contacts: [], routes: [], preferredSuppliers: [], preferredGoods: [], activities: [],
-        financials: { paymentTerms: 'NET_30', vatNumber: '67890', currency: 'MAD' }
-    },
-    {
-        id: 'cli_3', created_at: '2024-02-10T09:15:00Z', entityName: 'AutoParts Tangier', status: 'PROSPECT', type: 'CONSIGNEE',
-        email: 'purchasing@autoparts.ma', phone: '+212 539 33 44 55',
-        city: 'Tangier', country: 'Morocco',
-        creditLimit: 0, creditUsed: 0,
-        salesRepId: 'Youssef (Sales)', tags: ['Automotive'],
-        contacts: [], routes: [], preferredSuppliers: [], preferredGoods: [], activities: [],
-        financials: { paymentTerms: 'PREPAID', vatNumber: '54321', currency: 'EUR' }
-    }
-];

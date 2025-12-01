@@ -20,6 +20,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 interface ClientListPageProps {
     onNavigate: (view: 'list' | 'details') => void;
@@ -36,7 +37,6 @@ export default function ClientListPage({ onNavigate }: ClientListPageProps) {
       fetchClients();
   }, []);
 
-  // --- FILTER LOGIC (Explicit Typing Fix) ---
   const filteredData = clients.filter((client: Client) => {
       const matchesSearch = client.entityName.toLowerCase().includes(filters.search.toLowerCase()) || 
                             client.email.toLowerCase().includes(filters.search.toLowerCase());
@@ -44,12 +44,11 @@ export default function ClientListPage({ onNavigate }: ClientListPageProps) {
       return matchesSearch && matchesStatus;
   });
 
-  // --- STATS CALCULATION ---
   const stats = {
       total: clients.length,
-      active: clients.filter((c: Client) => c.status === 'ACTIVE').length,
-      creditRisk: clients.filter((c: Client) => (c.creditLimit > 0 && (c.creditUsed / c.creditLimit) > 0.9)).length,
-      totalCredit: clients.reduce((acc, c: Client) => acc + c.creditUsed, 0)
+      active: clients.filter(c => c.status === 'ACTIVE').length,
+      creditRisk: clients.filter(c => (c.creditLimit > 0 && (c.creditUsed / c.creditLimit) > 0.9)).length,
+      totalCredit: clients.reduce((acc, c) => acc + c.creditUsed, 0)
   };
 
   const handleCreate = () => {
@@ -73,19 +72,19 @@ export default function ClientListPage({ onNavigate }: ClientListPageProps) {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50/50">
+    <div className="flex flex-col h-full bg-slate-50/50">
       
-      {/* 1. TOP HEADER */}
-      <div className="px-8 py-6 border-b border-slate-200 bg-white sticky top-0 z-10 flex justify-between items-center">
+      {/* 1. HEADER */}
+      <div className="px-8 py-6 border-b border-slate-200 bg-white flex justify-between items-center sticky top-0 z-10 shadow-sm">
           <div>
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Client Directory</h1>
               <p className="text-slate-500 text-sm mt-1">Manage relationships, credit limits, and master data.</p>
           </div>
           <div className="flex gap-3">
-              <Button variant="outline" className="bg-white hover:bg-slate-50 border-slate-300 text-slate-700">
+              <Button variant="outline" className="bg-white hover:bg-slate-50 border-slate-300 text-slate-700 h-9">
                   <FileText className="h-4 w-4 mr-2" /> Export CSV
               </Button>
-              <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 shadow-sm transition-all">
+              <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 shadow-sm transition-all h-9">
                   <Plus className="h-4 w-4 mr-2" /> Add Client
               </Button>
           </div>
@@ -94,7 +93,7 @@ export default function ClientListPage({ onNavigate }: ClientListPageProps) {
       <div className="flex-1 overflow-auto p-8">
           
           {/* 2. KPI CARDS */}
-          <div className="grid grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
               <Card className="border-slate-200 shadow-sm bg-white">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Entities</CardTitle>
@@ -141,14 +140,14 @@ export default function ClientListPage({ onNavigate }: ClientListPageProps) {
                       <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                       <Input 
                           placeholder="Search by name or email..." 
-                          className="pl-9 border-slate-200 bg-slate-50 focus:bg-white transition-all rounded-lg" 
+                          className="pl-9 border-slate-200 bg-slate-50 focus:bg-white transition-all rounded-lg h-9" 
                           value={filters.search}
                           onChange={(e) => setSearch(e.target.value)}
                       />
                   </div>
                   <div className="h-6 w-px bg-slate-200"></div>
                   <Select value={filters.status} onValueChange={setFilterStatus}>
-                      <SelectTrigger className="w-[160px] border-slate-200 bg-slate-50 rounded-lg">
+                      <SelectTrigger className="w-[160px] border-slate-200 bg-slate-50 rounded-lg h-9">
                           <Filter className="h-3.5 w-3.5 mr-2 text-slate-500" />
                           <SelectValue placeholder="Status" />
                       </SelectTrigger>
@@ -161,23 +160,23 @@ export default function ClientListPage({ onNavigate }: ClientListPageProps) {
                       </SelectContent>
                   </Select>
               </div>
-              <div className="flex items-center border rounded-lg overflow-hidden">
-                  <Button variant="ghost" size="icon" className="h-9 w-9 rounded-none bg-slate-100 text-slate-600"><List className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" className="h-9 w-9 rounded-none hover:bg-slate-50 text-slate-400"><LayoutGrid className="h-4 w-4" /></Button>
+              <div className="flex items-center border rounded-lg overflow-hidden h-9">
+                  <Button variant="ghost" size="icon" className="h-full w-9 rounded-none bg-slate-100 text-slate-600"><List className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="h-full w-9 rounded-none hover:bg-slate-50 text-slate-400"><LayoutGrid className="h-4 w-4" /></Button>
               </div>
           </div>
 
           {/* 4. DATA TABLE */}
-          <Card className="border-slate-200 shadow-sm overflow-hidden rounded-xl">
+          <Card className="border-slate-200 shadow-sm overflow-hidden rounded-xl bg-white">
               <Table>
                   <TableHeader className="bg-slate-50/80">
                       <TableRow className="hover:bg-transparent">
-                          <TableHead className="w-[280px] font-bold text-slate-500">Entity Name</TableHead>
-                          <TableHead className="font-bold text-slate-500">Status</TableHead>
-                          <TableHead className="font-bold text-slate-500">Type</TableHead>
-                          <TableHead className="font-bold text-slate-500">Location</TableHead>
-                          <TableHead className="w-[220px] font-bold text-slate-500">Credit Usage</TableHead>
-                          <TableHead className="text-right font-bold text-slate-500">Actions</TableHead>
+                          <TableHead className="w-[300px] font-bold text-slate-500 text-xs uppercase tracking-wider">Entity Name</TableHead>
+                          <TableHead className="font-bold text-slate-500 text-xs uppercase tracking-wider">Status</TableHead>
+                          <TableHead className="font-bold text-slate-500 text-xs uppercase tracking-wider">Type</TableHead>
+                          <TableHead className="font-bold text-slate-500 text-xs uppercase tracking-wider">Location</TableHead>
+                          <TableHead className="w-[220px] font-bold text-slate-500 text-xs uppercase tracking-wider">Credit Usage</TableHead>
+                          <TableHead className="text-right font-bold text-slate-500 text-xs uppercase tracking-wider">Actions</TableHead>
                       </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -201,9 +200,11 @@ export default function ClientListPage({ onNavigate }: ClientListPageProps) {
                               <TableRow key={client.id} className="group cursor-pointer hover:bg-blue-50/40 transition-colors" onClick={() => handleRowClick(client.id)}>
                                   <TableCell>
                                       <div className="flex items-center gap-3">
-                                          <div className="h-10 w-10 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs shadow-sm">
-                                              {client.entityName.substring(0,2).toUpperCase()}
-                                          </div>
+                                          <Avatar className="h-9 w-9 rounded-lg border border-slate-200">
+                                              <AvatarFallback className="bg-slate-100 text-slate-700 font-bold rounded-lg">
+                                                  {client.entityName.substring(0,2).toUpperCase()}
+                                              </AvatarFallback>
+                                          </Avatar>
                                           <div>
                                               <div className="font-bold text-slate-800 text-sm group-hover:text-blue-700 transition-colors">{client.entityName}</div>
                                               <div className="text-xs text-slate-500">{client.email}</div>

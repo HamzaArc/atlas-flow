@@ -1,20 +1,22 @@
 import { useState } from 'react';
 import { Card } from "@/components/ui/card";
-import { MessageSquare, Bell, FileText, Filter, Send, Clock, User, AlertTriangle, Info } from "lucide-react";
+import { MessageSquare, Bell, FileText, Send, Clock, User, AlertTriangle, Info } from "lucide-react";
 import { useClientStore } from "@/store/useClientStore";
 import { useToast } from "@/components/ui/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { ActivityCategory } from '@/types/index';
+import { cn } from "@/lib/utils";
 
 const TABS = [
-    { id: 'ALL', label: 'All', icon: Clock },
-    { id: 'NOTE', label: 'Notes', icon: FileText },
-    { id: 'SYSTEM', label: 'System', icon: Bell },
+    { id: 'ALL', label: 'All' },
+    { id: 'NOTE', label: 'Notes' },
+    { id: 'SYSTEM', label: 'System' },
+    { id: 'ALERT', label: 'Alerts' },
 ];
 
-export function ClientActivityFeed() {
+export function ClientActivityFeed({ className }: { className?: string }) {
   const { activeClient, addActivity } = useClientStore();
   const { toast } = useToast();
   
@@ -29,7 +31,7 @@ export function ClientActivityFeed() {
       if (!noteContent.trim()) return;
       addActivity(noteContent, 'NOTE', 'neutral');
       setNoteContent('');
-      toast("Note added to timeline", "success");
+      toast("Note added", "success");
   };
 
   const getIcon = (cat: ActivityCategory) => {
@@ -49,26 +51,30 @@ export function ClientActivityFeed() {
   };
 
   return (
-    <Card className="h-full flex flex-col bg-white border-slate-200 shadow-sm overflow-hidden">
+    <Card className={cn("flex flex-col bg-white border border-slate-200 shadow-md overflow-hidden", className)}>
         
-        {/* HEADER */}
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
+        {/* HEADER: Tabs Restored */}
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0 h-14">
             <div className="flex items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-slate-500" />
-                <span className="text-sm font-bold text-slate-700">Collaboration Hub</span>
+                <div className="p-1.5 bg-white border border-slate-200 rounded-md shadow-sm text-indigo-600">
+                    <MessageSquare className="h-3.5 w-3.5" />
+                </div>
+                <span className="text-sm font-bold text-slate-700">Activity</span>
             </div>
-            <div className="flex gap-1 bg-white p-0.5 rounded-md border border-slate-200">
+            
+            {/* Pill Filters */}
+            <div className="flex gap-1 bg-slate-200/50 p-1 rounded-lg">
                 {TABS.map(tab => (
                     <button
                         key={tab.id}
                         onClick={() => setFilter(tab.id as any)}
-                        className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold transition-all ${
+                        className={cn(
+                            "px-3 py-1 rounded-md text-[10px] font-bold transition-all",
                             filter === tab.id 
-                                ? 'bg-slate-100 text-slate-800' 
-                                : 'text-slate-400 hover:text-slate-600'
-                        }`}
+                                ? "bg-white text-slate-800 shadow-sm ring-1 ring-black/5" 
+                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                        )}
                     >
-                        <tab.icon className="h-3 w-3" />
                         {tab.label}
                     </button>
                 ))}
@@ -80,8 +86,8 @@ export function ClientActivityFeed() {
             <ScrollArea className="h-full">
                 <div className="p-4 space-y-4">
                     {filteredActivities.length === 0 && (
-                        <div className="h-24 flex flex-col items-center justify-center text-slate-400">
-                            <Filter className="h-6 w-6 opacity-20 mb-2" />
+                        <div className="h-32 flex flex-col items-center justify-center text-slate-400">
+                            <Clock className="h-8 w-8 opacity-10 mb-2" />
                             <span className="text-xs">No activity found.</span>
                         </div>
                     )}
@@ -94,13 +100,13 @@ export function ClientActivityFeed() {
                                 <div className="w-px h-full bg-slate-100 group-last:hidden mt-1"></div>
                             </div>
                             <div className="flex-1 pb-2">
-                                <div className="flex items-center gap-2 mb-1">
+                                <div className="flex items-center justify-between mb-1">
                                     <span className="text-[11px] font-bold text-slate-700">{item.meta}</span>
                                     <span className="text-[9px] text-slate-400 font-medium">
-                                        {item.timestamp ? new Date(item.timestamp).toLocaleString() : ''}
+                                        {item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
                                     </span>
                                 </div>
-                                <div className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-2 rounded-md border border-slate-100">
+                                <div className="text-xs text-slate-600 leading-relaxed bg-slate-50/50 p-2 rounded-md border border-slate-100 group-hover:border-slate-200 transition-colors shadow-sm">
                                     {item.text}
                                 </div>
                             </div>
@@ -110,19 +116,20 @@ export function ClientActivityFeed() {
             </ScrollArea>
         </div>
 
-        {/* INPUT */}
-        <div className="p-3 border-t border-slate-100 bg-slate-50/50 shrink-0">
-            <div className="relative">
-                <textarea
+        {/* FOOTER */}
+        <div className="p-3 border-t border-slate-100 bg-slate-50/30 shrink-0 h-[60px] flex items-center">
+            <div className="flex gap-2 w-full">
+                <Input
                     value={noteContent}
                     onChange={(e) => setNoteContent(e.target.value)}
-                    className="w-full h-20 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition-all resize-none outline-none pr-12"
-                    placeholder="Type an internal note..."
+                    className="h-9 text-xs bg-white focus-visible:ring-indigo-100 border-slate-200"
+                    placeholder="Add a note..."
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveNote()}
                 />
                 <Button 
                     onClick={handleSaveNote} 
                     size="icon"
-                    className="absolute right-2 bottom-2 h-7 w-7 bg-blue-600 hover:bg-blue-700 rounded-md"
+                    className="h-9 w-9 bg-slate-900 hover:bg-slate-800 shadow-sm shrink-0"
                     disabled={!noteContent.trim()}
                 >
                     <Send className="h-3.5 w-3.5" />
