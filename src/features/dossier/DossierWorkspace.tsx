@@ -1,5 +1,5 @@
-import { differenceInDays, format } from "date-fns";
-import { Clock, Banknote, Container, FileText, AlertTriangle, CheckCircle2, ChevronRight } from "lucide-react";
+import { differenceInDays } from "date-fns";
+import { Clock, Banknote, Container, FileText, AlertTriangle, CheckCircle2, ChevronRight, DollarSign } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useDossierStore } from "@/store/useDossierStore";
@@ -10,9 +10,9 @@ import { DossierHeader } from "./components/DossierHeader";
 import { ShipmentDetails } from "./components/ShipmentDetails";
 import { ContainerManifest } from "./components/ContainerManifest";
 import { DocBucketSystem } from "./DocBucketSystem"; 
-import { ProfitLossTable } from "./ProfitLossTable";
 import { DossierActivityFeed } from "./components/DossierActivityFeed";
 import { ShipmentProgress } from "./components/ShipmentProgress";
+import DossierFinanceTab from "../finance/DossierFinanceTab"; // <--- IMPORTED
 
 interface DossierWorkspaceProps {
     onBack: () => void;
@@ -23,7 +23,6 @@ export default function DossierWorkspace({ onBack }: DossierWorkspaceProps) {
 
   // --- "DEATH CLOCK" LOGIC ---
   const today = new Date();
-  const daysUntilArrival = differenceInDays(new Date(dossier.eta), today);
   const freeTimeEnd = new Date(dossier.eta);
   freeTimeEnd.setDate(freeTimeEnd.getDate() + dossier.freeTimeDays);
   const daysLeftInFreeTime = differenceInDays(freeTimeEnd, today);
@@ -36,7 +35,7 @@ export default function DossierWorkspace({ onBack }: DossierWorkspaceProps) {
   return (
     <div className="h-screen flex flex-col bg-slate-50/50 overflow-hidden font-sans">
       
-      {/* 1. TOP HEADER (Now accepts onBack) */}
+      {/* 1. TOP HEADER */}
       <DossierHeader onBack={onBack} />
 
       {/* 2. INTELLIGENCE BAR */}
@@ -133,7 +132,7 @@ export default function DossierWorkspace({ onBack }: DossierWorkspaceProps) {
                                   <FileText className="h-4 w-4" /> Document Cloud
                               </TabsTrigger>
                               <TabsTrigger value="financials" className="data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm data-[state=active]:border-slate-200 border border-transparent rounded-t-lg px-4 text-xs font-bold uppercase tracking-wide h-full flex gap-2">
-                                  <Banknote className="h-4 w-4" /> Profit & Loss
+                                  <DollarSign className="h-4 w-4" /> Finance & Billing
                               </TabsTrigger>
                           </TabsList>
                       </div>
@@ -149,8 +148,9 @@ export default function DossierWorkspace({ onBack }: DossierWorkspaceProps) {
                               </div>
                           </TabsContent>
                           
-                          <TabsContent value="financials" className="h-full m-0 p-6 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
-                              <ProfitLossTable />
+                          <TabsContent value="financials" className="h-full m-0 p-0 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                              {/* Replaced Old ProfitLossTable with Full Finance Tab */}
+                              <DossierFinanceTab dossierId={dossier.id} />
                           </TabsContent>
                       </div>
                   </Tabs>

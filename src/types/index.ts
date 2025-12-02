@@ -113,7 +113,6 @@ export interface DossierContainer {
   returnDate?: string;
 }
 
-// NEW: Smart Alerts Interface
 export interface DossierAlert {
     id: string;
     type: 'BLOCKER' | 'WARNING' | 'INFO';
@@ -123,64 +122,115 @@ export interface DossierAlert {
 
 export interface Dossier {
   id: string;
-  ref: string; // Internal File Ref (e.g., IMP-24-001)
-  bookingRef: string; // Carrier Booking Reference <--- ADDED THIS FIELD
+  ref: string; 
+  bookingRef: string; 
   status: ShipmentStatus;
-  
-  // Linked Entities
   clientId: string;
   clientName: string;
   quoteId?: string;
-
-  // Master Data
   mblNumber: string; 
   hblNumber: string; 
   carrier: string;
   vesselName: string;
   voyageNumber: string;
-  
-  // Routing
   pol: string;
   pod: string;
   etd: Date;
   eta: Date;
   ata?: Date; 
-
-  // Parties
   shipper: ShipmentParty;
   consignee: ShipmentParty;
   notify?: ShipmentParty;
-
-  // Operational Logic
   incoterm: Incoterm;
   mode: TransportMode;
-  freeTimeDays: number; // Demurrage allowance
-  
-  // Logistics Ops
+  freeTimeDays: number; 
   vgmCutOff?: Date;
   portCutOff?: Date;
   docCutOff?: Date;
-  
-  // Sub-Resources
   containers: DossierContainer[];
   activities: ActivityItem[];
-  
-  // Computed Intelligence
   alerts: DossierAlert[];
   nextAction: string;
-  
-  // Financial Snapshot
   totalRevenue: number;
   totalCost: number;
   currency: Currency;
 }
 
-// Re-export legacy types if needed for compatibility
+// --- 4. FINANCE ENGINE (NEW) ---
+export type ChargeType = 'INCOME' | 'EXPENSE';
+export type ChargeStatus = 'ESTIMATED' | 'ACCRUED' | 'INVOICED' | 'POSTED' | 'PAID';
+export type VatRule = 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | 'DISBURSEMENT_0';
+
+export interface ChargeLine {
+    id: string;
+    dossierId: string;
+    type: ChargeType;
+    code: string; // e.g. 'OF', 'THC', 'DUM'
+    description: string;
+    vendorId?: string; // For AP
+    vendorName?: string;
+    
+    // Amounts
+    currency: Currency;
+    amount: number; // The amount in original currency
+    exchangeRate: number; // ROE to Local (MAD)
+    amountLocal: number; // The amount in MAD
+    
+    vatRule: VatRule;
+    vatAmount: number;
+    totalAmount: number;
+
+    status: ChargeStatus;
+    invoiceRef?: string; // Link to generated invoice
+    isBillable: boolean; // If expense, can we bill it?
+}
+
+export interface Invoice {
+    id: string;
+    reference: string; // INV-24-001
+    dossierId: string;
+    clientId: string;
+    clientName: string;
+    date: Date;
+    dueDate: Date;
+    status: 'DRAFT' | 'ISSUED' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+    currency: Currency;
+    subTotal: number;
+    taxTotal: number;
+    total: number;
+    lines: ChargeLine[];
+}
+
 export interface Client {
   id: string;
-  name: string;
-  ice: string;
-  rc?: string;
-  paymentTerms: 'CASH' | '30_DAYS' | '60_DAYS';
+  created_at: string;
+  updated_at?: string;
+  entityName: string;
+  status: 'ACTIVE' | 'PROSPECT' | 'SUSPENDED' | 'BLACKLISTED';
+  type: 'SHIPPER' | 'CONSIGNEE' | 'FORWARDER' | 'PARTNER';
+  email: string;
+  phone: string;
+  website?: string;
+  city: string;
+  country: string;
+  address?: string;
   creditLimit: number;
+  creditUsed: number;
+  financials: {
+      paymentTerms: string;
+      vatNumber: string;
+      currency: string;
+      ice?: string;
+      rc?: string;
+      taxId?: string;
+  };
+  salesRepId: string;
+  tags: string[];
+  contacts: any[];
+  routes: any[];
+  documents: any[];
+  suppliers: any[];
+  commodities: any[];
+  operational: any;
+  activities: ActivityItem[];
 }
