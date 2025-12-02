@@ -12,7 +12,8 @@ import { ContainerManifest } from "./components/ContainerManifest";
 import { DocBucketSystem } from "./DocBucketSystem"; 
 import { DossierActivityFeed } from "./components/DossierActivityFeed";
 import { ShipmentProgress } from "./components/ShipmentProgress";
-import DossierFinanceTab from "../finance/DossierFinanceTab"; // <--- IMPORTED
+// === NEW FINANCE IMPORT ===
+import DossierFinanceTab from "../finance/DossierFinanceTab"; 
 
 interface DossierWorkspaceProps {
     onBack: () => void;
@@ -21,14 +22,13 @@ interface DossierWorkspaceProps {
 export default function DossierWorkspace({ onBack }: DossierWorkspaceProps) {
   const { dossier } = useDossierStore();
 
-  // --- "DEATH CLOCK" LOGIC ---
   const today = new Date();
   const freeTimeEnd = new Date(dossier.eta);
   freeTimeEnd.setDate(freeTimeEnd.getDate() + dossier.freeTimeDays);
   const daysLeftInFreeTime = differenceInDays(freeTimeEnd, today);
   const isDemurrageRisk = daysLeftInFreeTime < 3 && ['AT_POD', 'CUSTOMS', 'DELIVERED'].includes(dossier.status);
 
-  // Financial Quick Check
+  // Financial Check
   const margin = dossier.totalRevenue - dossier.totalCost;
   const isNegative = margin < 0;
 
@@ -40,17 +40,12 @@ export default function DossierWorkspace({ onBack }: DossierWorkspaceProps) {
 
       {/* 2. INTELLIGENCE BAR */}
       <div className="bg-white border-b border-slate-200 px-6 py-4 shadow-[0_2px_4px_rgba(0,0,0,0.02)] z-10 flex flex-col gap-4">
-          
-          {/* Row 1: Workflow Stepper */}
           <div className="pt-2 pb-1">
             <ShipmentProgress />
           </div>
           
-          {/* Row 2: Critical Alerts & Metrics */}
           <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-1">
-              
               <div className="flex items-center gap-6">
-                  {/* ALERTS SECTION */}
                   {dossier.alerts.length > 0 ? (
                       <div className="flex items-center gap-2 animate-pulse">
                           <Badge variant="destructive" className="flex items-center gap-1.5 px-2 py-1 h-6">
@@ -68,7 +63,6 @@ export default function DossierWorkspace({ onBack }: DossierWorkspaceProps) {
 
                   <div className="w-px h-4 bg-slate-200"></div>
 
-                  {/* NEXT ACTION */}
                   <div className="flex items-center gap-2 text-xs">
                       <span className="text-slate-400 font-medium uppercase tracking-wider text-[10px]">Next Action:</span>
                       <span className="font-bold text-blue-700 flex items-center gap-1 cursor-pointer hover:underline">
@@ -77,9 +71,7 @@ export default function DossierWorkspace({ onBack }: DossierWorkspaceProps) {
                   </div>
               </div>
 
-              {/* KPI DASHBOARD */}
               <div className="flex items-center gap-4">
-                  {/* Timeline Logic */}
                   <div className={cn(
                       "flex items-center gap-2 px-3 py-1 rounded-md border",
                       isDemurrageRisk ? "bg-red-50 border-red-200 text-red-700" : "bg-slate-50 border-slate-200 text-slate-600"
@@ -91,7 +83,6 @@ export default function DossierWorkspace({ onBack }: DossierWorkspaceProps) {
                       </div>
                   </div>
 
-                  {/* Finance Logic */}
                   <div className={cn(
                       "flex items-center gap-2 px-3 py-1 rounded-md border",
                       isNegative ? "bg-red-50 border-red-200 text-red-700" : "bg-emerald-50 border-emerald-200 text-emerald-700"
@@ -110,7 +101,7 @@ export default function DossierWorkspace({ onBack }: DossierWorkspaceProps) {
       <div className="flex-1 p-6 overflow-hidden min-h-0">
           <div className="grid grid-cols-12 gap-6 h-full min-h-0">
               
-              {/* === LEFT COLUMN: CONTEXT & FEED (4 Cols) === */}
+              {/* LEFT COLUMN */}
               <div className="col-span-12 xl:col-span-4 flex flex-col gap-4 h-full min-h-0">
                   <div className="flex-1 min-h-0 shadow-sm rounded-xl overflow-hidden ring-1 ring-slate-200">
                       <ShipmentDetails />
@@ -120,7 +111,7 @@ export default function DossierWorkspace({ onBack }: DossierWorkspaceProps) {
                   </div>
               </div>
 
-              {/* === RIGHT COLUMN: EXECUTION TABS (8 Cols) === */}
+              {/* RIGHT COLUMN */}
               <div className="col-span-12 xl:col-span-8 flex flex-col h-full min-h-0 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                   <Tabs defaultValue="cargo" className="h-full flex flex-col">
                       <div className="px-2 pt-2 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
@@ -149,7 +140,7 @@ export default function DossierWorkspace({ onBack }: DossierWorkspaceProps) {
                           </TabsContent>
                           
                           <TabsContent value="financials" className="h-full m-0 p-0 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                              {/* Replaced Old ProfitLossTable with Full Finance Tab */}
+                              {/* === INTEGRATION POINT === */}
                               <DossierFinanceTab dossierId={dossier.id} />
                           </TabsContent>
                       </div>

@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+// src/types/index.ts
 
 // --- 1. CORE LOGISTICS ENUMS ---
 export type Incoterm = 
@@ -156,9 +156,11 @@ export interface Dossier {
   currency: Currency;
 }
 
-// --- 4. FINANCE ENGINE (NEW) ---
+// --- 4. FINANCE ENGINE (RE-ARCHITECTED) ---
 export type ChargeType = 'INCOME' | 'EXPENSE';
-export type ChargeStatus = 'ESTIMATED' | 'ACCRUED' | 'INVOICED' | 'POSTED' | 'PAID';
+export type ChargeStatus = 'ESTIMATED' | 'ACCRUED' | 'READY_TO_INVOICE' | 'INVOICED' | 'POSTED' | 'PAID' | 'PARTIAL';
+export type InvoiceStatus = 'DRAFT' | 'ISSUED' | 'SENT' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+export type InvoiceType = 'INVOICE' | 'CREDIT_NOTE' | 'PROFORMA';
 export type VatRule = 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | 'DISBURSEMENT_0';
 
 export interface ChargeLine {
@@ -176,28 +178,39 @@ export interface ChargeLine {
     exchangeRate: number; // ROE to Local (MAD)
     amountLocal: number; // The amount in MAD
     
+    // Tax Logic
     vatRule: VatRule;
+    vatRate: number; // e.g. 0.20
     vatAmount: number;
     totalAmount: number;
 
     status: ChargeStatus;
     invoiceRef?: string; // Link to generated invoice
+    invoiceId?: string; // Relation ID
     isBillable: boolean; // If expense, can we bill it?
+    createdAt?: Date;
 }
 
 export interface Invoice {
     id: string;
+    type: InvoiceType;
     reference: string; // INV-24-001
     dossierId: string;
     clientId: string;
     clientName: string;
     date: Date;
     dueDate: Date;
-    status: 'DRAFT' | 'ISSUED' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+    
+    // Explicitly using the InvoiceStatus type to fix TS2322
+    status: InvoiceStatus;
+    
     currency: Currency;
+    exchangeRate: number;
     subTotal: number;
     taxTotal: number;
     total: number;
+    balanceDue: number;
+    
     lines: ChargeLine[];
 }
 

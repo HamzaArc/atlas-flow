@@ -36,7 +36,7 @@ export default function FinanceDashboard() {
     }, [invoices]); // Re-calc when invoices change
 
     const handleExportSOA = () => {
-        toast("SOA Exported", "success"); // Simulation
+        toast("SOA Exported", "success"); 
     };
 
     return (
@@ -58,7 +58,7 @@ export default function FinanceDashboard() {
                 </div>
             </div>
 
-            {/* KPI Cards (LIVE DATA) */}
+            {/* KPI Cards (LIVE DATA from Store) */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 <Card className="shadow-sm border-slate-200 bg-white">
                     <CardHeader className="p-4 pb-2"><CardTitle className="text-xs uppercase text-slate-500 font-bold tracking-wider">Unbilled Revenue (WIP)</CardTitle></CardHeader>
@@ -133,23 +133,30 @@ export default function FinanceDashboard() {
                         <CardTitle className="text-sm font-bold text-slate-700">Recent Invoices</CardTitle>
                     </CardHeader>
                     <CardContent className="flex-1 p-0 overflow-auto">
-                        {invoices.map((inv) => (
-                            <div key={inv.id} className="flex items-start gap-3 p-3 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer group">
-                                <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs border ${
-                                    inv.status === 'PAID' ? 'bg-green-50 text-green-600 border-green-200' : 
-                                    inv.status === 'OVERDUE' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-blue-50 text-blue-600 border-blue-200'
-                                }`}>
-                                    <FileText className="h-3.5 w-3.5" />
-                                </div>
-                                <div>
-                                    <p className="text-xs font-bold text-slate-800">{inv.reference}</p>
-                                    <p className="text-[10px] text-slate-500">{inv.clientName} • {inv.total.toLocaleString()} MAD</p>
-                                </div>
-                                <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 uppercase">
-                                    {inv.status}
-                                </span>
+                        {invoices.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                                <FileText className="h-8 w-8 mb-2 opacity-20" />
+                                <span className="text-xs">No recent invoices</span>
                             </div>
-                        ))}
+                        ) : (
+                            invoices.map((inv) => (
+                                <div key={inv.id} className="flex items-start gap-3 p-3 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer group">
+                                    <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs border ${
+                                        inv.status === 'PAID' ? 'bg-green-50 text-green-600 border-green-200' : 
+                                        inv.status === 'OVERDUE' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-blue-50 text-blue-600 border-blue-200'
+                                    }`}>
+                                        <FileText className="h-3.5 w-3.5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-800">{inv.reference}</p>
+                                        <p className="text-[10px] text-slate-500">{inv.clientName} • {inv.total.toLocaleString()} MAD</p>
+                                    </div>
+                                    <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 uppercase">
+                                        {inv.status}
+                                    </span>
+                                </div>
+                            ))
+                        )}
                     </CardContent>
                 </Card>
             </div>

@@ -23,13 +23,16 @@ export function ChargeLineDialog({ open, onOpenChange, initialData, onSave, mode
         currency: 'MAD',
         vatRule: 'STD_20',
         vendorName: '',
+        exchangeRate: 1,
         ...initialData
     });
 
-    // Reset form when opening for Create
     useEffect(() => {
         if (open && mode === 'CREATE') {
-            setFormData({ type: 'EXPENSE', code: 'MISC', description: '', amount: 0, currency: 'MAD', vatRule: 'STD_20', vendorName: '' });
+            setFormData({ 
+                type: 'EXPENSE', code: 'MISC', description: '', amount: 0, 
+                currency: 'MAD', vatRule: 'STD_20', vendorName: '', exchangeRate: 1 
+            });
         } else if (open && initialData) {
             setFormData(initialData);
         }
@@ -77,7 +80,7 @@ export function ChargeLineDialog({ open, onOpenChange, initialData, onSave, mode
                         </div>
                     </div>
 
-                    {/* Row 2: Description (Full Width) */}
+                    {/* Row 2: Description */}
                     <div className="space-y-2">
                         <Label>Description</Label>
                         <Input 
@@ -87,7 +90,7 @@ export function ChargeLineDialog({ open, onOpenChange, initialData, onSave, mode
                         />
                     </div>
 
-                    {/* Row 3: Vendor (Conditional) */}
+                    {/* Row 3: Vendor (Only for Expenses) */}
                     {formData.type === 'EXPENSE' && (
                         <div className="space-y-2">
                             <Label>Vendor / Supplier</Label>
@@ -121,17 +124,27 @@ export function ChargeLineDialog({ open, onOpenChange, initialData, onSave, mode
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>VAT Rule</Label>
-                            <Select value={formData.vatRule} onValueChange={(v) => setFormData({...formData, vatRule: v as VatRule})}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="STD_20">Standard 20%</SelectItem>
-                                    <SelectItem value="ROAD_14">Transport 14%</SelectItem>
-                                    <SelectItem value="EXPORT_0_ART92">Export 0%</SelectItem>
-                                    <SelectItem value="DISBURSEMENT_0">Disbursement</SelectItem>
-                                </SelectContent>
-                            </Select>
+                            <Label>Ex. Rate</Label>
+                            <Input 
+                                type="number" 
+                                value={formData.exchangeRate} 
+                                onChange={(e) => setFormData({...formData, exchangeRate: parseFloat(e.target.value)})} 
+                            />
                         </div>
+                    </div>
+
+                    {/* Row 5: Tax Rule */}
+                    <div className="space-y-2">
+                        <Label>VAT Rule</Label>
+                        <Select value={formData.vatRule} onValueChange={(v) => setFormData({...formData, vatRule: v as VatRule})}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="STD_20">Standard 20%</SelectItem>
+                                <SelectItem value="ROAD_14">Transport 14%</SelectItem>
+                                <SelectItem value="EXPORT_0_ART92">Export 0% (Art 92)</SelectItem>
+                                <SelectItem value="DISBURSEMENT_0">Disbursement (Non-Taxable)</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
 
                 </div>
