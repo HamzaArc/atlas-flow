@@ -6,21 +6,26 @@ import DossierWorkspace from "@/features/dossier/DossierWorkspace";
 import DossierDashboard from "@/features/dossier/pages/DossierDashboard";
 import ClientDetailsPage from "@/features/crm/pages/ClientDetailsPage";
 import ClientListPage from "@/features/crm/pages/ClientListPage";
-import FinanceDashboard from "@/features/finance/pages/FinanceDashboard"; // <--- IMPORTED
+import FinanceDashboard from "@/features/finance/pages/FinanceDashboard";
+// === IMPORT TARIFF MODULES ===
+import RateDashboard from "@/features/tariffs/pages/RateDashboard";
+import RateWorkspace from "@/features/tariffs/pages/RateWorkspace";
+
 import { Toaster } from "@/components/ui/use-toast";
-import { useQuoteStore } from "@/store/useQuoteStore"; 
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<'dashboard' | 'create' | 'dossier' | 'crm' | 'finance'>('dashboard');
+  // Added 'tariffs' to type union
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'create' | 'dossier' | 'crm' | 'finance' | 'tariffs'>('dashboard');
   const [crmView, setCrmView] = useState<'list' | 'details'>('list');
   const [dossierView, setDossierView] = useState<'dashboard' | 'dossier'>('dashboard'); 
-
-  const { createNewQuote } = useQuoteStore();
+  // Added state for tariff sub-navigation
+  const [tariffView, setTariffView] = useState<'dashboard' | 'workspace'>('dashboard');
 
   const handleSidebarNav = (page: any) => {
       setCurrentPage(page);
       if (page === 'crm') setCrmView('list');
       if (page === 'dossier') setDossierView('dashboard');
+      if (page === 'tariffs') setTariffView('dashboard');
   };
 
   return (
@@ -61,9 +66,17 @@ function App() {
             )
         )}
 
-        {/* 4. Finance Module (UPDATED) */}
         {currentPage === 'finance' && (
             <FinanceDashboard />
+        )}
+
+        {/* === TARIFF MANAGER LOGIC === */}
+        {currentPage === 'tariffs' && (
+            tariffView === 'dashboard' ? <RateDashboard onNavigate={setTariffView} /> : (
+                <div className="absolute inset-0 z-20 bg-white">
+                    <RateWorkspace onBack={() => setTariffView('dashboard')} />
+                </div>
+            )
         )}
 
       </main>

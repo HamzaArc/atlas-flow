@@ -7,7 +7,8 @@ import {
   Briefcase,
   LogOut,
   ChevronRight,
-  Box
+  Box,
+  Banknote // Imported for Tariffs
 } from "lucide-react";
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
     currentView: string;
-    onNavigate: (view: 'dashboard' | 'dossier' | 'crm' | 'finance') => void;
+    // Updated type definition
+    onNavigate: (view: 'dashboard' | 'dossier' | 'crm' | 'finance' | 'tariffs') => void;
 }
 
 export function Sidebar({ className, currentView, onNavigate }: SidebarProps) {
@@ -81,6 +83,14 @@ export function Sidebar({ className, currentView, onNavigate }: SidebarProps) {
                     label="Shipment Dossiers" 
                     active={currentView === 'dossier'}
                     onClick={() => onNavigate('dossier')} 
+                />
+                {/* NEW TARIFF MODULE */}
+                <NavItem 
+                    id="tariffs" 
+                    icon={Banknote} 
+                    label="Tariff Manager" 
+                    active={currentView === 'tariffs'}
+                    onClick={() => onNavigate('tariffs')} 
                 />
             </div>
         </div>
