@@ -23,7 +23,8 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
       
       // Data for PDF
       items, pol, pod, mode, incoterm, reference, clientName, validityDate,
-      exchangeRates, totalWeight, totalVolume, marginBuffer
+      exchangeRates, totalWeight, totalVolume, marginBuffer,
+      approval, status, submitForApproval
   } = useQuoteStore();
 
   const marginPercent = totalSellMAD > 0 
@@ -108,6 +109,21 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
                           </div>
                           
                           {/* Table Area (Scrollable) */}
+                          {approval.requiresApproval && status === 'DRAFT' && (
+                            <div className="px-5 py-3 border-b border-amber-200 bg-amber-50/70 text-amber-700 text-xs flex items-center justify-between">
+                                <div>
+                                    <span className="font-semibold uppercase tracking-wide text-[10px]">Approval Required</span>
+                                    <p className="text-[11px] mt-0.5">{approval.reason}</p>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    onClick={submitForApproval}
+                                    className="h-8 text-[11px] bg-amber-600 hover:bg-amber-700"
+                                >
+                                    Submit for Review
+                                </Button>
+                            </div>
+                          )}
                           <div className="flex-1 overflow-hidden relative bg-slate-50/30 min-h-0">
                               <PricingTable />
                           </div>
@@ -153,7 +169,7 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
 
                    {/* BOTTOM: Collaboration Hub */}
                    <div className="flex-1 min-h-0 overflow-hidden">
-                      <ActivityFeed />
+                      <ActivityFeed onPreviewQuote={handleGeneratePDF} />
                    </div>
               </div>
           </div>
