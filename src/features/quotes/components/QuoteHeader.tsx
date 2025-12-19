@@ -30,7 +30,7 @@ const STEPS = [
 
 export function QuoteHeader({ onBack }: QuoteHeaderProps) {
   const { 
-    reference, status, clientName, validityDate,
+    reference, status, clientName, validityDate, exchangeRateValidity,
     salespersonName, cargoReadyDate, customerReference,
     quoteCurrency, exchangeRates,
     setIdentity, setStatus, saveQuote, duplicateQuote, deleteQuote, id,
@@ -38,6 +38,9 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
   } = useQuoteStore();
 
   const isReadOnly = status === 'ACCEPTED' || status === 'REJECTED';
+  const fxWarning = validityDate && exchangeRateValidity
+    ? new Date(validityDate) > new Date(exchangeRateValidity)
+    : false;
 
   // --- COMPONENT: WORKFLOW STEPPER ---
   const StatusStepper = () => (
@@ -158,6 +161,15 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                                    onChange={(e) => setExchangeRate('EUR', parseFloat(e.target.value))}
                                />
                            </div>
+                           <div className="grid grid-cols-4 gap-2 items-center">
+                               <Label className="text-xs font-medium col-span-1">FX Valid</Label>
+                               <Input
+                                   type="date"
+                                   className="col-span-3 h-8 text-xs bg-white"
+                                   value={formatDateForInput(exchangeRateValidity)}
+                                   onChange={(e) => setIdentity('exchangeRateValidity', e.target.value)}
+                               />
+                           </div>
                        </div>
                    </PopoverContent>
                </Popover>
@@ -255,6 +267,11 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                       onChange={(e) => setIdentity('validityDate', e.target.value)}
                       disabled={isReadOnly}
                   />
+                  {fxWarning && (
+                      <div className="text-[9px] text-amber-600 font-semibold">
+                          FX validity expires before quote.
+                      </div>
+                  )}
               </div>
 
               {/* Sales Owner */}

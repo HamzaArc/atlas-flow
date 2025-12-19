@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Trash2, Plus, MapPin, Ship, Anchor, Zap, Wand2 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
+import { useClientStore } from "@/store/useClientStore";
 import { QuoteLineItem, Currency } from "@/types/index";
 import {
   DropdownMenu,
@@ -19,11 +20,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 // Section Header Component with prepaid/collect logic visual
 const SectionHeader = ({ title, icon: Icon, onAdd, isCollect }: { title: string, icon: any, onAdd: () => void, isCollect?: boolean }) => (
     <TableRow className="hover:bg-transparent border-b border-slate-100 bg-slate-50/50">
-        <TableCell colSpan={8} className="py-2 pt-3">
+        <TableCell colSpan={9} className="py-2 pt-3">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                     <div className="p-1 rounded-md bg-white border shadow-sm text-slate-600">
@@ -52,10 +54,18 @@ const SectionHeader = ({ title, icon: Icon, onAdd, isCollect }: { title: string,
 export function PricingTable() {
   const { 
       items, addLineItem, updateLineItem, removeLineItem, 
-      exchangeRates, quoteCurrency, status, applyTemplate 
+      exchangeRates, quoteCurrency, status, applyTemplate,
+      validityDate, exchangeRateValidity, clientName
   } = useQuoteStore();
+  const { clients } = useClientStore();
+  const activeClient = clients.find((client) => client.entityName === clientName);
+  const vendors = activeClient?.suppliers || [];
 
   const isReadOnly = status !== 'DRAFT';
+  const quoteValidity = validityDate ? new Date(validityDate) : null;
+  const fxWarning = validityDate && exchangeRateValidity
+    ? new Date(validityDate) > new Date(exchangeRateValidity)
+    : false;
 
   // --- HELPER: Calculation Logic Display ---
   const calculateSellDisplay = (item: QuoteLineItem) => {
@@ -84,15 +94,19 @@ export function PricingTable() {
       
       if (sectionItems.length === 0) return (
           <TableRow>
-              <TableCell colSpan={8} className="h-12 text-center text-xs text-slate-300 italic">
+              <TableCell colSpan={9} className="h-12 text-center text-xs text-slate-300 italic">
                   No items in {section.toLowerCase()} section.
               </TableCell>
           </TableRow>
       );
 
-      return sectionItems.map((item) => (
-        <TableRow key={item.id} className="group border-b border-slate-50 hover:bg-blue-50/30 transition-colors">
-            <TableCell className="w-[30%] py-1 pl-4">
+      return sectionItems.map((item) => {
+        const lineValidity = item.lineValidityDate ? new Date(item.lineValidityDate) : null;
+        const isLineEarly = quoteValidity && lineValidity ? lineValidity < quoteValidity : false;
+        const vendorValue = item.vendorId || 'none';
+        return (
+        <TableRow key={item.id} className={cn("group border-b border-slate-50 hover:bg-blue-50/30 transition-colors", isLineEarly && "bg-amber-50/60")}>
+            <TableCell className="w-[24%] py-1 pl-4">
                 <Input 
                     disabled={isReadOnly}
                     className="h-8 border-transparent bg-transparent hover:bg-white focus:bg-white focus:border-blue-200 focus:ring-2 focus:ring-blue-100 font-medium text-slate-700 text-xs transition-all placeholder:text-slate-300 shadow-none" 
@@ -102,8 +116,35 @@ export function PricingTable() {
                 />
             </TableCell>
 
+            <TableCell className="w-[14%] py-1">
+                <Select
+                    disabled={isReadOnly}
+                    value={vendorValue}
+                    onValueChange={(value) => {
+                      if (value === 'none') {
+                        updateLineItem(item.id, 'vendorId', '');
+                        updateLineItem(item.id, 'vendorName', '');
+                        return;
+                      }
+                      const vendor = vendors.find((sup) => sup.id === value);
+                      updateLineItem(item.id, 'vendorId', value);
+                      updateLineItem(item.id, 'vendorName', vendor?.name || '');
+                    }}
+                >
+                    <SelectTrigger className="h-8 border-transparent bg-slate-50/50 hover:bg-white text-xs font-semibold text-slate-500 shadow-none">
+                        <SelectValue placeholder="Vendor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="none">Unassigned</SelectItem>
+                        {vendors.map((vendor) => (
+                          <SelectItem key={vendor.id} value={vendor.id}>{vendor.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </TableCell>
+
             {/* COSTING SIDE (Private) */}
-            <TableCell className="w-[10%] py-1">
+            <TableCell className="w-[9%] py-1">
                 <Input 
                     disabled={isReadOnly}
                     type="number"
@@ -112,7 +153,7 @@ export function PricingTable() {
                     onChange={(e) => updateLineItem(item.id, 'buyPrice', parseFloat(e.target.value) || 0)}
                 />
             </TableCell>
-            <TableCell className="w-[10%] py-1">
+            <TableCell className="w-[8%] py-1">
                 <Select 
                     disabled={isReadOnly}
                     value={item.buyCurrency} 
@@ -130,7 +171,7 @@ export function PricingTable() {
             </TableCell>
 
             {/* MARKUP */}
-            <TableCell className="w-[12%] py-1">
+            <TableCell className="w-[10%] py-1">
                  <div className="flex items-center gap-1">
                     <Input 
                         disabled={isReadOnly}
@@ -148,7 +189,7 @@ export function PricingTable() {
             </TableCell>
 
             {/* SELLING SIDE (Public) */}
-            <TableCell className="w-[15%] py-1">
+            <TableCell className="w-[10%] py-1">
                 <Select 
                     disabled={isReadOnly}
                     value={item.vatRule} 
@@ -165,7 +206,24 @@ export function PricingTable() {
                 </Select>
             </TableCell>
 
-            <TableCell className="w-[15%] py-1 text-right pr-6">
+            <TableCell className="w-[12%] py-1">
+                <div className="flex flex-col items-start gap-1">
+                    <Input
+                        disabled={isReadOnly}
+                        type="date"
+                        className="h-8 border-transparent bg-slate-50/50 hover:bg-white focus:bg-white text-[10px] text-slate-600 shadow-none"
+                        value={item.lineValidityDate || ''}
+                        onChange={(e) => updateLineItem(item.id, 'lineValidityDate', e.target.value)}
+                    />
+                    {isLineEarly && (
+                        <Badge variant="outline" className="h-4 text-[9px] px-1 text-amber-600 border-amber-200 bg-amber-50">
+                            Earlier than quote
+                        </Badge>
+                    )}
+                </div>
+            </TableCell>
+
+            <TableCell className="w-[13%] py-1 text-right pr-6">
                 <div className="flex flex-col items-end">
                     <span className="font-mono font-bold text-slate-800 text-sm">
                         {calculateSellDisplay(item)}
@@ -186,7 +244,8 @@ export function PricingTable() {
                 )}
             </TableCell>
         </TableRow>
-      ));
+      );
+      });
   };
 
   return (
@@ -216,16 +275,23 @@ export function PricingTable() {
               </DropdownMenu>
           </div>
       )}
+      {fxWarning && (
+          <div className="px-4 py-2 text-[10px] text-amber-700 bg-amber-50 border-b border-amber-100">
+              Exchange rate validity expires before the quote validity. Review FX rates.
+          </div>
+      )}
 
       <div className="flex-1 overflow-auto">
         <Table>
             <TableHeader className="bg-white sticky top-0 z-10 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
                 <TableRow className="hover:bg-transparent border-none">
                     <TableHead className="h-9 text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-4">Description</TableHead>
+                    <TableHead className="h-9 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vendor</TableHead>
                     <TableHead className="h-9 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Cost</TableHead>
                     <TableHead className="h-9 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Curr</TableHead>
                     <TableHead className="h-9 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Margin</TableHead>
                     <TableHead className="h-9 text-[10px] font-bold text-slate-400 uppercase tracking-widest">VAT</TableHead>
+                    <TableHead className="h-9 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Line Valid</TableHead>
                     <TableHead className="h-9 text-[10px] font-bold text-blue-600 uppercase tracking-widest text-right pr-6">Sell Price</TableHead>
                     <TableHead className="h-9 w-10"></TableHead>
                 </TableRow>
@@ -245,7 +311,7 @@ export function PricingTable() {
                 
                 {items.length === 0 && (
                     <TableRow>
-                        <TableCell colSpan={8} className="h-32 text-center">
+                        <TableCell colSpan={9} className="h-32 text-center">
                             <div className="flex flex-col items-center justify-center text-slate-400 gap-2">
                                 <Zap className="h-8 w-8 opacity-10" />
                                 <span className="text-sm font-medium">Pricing table is empty.</span>

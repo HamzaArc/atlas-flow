@@ -1,6 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileOutput, Box, Lock, MoreHorizontal } from "lucide-react";
+import { FileOutput, Box, Lock, MoreHorizontal, Plus } from "lucide-react";
 import { QuoteHeader } from "./components/QuoteHeader"; 
 import { RouteSelector } from "./components/RouteSelector";
 import { CargoEngine } from "./components/CargoEngine";
@@ -24,7 +24,8 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
       // Data for PDF
       items, pol, pod, mode, incoterm, reference, clientName, validityDate,
       exchangeRates, totalWeight, totalVolume, marginBuffer,
-      approval, status, submitForApproval
+      approval, status, submitForApproval,
+      quoteOptions, activeOptionId, setActiveOption, addQuoteOption
   } = useQuoteStore();
 
   const marginPercent = totalSellMAD > 0 
@@ -84,6 +85,27 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
               {/* === RIGHT COLUMN: COMMERCIAL & COMMUNICATION (9 Cols) === */}
               {/* Layout: Top 60%, Bottom Rest. Matches Left Column split. */}
               <div className="col-span-9 flex flex-col gap-6 h-full min-h-0">
+                   <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                      {quoteOptions.map((option) => (
+                        <Button
+                          key={option.id}
+                          variant={option.id === activeOptionId ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setActiveOption(option.id)}
+                          className={`h-8 text-xs font-semibold ${option.id === activeOptionId ? "bg-slate-900 hover:bg-slate-800" : "bg-white text-slate-600 border-slate-200"}`}
+                        >
+                          {option.label}
+                        </Button>
+                      ))}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={addQuoteOption}
+                        className="h-8 text-xs text-slate-500 border border-dashed border-slate-200 hover:text-blue-600 hover:border-blue-200"
+                      >
+                        <Plus className="h-3.5 w-3.5 mr-1" /> Add Option
+                      </Button>
+                   </div>
                    
                    {/* TOP: Commercial Offer */}
                    <Card className="h-[60%] flex flex-col overflow-hidden bg-white shadow-md ring-1 ring-slate-200/60 border-none min-h-0">

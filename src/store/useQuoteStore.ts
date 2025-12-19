@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase'; 
-import { Quote, QuoteLineItem, TransportMode, Incoterm, Currency, Probability, PackagingType, ActivityItem, ActivityCategory, QuoteApproval } from '@/types/index';
+import { Quote, QuoteLineItem, QuoteOption, TransportMode, Incoterm, Currency, Probability, PackagingType, ActivityItem, ActivityCategory, QuoteApproval } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 
 // --- UPDATED TYPES ---
@@ -18,6 +18,50 @@ interface CargoRow {
 
 // TEMPLATE TYPES
 type PricingTemplate = 'IMPORT_STD' | 'EXPORT_STD' | 'CROSS_TRADE' | 'CLEARANCE_ONLY';
+
+const OPTION_LABELS = ['Option A', 'Option B', 'Option C', 'Option D'];
+
+const getModeLabel = (mode: TransportMode) => {
+  switch (mode) {
+    case 'AIR':
+      return 'Air';
+    case 'SEA_FCL':
+      return 'Sea FCL';
+    case 'SEA_LCL':
+      return 'Sea LCL';
+    case 'ROAD':
+      return 'Road';
+    default:
+      return mode;
+  }
+};
+
+const createQuoteOptionFromState = (
+  state: Pick<QuoteState, 'id' | 'mode' | 'incoterm' | 'pol' | 'pod' | 'placeOfLoading' | 'placeOfDelivery' | 'equipmentType' | 'containerCount' | 'requestedDepartureDate' | 'estimatedDepartureDate' | 'estimatedArrivalDate' | 'transitTime' | 'freeTime' | 'items'>,
+  optionId: string,
+  label: string
+): QuoteOption => ({
+  id: optionId,
+  label,
+  mode: state.mode,
+  incoterm: state.incoterm,
+  pol: state.pol,
+  pod: state.pod,
+  placeOfLoading: state.placeOfLoading,
+  placeOfDelivery: state.placeOfDelivery,
+  equipmentType: state.equipmentType,
+  containerCount: state.containerCount,
+  requestedDepartureDate: state.requestedDepartureDate,
+  estimatedDepartureDate: state.estimatedDepartureDate,
+  estimatedArrivalDate: state.estimatedArrivalDate,
+  transitTime: state.transitTime,
+  freeTime: state.freeTime,
+  items: state.items.map(item => ({
+    ...item,
+    id: Math.random().toString(36).substring(7),
+    quoteId: state.id
+  }))
+});
 
 interface QuoteState {
   // --- DATABASE STATE ---
@@ -38,6 +82,7 @@ interface QuoteState {
   
   // Dates & KPIs
   validityDate: string;
+  exchangeRateValidity: string;
   cargoReadyDate: string;
   requestedDepartureDate: string;
   estimatedDepartureDate: string;
@@ -58,6 +103,10 @@ interface QuoteState {
   cargoValue: number;
   insuranceRequired: boolean;
   internalNotes: string;
+
+  // Multi-option quote
+  quoteOptions: QuoteOption[];
+  activeOptionId: string;
 
   // Route & Equipment
   mode: TransportMode;
@@ -119,6 +168,10 @@ interface QuoteState {
   updateLineItem: (id: string, field: keyof QuoteLineItem, value: any) => void;
   removeLineItem: (id: string) => void;
   applyTemplate: (template: PricingTemplate) => void;
+  setActiveOption: (id: string) => void;
+  addQuoteOption: () => void;
+  renameQuoteOption: (id: string, label: string) => void;
+  updateOptionField: (field: keyof QuoteOption, value: any) => void;
   
   addActivity: (text: string, category?: ActivityCategory, tone?: 'success' | 'neutral' | 'warning' | 'destructive') => void;
   
@@ -146,6 +199,7 @@ const DEFAULT_STATE = {
   salespersonName: 'Youssef (Sales)',
   
   validityDate: new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0],
+  exchangeRateValidity: new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0],
   cargoReadyDate: new Date().toISOString().split('T')[0],
   requestedDepartureDate: '',
   estimatedDepartureDate: '',
@@ -165,6 +219,28 @@ const DEFAULT_STATE = {
   cargoValue: 0,
   insuranceRequired: false,
   internalNotes: '',
+
+  quoteOptions: [
+    {
+      id: 'option-a',
+      label: 'Option A: Sea LCL',
+      mode: 'SEA_LCL' as TransportMode,
+      incoterm: 'FOB' as Incoterm,
+      pol: 'CASABLANCA (MAP)',
+      pod: 'SHANGHAI (CN)',
+      placeOfLoading: '',
+      placeOfDelivery: '',
+      equipmentType: '',
+      containerCount: 1,
+      requestedDepartureDate: '',
+      estimatedDepartureDate: '',
+      estimatedArrivalDate: '',
+      transitTime: 0,
+      freeTime: 0,
+      items: []
+    }
+  ],
+  activeOptionId: 'option-a',
   
   mode: 'SEA_LCL' as TransportMode,
   incoterm: 'FOB' as Incoterm,
@@ -218,7 +294,20 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   isLoading: false,
   ...DEFAULT_STATE,
 
-  setIdentity: (field, value) => set((state) => ({ ...state, [field]: value })),
+  setIdentity: (field, value) => {
+      set((state) => ({
+        ...state,
+        [field]: value,
+        quoteOptions: ['requestedDepartureDate', 'estimatedDepartureDate', 'estimatedArrivalDate', 'transitTime', 'freeTime']
+          .includes(field)
+          ? state.quoteOptions.map(option =>
+              option.id === state.activeOptionId
+                ? { ...option, [field]: value }
+                : option
+            )
+          : state.quoteOptions
+      }));
+  },
   setStatus: async (status) => {
       set({ status });
       get().addActivity(`Status manually changed to ${status}`, 'SYSTEM', 'neutral');
@@ -226,14 +315,35 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   },
 
   setMode: (mode) => {
-      set({ 
-          mode,
-          incoterm: mode === 'AIR' ? 'FCA' : 'FOB', 
-          equipmentType: '', 
-          containerCount: 1,
-          freeTime: 0, 
-          placeOfLoading: '',
-          placeOfDelivery: ''
+      set((state) => {
+          const incoterm = mode === 'AIR' ? 'FCA' : 'FOB';
+          const optionIndex = state.quoteOptions.findIndex(option => option.id === state.activeOptionId);
+          const labelPrefix = OPTION_LABELS[optionIndex] || `Option ${optionIndex + 1}`;
+          const updatedOptions = state.quoteOptions.map(option =>
+              option.id === state.activeOptionId
+                ? {
+                    ...option,
+                    mode,
+                    incoterm,
+                    equipmentType: '',
+                    containerCount: 1,
+                    freeTime: 0,
+                    placeOfLoading: '',
+                    placeOfDelivery: '',
+                    label: `${labelPrefix}: ${getModeLabel(mode)}`
+                  }
+                : option
+          );
+          return {
+              mode,
+              incoterm,
+              equipmentType: '',
+              containerCount: 1,
+              freeTime: 0,
+              placeOfLoading: '',
+              placeOfDelivery: '',
+              quoteOptions: updatedOptions
+          };
       });
       get().updateCargo(get().cargoRows);
   },
@@ -241,19 +351,45 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   setIncoterm: (incoterm) => {
       const isExw = incoterm === 'EXW';
       const isDoorDelivery = ['DAP', 'DPU', 'DDP'].includes(incoterm);
-      set({ 
+      set((state) => ({
           incoterm,
-          placeOfLoading: isExw ? get().placeOfLoading : '', 
-          placeOfDelivery: isDoorDelivery ? get().placeOfDelivery : '' 
-      });
+          placeOfLoading: isExw ? state.placeOfLoading : '',
+          placeOfDelivery: isDoorDelivery ? state.placeOfDelivery : '',
+          quoteOptions: state.quoteOptions.map(option =>
+              option.id === state.activeOptionId
+                ? {
+                    ...option,
+                    incoterm,
+                    placeOfLoading: isExw ? state.placeOfLoading : '',
+                    placeOfDelivery: isDoorDelivery ? state.placeOfDelivery : ''
+                  }
+                : option
+          )
+      }));
   },
 
   setRouteLocations: (field, value) => {
-      set((state) => ({ ...state, [field]: value }));
+      set((state) => ({
+          ...state,
+          [field]: value,
+          quoteOptions: state.quoteOptions.map(option =>
+              option.id === state.activeOptionId
+                ? { ...option, [field]: value }
+                : option
+          )
+      }));
   },
 
   setEquipment: (type, count) => {
-      set({ equipmentType: type, containerCount: count });
+      set((state) => ({
+          equipmentType: type,
+          containerCount: count,
+          quoteOptions: state.quoteOptions.map(option =>
+              option.id === state.activeOptionId
+                ? { ...option, equipmentType: type, containerCount: count }
+                : option
+          )
+      }));
   },
 
   setExchangeRate: (currency, rate) => {
@@ -265,6 +401,106 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   setQuoteCurrency: (currency) => {
     set({ quoteCurrency: currency });
     get().updateLineItem('trigger', 'description', 'trigger');
+  },
+
+  updateOptionField: (field, value) => {
+      set((state) => ({
+          quoteOptions: state.quoteOptions.map(option =>
+              option.id === state.activeOptionId
+                ? { ...option, [field]: value }
+                : option
+          )
+      }));
+  },
+
+  setActiveOption: (id) => {
+      set((state) => {
+          const currentOption = state.quoteOptions.find(option => option.id === state.activeOptionId);
+          const syncedOptions = currentOption
+            ? state.quoteOptions.map(option =>
+                option.id === state.activeOptionId
+                  ? {
+                      ...option,
+                      mode: state.mode,
+                      incoterm: state.incoterm,
+                      pol: state.pol,
+                      pod: state.pod,
+                      placeOfLoading: state.placeOfLoading,
+                      placeOfDelivery: state.placeOfDelivery,
+                      equipmentType: state.equipmentType,
+                      containerCount: state.containerCount,
+                      requestedDepartureDate: state.requestedDepartureDate,
+                      estimatedDepartureDate: state.estimatedDepartureDate,
+                      estimatedArrivalDate: state.estimatedArrivalDate,
+                      transitTime: state.transitTime,
+                      freeTime: state.freeTime,
+                      items: state.items
+                    }
+                  : option
+              )
+            : state.quoteOptions;
+          const nextOption = syncedOptions.find(option => option.id === id) || syncedOptions[0];
+          if (!nextOption) return state;
+          return {
+              activeOptionId: nextOption.id,
+              quoteOptions: syncedOptions,
+              mode: nextOption.mode,
+              incoterm: nextOption.incoterm,
+              pol: nextOption.pol,
+              pod: nextOption.pod,
+              placeOfLoading: nextOption.placeOfLoading,
+              placeOfDelivery: nextOption.placeOfDelivery,
+              equipmentType: nextOption.equipmentType,
+              containerCount: nextOption.containerCount,
+              requestedDepartureDate: nextOption.requestedDepartureDate,
+              estimatedDepartureDate: nextOption.estimatedDepartureDate,
+              estimatedArrivalDate: nextOption.estimatedArrivalDate,
+              transitTime: nextOption.transitTime,
+              freeTime: nextOption.freeTime,
+              items: nextOption.items
+          };
+      });
+      get().updateLineItem('trigger', 'description', 'trigger');
+  },
+
+  addQuoteOption: () => {
+      set((state) => {
+          const nextIndex = state.quoteOptions.length;
+          const optionId = `option-${Math.random().toString(36).substring(7)}`;
+          const labelPrefix = OPTION_LABELS[nextIndex] || `Option ${nextIndex + 1}`;
+          const option = createQuoteOptionFromState(
+            state,
+            optionId,
+            `${labelPrefix}: ${getModeLabel(state.mode)}`
+          );
+          return {
+              quoteOptions: [...state.quoteOptions, option],
+              activeOptionId: optionId,
+              mode: option.mode,
+              incoterm: option.incoterm,
+              pol: option.pol,
+              pod: option.pod,
+              placeOfLoading: option.placeOfLoading,
+              placeOfDelivery: option.placeOfDelivery,
+              equipmentType: option.equipmentType,
+              containerCount: option.containerCount,
+              requestedDepartureDate: option.requestedDepartureDate,
+              estimatedDepartureDate: option.estimatedDepartureDate,
+              estimatedArrivalDate: option.estimatedArrivalDate,
+              transitTime: option.transitTime,
+              freeTime: option.freeTime,
+              items: option.items
+          };
+      });
+      get().updateLineItem('trigger', 'description', 'trigger');
+  },
+
+  renameQuoteOption: (id, label) => {
+      set((state) => ({
+          quoteOptions: state.quoteOptions.map(option =>
+              option.id === id ? { ...option, label } : option
+          )
+      }));
   },
 
   // --- UPDATED CALCULATION LOGIC ---
@@ -309,22 +545,39 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       description: '',
       buyPrice: 0,
       buyCurrency: 'MAD', 
+      vendorId: '',
+      vendorName: '',
+      lineValidityDate: '',
       markupType: 'PERCENT',
       markupValue: 20, 
       vatRule: 'STD_20',
     };
-    set(state => ({ items: [...state.items, newItem] }));
+    set(state => {
+      const updatedItems = [...state.items, newItem];
+      return {
+        items: updatedItems,
+        quoteOptions: state.quoteOptions.map(option =>
+          option.id === state.activeOptionId ? { ...option, items: updatedItems } : option
+        )
+      };
+    });
     get().updateLineItem('trigger', 'description', 'trigger');
   },
 
   removeLineItem: (id) => {
     const newItems = get().items.filter(i => i.id !== id);
-    set({ items: newItems });
+    set((state) => ({
+      items: newItems,
+      quoteOptions: state.quoteOptions.map(option =>
+        option.id === state.activeOptionId ? { ...option, items: newItems } : option
+      )
+    }));
     get().updateLineItem('trigger', 'description', 'trigger'); 
   },
 
   applyTemplate: (template) => {
       const newItems: QuoteLineItem[] = [];
+      const validityDate = get().validityDate;
       const createItem = (section: any, desc: string, price: number, curr: Currency = 'MAD', markup = 20): QuoteLineItem => ({
           id: Math.random().toString(36).substring(7),
           quoteId: get().id,
@@ -332,6 +585,9 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           description: desc,
           buyPrice: price,
           buyCurrency: curr,
+          vendorId: '',
+          vendorName: '',
+          lineValidityDate: validityDate,
           markupType: 'PERCENT',
           markupValue: markup,
           vatRule: section === 'FREIGHT' ? 'EXPORT_0_ART92' : 'STD_20'
@@ -350,7 +606,12 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           newItems.push(createItem('DESTINATION', 'DTHC (Prepaid)', 120, 'EUR'));
       }
 
-      set({ items: newItems });
+      set((state) => ({
+        items: newItems,
+        quoteOptions: state.quoteOptions.map(option =>
+          option.id === state.activeOptionId ? { ...option, items: newItems } : option
+        )
+      }));
       get().updateLineItem('trigger', 'description', 'trigger');
       useToast.getState().toast("Pricing template applied successfully.", "success");
   },
@@ -397,8 +658,11 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     const requiresApproval = marginPercent < 15;
     const approvalReason = requiresApproval ? `Margin ${marginPercent.toFixed(1)}% is below 15% threshold` : null;
 
-    set({ 
-        items: updatedItems, 
+    set((state) => ({ 
+        items: updatedItems,
+        quoteOptions: state.quoteOptions.map(option =>
+          option.id === state.activeOptionId ? { ...option, items: updatedItems } : option
+        ),
         totalCostMAD: parseFloat(totalCostMAD.toFixed(2)),
         totalSellMAD: parseFloat(totalSellMAD.toFixed(2)),
         totalMarginMAD: parseFloat(totalMarginMAD.toFixed(2)),
@@ -407,8 +671,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         totalSellTarget: parseFloat(totalSellTarget.toFixed(2)),
         totalTaxTarget: parseFloat(totalTaxTarget.toFixed(2)),
         totalTTCTarget: parseFloat((totalSellTarget + totalTaxTarget).toFixed(2)),
-        approval: { ...get().approval, requiresApproval, reason: approvalReason }
-    });
+        approval: { ...state.approval, requiresApproval, reason: approvalReason }
+    }));
   },
 
   addActivity: (text, category = 'NOTE', tone = 'neutral') => {
@@ -555,10 +819,13 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
           cargoRows: state.cargoRows,
           items: state.items,
+          quoteOptions: state.quoteOptions,
+          activeOptionId: state.activeOptionId,
           goodsDescription: state.goodsDescription,
           internalNotes: state.internalNotes,
           activities: state.activities, 
           exchangeRates: state.exchangeRates,
+          exchangeRateValidity: state.exchangeRateValidity,
           marginBuffer: state.marginBuffer, 
           quoteCurrency: state.quoteCurrency,
           salespersonName: state.salespersonName,
@@ -613,16 +880,12 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       const { data, error } = await supabase.from('quotes').select('*').eq('id', id).single();
       if (error || !data) { set({ isLoading: false }); return; }
 
-      const json = data.data; 
-      set({
-          isLoading: false,
-          id: data.id,
-          reference: data.reference,
-          status: data.status,
-          clientName: data.client_name,
-          validityDate: data.validity_date,
-          
-          mode: json.mode || 'SEA_LCL',
+      const json = data.data;
+      const fallbackMode = json.mode || 'SEA_LCL';
+      const fallbackOption: QuoteOption = {
+          id: 'option-a',
+          label: `Option A: ${getModeLabel(fallbackMode)}`,
+          mode: fallbackMode,
           incoterm: json.incoterm || 'FOB',
           pol: json.pol || data.pol,
           pod: json.pod || data.pod,
@@ -630,24 +893,58 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           placeOfDelivery: json.placeOfDelivery || '',
           equipmentType: json.equipmentType || '',
           containerCount: json.containerCount || 1,
+          requestedDepartureDate: json.requestedDepartureDate || '',
+          estimatedDepartureDate: json.estimatedDepartureDate || '',
+          estimatedArrivalDate: json.estimatedArrivalDate || '',
           transitTime: json.transitTime || 0,
           freeTime: json.freeTime || 0,
+          items: json.items || []
+      };
+      const options = json.quoteOptions?.length ? json.quoteOptions : [fallbackOption];
+      const normalizedOptions = options.map((option: QuoteOption, index: number) => ({
+          ...option,
+          label: option.label || `${OPTION_LABELS[index] || `Option ${index + 1}`}: ${getModeLabel(option.mode)}`
+      }));
+      const activeId = json.activeOptionId || normalizedOptions[0]?.id || fallbackOption.id;
+      const activeOption = normalizedOptions.find((option: QuoteOption) => option.id === activeId) || normalizedOptions[0];
+
+      set({
+          isLoading: false,
+          id: data.id,
+          reference: data.reference,
+          status: data.status,
+          clientName: data.client_name,
+          validityDate: data.validity_date,
+          exchangeRateValidity: json.exchangeRateValidity || data.validity_date,
+
+          quoteOptions: normalizedOptions,
+          activeOptionId: activeOption.id,
+          mode: activeOption.mode,
+          incoterm: activeOption.incoterm,
+          pol: activeOption.pol,
+          pod: activeOption.pod,
+          placeOfLoading: activeOption.placeOfLoading,
+          placeOfDelivery: activeOption.placeOfDelivery,
+          equipmentType: activeOption.equipmentType,
+          containerCount: activeOption.containerCount,
+          transitTime: activeOption.transitTime,
+          freeTime: activeOption.freeTime,
 
           cargoRows: json.cargoRows || [],
-          items: json.items || [],
+          items: activeOption.items || [],
           goodsDescription: json.goodsDescription || '',
           internalNotes: json.internalNotes || '',
           activities: json.activities || [],
           exchangeRates: json.exchangeRates || DEFAULT_STATE.exchangeRates,
-          marginBuffer: json.marginBuffer || DEFAULT_STATE.marginBuffer, 
+          marginBuffer: json.marginBuffer || DEFAULT_STATE.marginBuffer,
           quoteCurrency: json.quoteCurrency || 'MAD',
           salespersonName: json.salespersonName || 'Admin',
           probability: json.probability || 'MEDIUM',
           customerReference: json.customerReference || '',
           cargoReadyDate: json.cargoReadyDate || new Date().toISOString().split('T')[0],
-          requestedDepartureDate: json.requestedDepartureDate || '',
-          estimatedDepartureDate: json.estimatedDepartureDate || '',
-          estimatedArrivalDate: json.estimatedArrivalDate || '',
+          requestedDepartureDate: activeOption.requestedDepartureDate || '',
+          estimatedDepartureDate: activeOption.estimatedDepartureDate || '',
+          estimatedArrivalDate: activeOption.estimatedArrivalDate || '',
           competitorInfo: json.competitorInfo || '',
           hsCode: json.hsCode || '',
           isHazmat: json.isHazmat || false,

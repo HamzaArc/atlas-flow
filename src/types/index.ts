@@ -39,9 +39,31 @@ export interface QuoteLineItem {
   description: string;
   buyPrice: number;
   buyCurrency: Currency;
+  vendorId?: string;
+  vendorName?: string;
+  lineValidityDate?: string;
   markupType: 'PERCENT' | 'FIXED_AMOUNT';
   markupValue: number;
   vatRule: 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | 'DISBURSEMENT';
+}
+
+export interface QuoteOption {
+  id: string;
+  label: string;
+  mode: TransportMode;
+  incoterm: Incoterm;
+  pol: string;
+  pod: string;
+  placeOfLoading: string;
+  placeOfDelivery: string;
+  equipmentType: string;
+  containerCount: number;
+  requestedDepartureDate: string;
+  estimatedDepartureDate: string;
+  estimatedArrivalDate: string;
+  transitTime: number;
+  freeTime: number;
+  items: QuoteLineItem[];
 }
 
 export interface Quote {
@@ -54,6 +76,9 @@ export interface Quote {
   salespersonId: string;
   salespersonName: string;
   validityDate: Date;
+  exchangeRateValidity?: Date;
+  quoteOptions?: QuoteOption[];
+  activeOptionId?: string;
   cargoReadyDate: Date;
   requestedDepartureDate?: Date;
   estimatedDepartureDate?: Date;
