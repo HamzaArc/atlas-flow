@@ -5,6 +5,7 @@ import {
   Settings, 
   Users, 
   Briefcase,
+  Database,
   LogOut,
   ChevronRight,
   Box
@@ -15,7 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
     currentView: string;
-    onNavigate: (view: 'dashboard' | 'dossier' | 'crm' | 'finance') => void;
+    onNavigate: (view: 'dashboard' | 'dossier' | 'crm' | 'finance' | 'tariffs') => void;
 }
 
 export function Sidebar({ className, currentView, onNavigate }: SidebarProps) {
@@ -91,6 +92,7 @@ export function Sidebar({ className, currentView, onNavigate }: SidebarProps) {
             <div className="space-y-0.5">
                 <NavItem id="crm" icon={Users} label="CRM (Clients)" active={currentView === 'crm'} onClick={() => onNavigate('crm')} />
                 <NavItem id="finance" icon={Briefcase} label="Finance & Billing" active={currentView === 'finance'} onClick={() => onNavigate('finance')} />
+                <NavItem id="tariffs" icon={Database} label="Tariff Library" active={currentView === 'tariffs'} onClick={() => onNavigate('tariffs')} />
             </div>
         </div>
 

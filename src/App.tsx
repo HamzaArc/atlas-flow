@@ -7,11 +7,12 @@ import DossierDashboard from "@/features/dossier/pages/DossierDashboard";
 import ClientDetailsPage from "@/features/crm/pages/ClientDetailsPage";
 import ClientListPage from "@/features/crm/pages/ClientListPage";
 import FinanceDashboard from "@/features/finance/pages/FinanceDashboard"; // <--- IMPORTED
+import TariffDashboard from "@/features/tariffs/pages/TariffDashboard";
 import { Toaster } from "@/components/ui/use-toast";
 import { useQuoteStore } from "@/store/useQuoteStore"; 
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<'dashboard' | 'create' | 'dossier' | 'crm' | 'finance'>('dashboard');
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'create' | 'dossier' | 'crm' | 'finance' | 'tariffs'>('dashboard');
   const [crmView, setCrmView] = useState<'list' | 'details'>('list');
   const [dossierView, setDossierView] = useState<'dashboard' | 'dossier'>('dashboard'); 
 
@@ -64,6 +65,10 @@ function App() {
         {/* 4. Finance Module (UPDATED) */}
         {currentPage === 'finance' && (
             <FinanceDashboard />
+        )}
+
+        {currentPage === 'tariffs' && (
+            <TariffDashboard />
         )}
 
       </main>
