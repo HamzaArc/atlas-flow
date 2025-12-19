@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ActivityCategory } from '@/types/index';
+import { Input } from "@/components/ui/input";
 
 const TABS = [
     { id: 'ALL', label: 'All Activity', icon: Clock },
@@ -15,12 +16,17 @@ const TABS = [
     { id: 'ALERT', label: 'Alerts', icon: AlertTriangle },
 ];
 
-export function ActivityFeed() {
-  const { activities, addActivity } = useQuoteStore();
+interface ActivityFeedProps {
+  onPreviewQuote?: () => void;
+}
+
+export function ActivityFeed({ onPreviewQuote }: ActivityFeedProps) {
+  const { activities, addActivity, attemptSubmission, approval, status } = useQuoteStore();
   const { toast } = useToast();
   
   const [filter, setFilter] = useState<'ALL' | ActivityCategory>('ALL');
   const [noteContent, setNoteContent] = useState('');
+  const [recipientEmail, setRecipientEmail] = useState('');
 
   const filteredActivities = activities.filter(a => filter === 'ALL' || a.category === filter);
 
@@ -29,6 +35,19 @@ export function ActivityFeed() {
       addActivity(noteContent, 'NOTE', 'neutral');
       setNoteContent('');
       toast("Note added to timeline", "success");
+  };
+
+  const handleSendQuote = async () => {
+      await attemptSubmission();
+      if (!approval.requiresApproval) {
+          const target = recipientEmail.trim();
+          addActivity(
+              target ? `Quote shared with ${target}` : 'Quote prepared for customer delivery',
+              'SYSTEM',
+              'success'
+          );
+          setRecipientEmail('');
+      }
   };
 
   const getIcon = (cat: ActivityCategory) => {
@@ -129,6 +148,47 @@ export function ActivityFeed() {
                 />
             </div>
             
+            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Customer Delivery</span>
+                    <Badge variant="outline" className="text-[9px]">External</Badge>
+                </div>
+                <div className="space-y-2">
+                    <Input
+                        value={recipientEmail}
+                        onChange={(e) => setRecipientEmail(e.target.value)}
+                        placeholder="customer@email.com"
+                        className="h-8 text-xs bg-white"
+                    />
+                    {approval.requiresApproval && status === 'DRAFT' && (
+                        <p className="text-[10px] text-amber-600">
+                            Approval required before sending. Submit for review to continue.
+                        </p>
+                    )}
+                    <div className="flex gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={onPreviewQuote}
+                            className="h-8 text-[11px] border-slate-200"
+                        >
+                            Preview PDF
+                        </Button>
+                        <Button
+                            size="sm"
+                            onClick={handleSendQuote}
+                            className="h-8 text-[11px] bg-indigo-600 hover:bg-indigo-700"
+                            disabled={status !== 'DRAFT' || approval.requiresApproval}
+                        >
+                            Send Quote
+                        </Button>
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                        Sending will mark the quote as sent and log the activity.
+                    </p>
+                </div>
+            </div>
+
             <div className="flex items-center justify-between mt-auto">
                 <div className="flex -space-x-2 overflow-hidden">
                     <div className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-slate-200 flex items-center justify-center text-[9px] font-bold text-slate-500">YA</div>
