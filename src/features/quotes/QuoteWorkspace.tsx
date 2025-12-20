@@ -1,6 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileOutput, Box, Lock, MoreHorizontal, Plus, Copy, Trash2, Plane, Ship, Truck, AlertCircle } from "lucide-react";
+import { FileOutput, Box, Lock, MoreHorizontal, Plus, Copy, Trash2, Plane, Ship, Truck, AlertCircle, RefreshCw, Settings2 } from "lucide-react";
 import { QuoteHeader } from "./components/QuoteHeader"; 
 import { RouteSelector } from "./components/RouteSelector";
 import { CargoEngine } from "./components/CargoEngine";
@@ -10,6 +10,7 @@ import { useQuoteStore } from "@/store/useQuoteStore";
 import { pdf } from '@react-pdf/renderer';
 import { QuotePDF } from './components/QuotePDF';
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -17,6 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface QuoteWorkspaceProps {
     onBack: () => void;
@@ -30,7 +32,7 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
       
       // Data
       items, pol, pod, mode, incoterm, reference, clientName, validityDate,
-      exchangeRates, totalWeight, totalVolume, marginBuffer,
+      exchangeRates, setExchangeRate, totalWeight, totalVolume, marginBuffer,
       
       // Workflow
       approval, status, submitForApproval, hasExpiredRates,
@@ -66,7 +68,7 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
         volume={totalVolume}
         exchangeRates={exchangeRates}
         marginBuffer={marginBuffer}
-        optionName={optionName} // <--- PASSING THE NAME
+        optionName={optionName}
       />
     ).toBlob();
     const url = URL.createObjectURL(blob);
@@ -174,6 +176,53 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
                                     <p className="text-[10px] text-slate-400 font-medium">Pricing & Margins</p>
                                 </div>
                              </div>
+
+                             {/* --- INTERACTIVE RATE ANCHOR MANAGER --- */}
+                             <div className="flex items-center gap-3 mx-4">
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <div className="flex gap-2 cursor-pointer group hover:opacity-80 transition-opacity">
+                                            {Object.entries(exchangeRates)
+                                                .filter(([k, v]) => k !== 'MAD' && k !== 'GBP' && v !== 1)
+                                                .map(([curr, rate]) => (
+                                                    <Badge key={curr} variant="secondary" className="h-6 px-2 text-[10px] font-mono bg-slate-100 text-slate-600 border border-slate-200 group-hover:border-blue-300 group-hover:bg-blue-50 group-hover:text-blue-700">
+                                                        {curr}: {rate.toFixed(2)}
+                                                    </Badge>
+                                            ))}
+                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-300 hover:text-blue-600">
+                                                <Settings2 className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </div>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-64 p-4" align="end">
+                                        <div className="space-y-3">
+                                            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                                                <RefreshCw className="h-3 w-3" /> Exchange Rate Basis
+                                            </h4>
+                                            <p className="text-[10px] text-slate-500">
+                                                Adjust the currency anchor for this quote. All line items will recalculate immediately.
+                                            </p>
+                                            
+                                            {['EUR', 'USD'].map(curr => (
+                                                <div key={curr} className="flex items-center justify-between gap-2">
+                                                    <span className="text-xs font-bold w-8">{curr}</span>
+                                                    <div className="flex items-center gap-2 flex-1">
+                                                        <span className="text-[10px] text-slate-400">=</span>
+                                                        <Input 
+                                                            type="number" 
+                                                            className="h-7 text-xs font-mono text-right" 
+                                                            value={exchangeRates[curr] || 0}
+                                                            onChange={(e) => setExchangeRate(curr, parseFloat(e.target.value))}
+                                                        />
+                                                        <span className="text-[10px] font-bold text-slate-500">MAD</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                             </div>
+
                              <div className="flex gap-2">
                                 <Button variant="outline" size="sm" onClick={handleGeneratePDF} className="h-8 text-xs bg-white border-slate-200 text-slate-700 font-medium hover:bg-slate-50 hover:text-blue-700">
                                     <FileOutput className="h-3.5 w-3.5 mr-2" /> Preview

@@ -43,6 +43,13 @@ const styles = StyleSheet.create({
   grandTotal: { borderTop: '1px solid #cbd5e1', paddingTop: 6, marginTop: 4 },
   grandValue: { fontSize: 12, fontWeight: 'bold', color: '#2563eb' },
 
+  // NEW: Exchange Rate Anchor Section
+  anchorSection: { marginTop: 20, padding: 10, border: '1px solid #e2e8f0', borderRadius: 2, backgroundColor: '#f8fafc' },
+  anchorTitle: { fontSize: 8, fontWeight: 'bold', color: '#475569', textTransform: 'uppercase', marginBottom: 5 },
+  rateRow: { flexDirection: 'row', gap: 15, marginBottom: 5 },
+  rateText: { fontSize: 8, fontFamily: 'Helvetica', color: '#334155' },
+  disclaimer: { fontSize: 7, color: '#64748b', fontStyle: 'italic', marginTop: 5 },
+
   footer: { position: 'absolute', bottom: 30, left: 40, right: 40, textAlign: 'center', fontSize: 7, color: '#94a3b8', borderTop: '1px solid #e2e8f0', paddingTop: 10 }
 });
 
@@ -63,7 +70,7 @@ interface QuotePDFProps {
   volume: number;
   exchangeRates: Record<string, number>;
   marginBuffer: number;
-  optionName?: string; // NEW PROP
+  optionName?: string;
 }
 
 export const QuotePDF = ({ 
@@ -132,7 +139,6 @@ export const QuotePDF = ({
             <View style={styles.box}>
                 <Text style={styles.boxLabel}>Shipment Details</Text>
                 <Text style={styles.boxValue}>{mode} | {incoterm}</Text>
-                {/* NEW: Display Option Name clearly */}
                 {optionName && <Text style={styles.optionBadge}>{optionName}</Text>}
             </View>
         </View>
@@ -164,6 +170,23 @@ export const QuotePDF = ({
                     <Text style={styles.grandValue}>{totalTTC.toFixed(2)} {currency}</Text>
                 </View>
             </View>
+        </View>
+
+        {/* --- EXCHANGE RATE ANCHOR SECTION --- */}
+        <View style={styles.anchorSection}>
+            <Text style={styles.anchorTitle}>Exchange Rate Basis</Text>
+            <View style={styles.rateRow}>
+                {Object.entries(exchangeRates)
+                    .filter(([curr, rate]) => (curr === 'USD' || curr === 'EUR') && rate !== 1) 
+                    .map(([curr, rate]) => (
+                        <Text key={curr} style={styles.rateText}>
+                            1 {curr} = {rate.toFixed(4)} {currency}   |
+                        </Text>
+                ))}
+            </View>
+            <Text style={styles.disclaimer}>
+                Rates are based on the exchange rates listed above. Variations greater than 2% at the time of invoicing will result in an adjustment of the final amount.
+            </Text>
         </View>
 
         <View style={styles.footer}>

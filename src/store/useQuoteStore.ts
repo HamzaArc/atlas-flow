@@ -180,7 +180,7 @@ const createDefaultOption = (quoteId: string, mode: TransportMode = 'SEA_LCL'): 
     items: [],
     baseCurrency: 'MAD',
     quoteCurrency: 'MAD',
-    exchangeRates: { MAD: 1, USD: 9.80, EUR: 10.75, GBP: 12.50 },
+    exchangeRates: { MAD: 1, USD: 9.80, EUR: 10.75 }, // REMOVED GBP
     marginBuffer: 1.02,
     totalTTC: 0
 });
@@ -232,7 +232,7 @@ const DEFAULT_STATE = {
   transitTime: 0,
   freeTime: 0,
   items: [],
-  exchangeRates: { MAD: 1, USD: 9.80, EUR: 10.75, GBP: 12.50 },
+  exchangeRates: { MAD: 1, USD: 9.80, EUR: 10.75 }, // REMOVED GBP
   marginBuffer: 1.02,
   quoteCurrency: 'MAD' as Currency,
 
@@ -398,6 +398,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     const newRates = { ...exchangeRates, [currency]: rate };
     const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, exchangeRates: newRates } : o);
     set({ exchangeRates: newRates, options: updatedOptions });
+    // Trigger recalculation
     get().updateLineItem('trigger', 'description', 'trigger');
   },
   setQuoteCurrency: (currency) => {

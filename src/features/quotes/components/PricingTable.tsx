@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
     Trash2, Plus, MapPin, Ship, Anchor, Zap, Wand2, 
-    Building2, Calendar, AlertTriangle, XCircle, AlertCircle
+    Building2, Calendar, AlertTriangle, XCircle, AlertCircle, RefreshCw
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { QuoteLineItem, Currency } from "@/types/index";
@@ -25,6 +25,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 // --- MOCK VENDOR DATA ---
@@ -117,7 +118,7 @@ export function PricingTable() {
       return null;
   };
 
-  const calculateSellDisplay = (item: QuoteLineItem) => {
+  const calculateSellDetails = (item: QuoteLineItem) => {
       const buyRate = exchangeRates[item.buyCurrency] || 1;
       const costInMAD = item.buyPrice * buyRate;
 
@@ -132,7 +133,15 @@ export function PricingTable() {
       const targetRate = exchangeRates[quoteCurrency] || 1;
       const finalSell = quoteCurrency === 'MAD' ? sellInMAD : sellInMAD / targetRate;
 
-      return finalSell.toFixed(2);
+      // New: Return object with details for Tooltip
+      return {
+          finalVal: finalSell.toFixed(2),
+          mathString: `${sellInMAD.toFixed(2)} MAD` + (quoteCurrency !== 'MAD' ? ` / ${targetRate} = ${finalSell.toFixed(2)} ${quoteCurrency}` : ''),
+          conversionNote: item.buyCurrency !== quoteCurrency 
+             ? `1 ${item.buyCurrency} = ${buyRate} MAD` 
+             : null,
+          sellInMAD
+      };
   };
 
   const renderRows = (section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION') => {
@@ -149,6 +158,7 @@ export function PricingTable() {
       return sectionItems.map((item) => {
         const risk = checkValidityRisk(item.validityDate);
         const isExpired = risk?.level === 'expired';
+        const calc = calculateSellDetails(item);
 
         return (
         <TableRow 
@@ -314,13 +324,32 @@ export function PricingTable() {
                 </Select>
             </TableCell>
 
-            {/* 7. SELL PRICE */}
+            {/* 7. SELL PRICE (SMART) */}
             <TableCell className="w-[12%] py-1 text-right pr-4">
-                <div className="flex flex-col items-end">
-                    <span className="font-mono font-bold text-slate-800 text-sm">
-                        {calculateSellDisplay(item)}
-                    </span>
-                </div>
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <div className="flex flex-col items-end cursor-help group-hover:bg-slate-100 rounded px-1 transition-colors">
+                                <span className="font-mono font-bold text-slate-800 text-sm flex items-center gap-1">
+                                    {calc.finalVal}
+                                    {/* Show conversion indicator if needed */}
+                                    {item.buyCurrency !== quoteCurrency && (
+                                        <RefreshCw className="h-3 w-3 text-blue-400 opacity-50" />
+                                    )}
+                                </span>
+                            </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="text-xs">
+                            <div className="space-y-1">
+                                <p className="font-semibold text-slate-700">Calculation Logic:</p>
+                                {calc.conversionNote && (
+                                    <p className="text-slate-500 italic border-b border-slate-200 pb-1 mb-1">{calc.conversionNote}</p>
+                                )}
+                                <p>Sell (MAD): {calc.sellInMAD.toFixed(2)}</p>
+                            </div>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
             </TableCell>
 
             {/* 8. ACTIONS */}
