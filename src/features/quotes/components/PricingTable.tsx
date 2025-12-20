@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
     Trash2, Plus, MapPin, Ship, Anchor, Zap, Wand2, 
-    Building2, Calendar, AlertTriangle, XCircle
+    Building2, Calendar, AlertTriangle, XCircle, AlertCircle
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { QuoteLineItem, Currency } from "@/types/index";
@@ -93,15 +93,23 @@ export function PricingTable() {
   // --- HELPER: Expiry Logic ---
   const checkValidityRisk = (itemValidity?: Date) => {
       if (!itemValidity) return null;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const itemDate = new Date(itemValidity);
+
+      // 1. STRICT EXPIRY (Blocker)
+      if (itemDate < today) {
+          return { level: 'expired', msg: 'Expired' };
+      }
+
+      // 2. LOGICAL INCONSISTENCY (Expires before quote validity)
       const globalDate = new Date(quoteValidity);
-      const lineDate = new Date(itemValidity);
-      
-      // If line expires BEFORE the quote expires -> HIGH RISK
-      if (lineDate < globalDate) {
+      if (itemDate < globalDate) {
           return { level: 'error', msg: 'Expires before Quote' };
       }
-      // If line expires within 3 days of quote -> WARNING
-      const diffTime = Math.abs(lineDate.getTime() - globalDate.getTime());
+
+      // 3. TIGHT DEADLINE (Warning)
+      const diffTime = Math.abs(itemDate.getTime() - globalDate.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
       if (diffDays < 3) {
           return { level: 'warning', msg: 'Tight Validity' };
@@ -140,18 +148,35 @@ export function PricingTable() {
 
       return sectionItems.map((item) => {
         const risk = checkValidityRisk(item.validityDate);
+        const isExpired = risk?.level === 'expired';
 
         return (
-        <TableRow key={item.id} className="group border-b border-slate-50 hover:bg-blue-50/30 transition-colors">
+        <TableRow 
+            key={item.id} 
+            className={cn(
+                "group border-b transition-colors",
+                isExpired ? "bg-red-50 hover:bg-red-100 border-red-200" : "border-slate-50 hover:bg-blue-50/30"
+            )}
+        >
             {/* 1. DESCRIPTION */}
             <TableCell className="w-[25%] py-1 pl-4">
-                <Input 
-                    disabled={isReadOnly}
-                    className="h-8 border-transparent bg-transparent hover:bg-white focus:bg-white focus:border-blue-200 focus:ring-2 focus:ring-blue-100 font-medium text-slate-700 text-xs transition-all placeholder:text-slate-300 shadow-none" 
-                    value={item.description}
-                    placeholder="Item Name"
-                    onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
-                />
+                <div className="flex items-center gap-2">
+                    {isExpired && (
+                        <div title="Rate Expired" className="flex-shrink-0 text-red-600 animate-pulse">
+                            <AlertCircle className="h-4 w-4" />
+                        </div>
+                    )}
+                    <Input 
+                        disabled={isReadOnly}
+                        className={cn(
+                            "h-8 border-transparent bg-transparent hover:bg-white focus:bg-white focus:ring-2 font-medium text-xs transition-all placeholder:text-slate-300 shadow-none",
+                            isExpired ? "text-red-700" : "text-slate-700 focus:border-blue-200 focus:ring-blue-100"
+                        )}
+                        value={item.description}
+                        placeholder="Item Name"
+                        onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
+                    />
+                </div>
             </TableCell>
 
             {/* 2. VENDOR & VALIDITY (UPDATED) */}
@@ -177,6 +202,7 @@ export function PricingTable() {
                                 disabled={isReadOnly}
                                 className={cn(
                                     "h-7 min-w-[3.5rem] px-1.5 flex items-center justify-center gap-1 rounded border text-[9px] font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-100",
+                                    risk?.level === 'expired' ? "bg-red-100 text-red-700 border-red-300 shadow-sm" :
                                     risk?.level === 'error' ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100" :
                                     risk?.level === 'warning' ? "bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100" :
                                     item.validityDate ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" :
@@ -194,13 +220,15 @@ export function PricingTable() {
                         <PopoverContent className="w-auto p-3" align="end">
                             <div className="flex flex-col gap-3">
                                 <div className="space-y-1">
-                                    <h4 className="font-medium text-[10px] text-slate-500 uppercase tracking-wider">Rate Validity</h4>
+                                    <h4 className={cn("font-medium text-[10px] uppercase tracking-wider", isExpired ? "text-red-500" : "text-slate-500")}>
+                                        {isExpired ? "Rate Expired!" : "Rate Validity"}
+                                    </h4>
                                     <p className="text-[10px] text-slate-400">When does this specific price expire?</p>
                                 </div>
                                 
                                 <Input 
                                     type="date" 
-                                    className="h-8 text-xs bg-slate-50"
+                                    className={cn("h-8 text-xs", isExpired ? "bg-red-50 border-red-200" : "bg-slate-50")}
                                     value={item.validityDate ? new Date(item.validityDate).toISOString().split('T')[0] : ''}
                                     onChange={(e) => updateLineItem(item.id, 'validityDate', createLocalOneDate(e.target.value))}
                                 />

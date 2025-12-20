@@ -102,6 +102,7 @@ interface QuoteState {
   // Workflow Engine
   approval: QuoteApproval;
   activities: ActivityItem[];
+  hasExpiredRates: boolean; // NEW: Strict Validity Flag
 
   // --- ACTIONS ---
   setIdentity: (field: string, value: any) => void;
@@ -144,6 +145,21 @@ interface QuoteState {
   deleteQuote: (id: string) => Promise<void>;
   duplicateQuote: () => void;
 }
+
+// Helper: Check for expired items in a list
+const checkStrictExpiry = (items: QuoteLineItem[]): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
+
+    return items.some(item => {
+        if (!item.validityDate) return false;
+        // Ensure we are working with a Date object
+        const itemDate = new Date(item.validityDate);
+        // Expiry Logic: If item validity is LESS than today (yesterday or older), it is expired.
+        // If it equals today, it is still valid until midnight.
+        return itemDate < today;
+    });
+};
 
 // Helper to generate a fresh option
 const createDefaultOption = (quoteId: string, mode: TransportMode = 'SEA_LCL'): QuoteOption => ({
@@ -227,6 +243,7 @@ const DEFAULT_STATE = {
   densityRatio: 0,
 
   approval: { requiresApproval: false, reason: null },
+  hasExpiredRates: false,
   
   activities: [
       { id: '1', category: 'SYSTEM', text: 'Quote initialized', meta: 'System', tone: 'neutral', timestamp: new Date() },
@@ -278,7 +295,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         pol: defaultOption.pol,
         pod: defaultOption.pod,
         items: defaultOption.items,
-        exchangeRates: defaultOption.exchangeRates
+        exchangeRates: defaultOption.exchangeRates,
+        hasExpiredRates: checkStrictExpiry(defaultOption.items)
     });
     get().updateCargo(newState.cargoRows);
   },
@@ -325,7 +343,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           items: opt.items,
           exchangeRates: opt.exchangeRates,
           marginBuffer: opt.marginBuffer,
-          quoteCurrency: opt.quoteCurrency
+          quoteCurrency: opt.quoteCurrency,
+          hasExpiredRates: checkStrictExpiry(opt.items)
       });
       get().updateLineItem('trigger', 'description', 'trigger'); 
   },
@@ -436,7 +455,11 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     };
     const newItems = [...items, newItem];
     const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, items: newItems } : o);
-    set({ items: newItems, options: updatedOptions });
+    set({ 
+        items: newItems, 
+        options: updatedOptions,
+        hasExpiredRates: checkStrictExpiry(newItems) 
+    });
     get().updateLineItem('trigger', 'description', 'trigger');
   },
 
@@ -444,7 +467,11 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     const { items, options, activeOptionId } = get();
     const newItems = items.filter(i => i.id !== itemId);
     const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, items: newItems } : o);
-    set({ items: newItems, options: updatedOptions });
+    set({ 
+        items: newItems, 
+        options: updatedOptions,
+        hasExpiredRates: checkStrictExpiry(newItems)
+    });
     get().updateLineItem('trigger', 'description', 'trigger'); 
   },
 
@@ -479,7 +506,11 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
       const { options } = get();
       const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, items: newItems } : o);
-      set({ items: newItems, options: updatedOptions });
+      set({ 
+          items: newItems, 
+          options: updatedOptions,
+          hasExpiredRates: checkStrictExpiry(newItems)
+      });
       get().updateLineItem('trigger', 'description', 'trigger');
       useToast.getState().toast("Pricing template applied successfully.", "success");
   },
@@ -537,7 +568,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         totalSellTarget: parseFloat(totalSellTarget.toFixed(2)),
         totalTaxTarget: parseFloat(totalTaxTarget.toFixed(2)),
         totalTTCTarget: parseFloat((totalSellTarget + totalTaxTarget).toFixed(2)),
-        approval: { ...get().approval, requiresApproval, reason: approvalReason }
+        approval: { ...get().approval, requiresApproval, reason: approvalReason },
+        hasExpiredRates: checkStrictExpiry(updatedItems) // RE-CHECK VALIDITY ON UPDATE
     });
   },
 
@@ -556,7 +588,14 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   // --- WORKFLOW ACTIONS ---
   
   attemptSubmission: async () => {
-      const { approval } = get();
+      const { approval, hasExpiredRates } = get();
+
+      // STRICT VALIDITY GUARDRAIL
+      if (hasExpiredRates) {
+          useToast.getState().toast("Cannot Send: Active option contains expired rates.", "error");
+          return;
+      }
+
       if (approval.requiresApproval) {
           useToast.getState().toast("Approval required before sending.", "error");
       } else {
@@ -568,7 +607,14 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   },
 
   submitForApproval: async () => {
-      const { approval } = get();
+      const { approval, hasExpiredRates } = get();
+
+      // STRICT VALIDITY GUARDRAIL
+      if (hasExpiredRates) {
+          useToast.getState().toast("Cannot Submit: Active option contains expired rates.", "error");
+          return;
+      }
+
       set({ 
           status: 'VALIDATION',
           approval: { 
@@ -583,7 +629,14 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   },
 
   approveQuote: async (comment) => {
-      const { approval } = get();
+      const { approval, hasExpiredRates } = get();
+
+      // STRICT VALIDITY GUARDRAIL
+      if (hasExpiredRates) {
+        useToast.getState().toast("Cannot Approve: Option contains expired rates.", "error");
+        return;
+      }
+
       set({ 
           status: 'SENT', 
           approval: {

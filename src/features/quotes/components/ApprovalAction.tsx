@@ -5,7 +5,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { 
-    AlertTriangle, Send, CheckCircle2, XCircle, ShieldAlert, Ban, Trash2 
+    AlertTriangle, Send, CheckCircle2, XCircle, ShieldAlert, Ban, Trash2, Lock 
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { Badge } from "@/components/ui/badge";
@@ -15,11 +15,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export function ApprovalAction() {
   const { 
       status, approval, attemptSubmission, submitForApproval, 
-      approveQuote, rejectQuote, cancelQuote 
+      approveQuote, rejectQuote, cancelQuote, hasExpiredRates 
   } = useQuoteStore();
 
   const [rejectReason, setRejectReason] = useState("");
@@ -73,6 +79,37 @@ export function ApprovalAction() {
           </DialogContent>
       </Dialog>
   );
+
+  // --- LOCKED STATE DUE TO EXPIRY ---
+  if (hasExpiredRates && (status === 'DRAFT' || status === 'VALIDATION')) {
+      return (
+          <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="outline" size="sm" disabled className="h-8 text-xs border-red-200 bg-red-50 text-red-400 opacity-70 cursor-not-allowed">
+                        <Lock className="h-3.5 w-3.5 mr-2" />
+                        {status === 'VALIDATION' ? "Cannot Approve" : "Submission Locked"}
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent className="bg-red-600 text-white border-red-700">
+                    <p className="text-xs font-bold">Action Blocked: Expired Rates</p>
+                    <p className="text-[10px]">Update the expired line items to proceed.</p>
+                </TooltipContent>
+            </Tooltip>
+            {/* Allow cancel even if expired */}
+            <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setIsRejectOpen(true)}
+                className="h-8 text-xs text-slate-400 hover:text-red-600 hover:bg-red-50 ml-1"
+                title="Cancel Quote"
+            >
+                <Trash2 className="h-4 w-4" />
+            </Button>
+            <RejectionDialog />
+          </TooltipProvider>
+      );
+  }
 
   // --- LOGIC: SALES REP VIEW (DRAFT) ---
   if (status === 'DRAFT') {

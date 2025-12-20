@@ -1,6 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileOutput, Box, Lock, MoreHorizontal, Plus, Copy, Trash2, Plane, Ship, Truck } from "lucide-react";
+import { FileOutput, Box, Lock, MoreHorizontal, Plus, Copy, Trash2, Plane, Ship, Truck, AlertCircle } from "lucide-react";
 import { QuoteHeader } from "./components/QuoteHeader"; 
 import { RouteSelector } from "./components/RouteSelector";
 import { CargoEngine } from "./components/CargoEngine";
@@ -33,7 +33,7 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
       exchangeRates, totalWeight, totalVolume, marginBuffer,
       
       // Workflow
-      approval, status, submitForApproval,
+      approval, status, submitForApproval, hasExpiredRates,
 
       // Options
       options, activeOptionId, setActiveOption, createOption, removeOption, duplicateOption
@@ -134,7 +134,24 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
       </div>
 
       {/* Main Grid */}
-      <div className="flex-1 p-6 overflow-hidden min-h-0">
+      <div className="flex-1 p-6 overflow-hidden min-h-0 flex flex-col">
+          {/* STRICT VALIDITY BANNER */}
+          {hasExpiredRates && (
+              <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+                  <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+                  <div className="flex-1">
+                      <h4 className="text-sm font-bold text-red-800">Quote Contains Expired Rates</h4>
+                      <p className="text-xs text-red-600 mt-1">
+                          Critical line items in this option have passed their validity date. 
+                          You cannot send or approve this quote until these rates are updated or re-confirmed.
+                      </p>
+                  </div>
+                  <Button size="sm" variant="outline" className="h-7 text-xs bg-white border-red-200 text-red-700 hover:bg-red-50">
+                      Highlight Items
+                  </Button>
+              </div>
+          )}
+
           <div className="grid grid-cols-12 gap-6 h-full min-h-0">
               <div className="col-span-3 flex flex-col gap-6 h-full min-h-0">
                   <div className="h-[60%] min-h-0">
@@ -164,7 +181,7 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
                              </div>
                           </div>
                           
-                          {approval.requiresApproval && status === 'DRAFT' && (
+                          {approval.requiresApproval && status === 'DRAFT' && !hasExpiredRates && (
                             <div className="px-5 py-3 border-b border-amber-200 bg-amber-50/70 text-amber-700 text-xs flex items-center justify-between">
                                 <div>
                                     <span className="font-semibold uppercase tracking-wide text-[10px]">Approval Required</span>
