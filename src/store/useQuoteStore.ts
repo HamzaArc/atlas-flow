@@ -26,6 +26,8 @@ interface QuoteState {
   // --- EDITOR STATE (Global RFQ Context) ---
   id: string;
   reference: string;
+  masterReference: string; 
+  version: number;
   customerReference: string;
   status: 'DRAFT' | 'PRICING' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'REJECTED';
   
@@ -131,7 +133,9 @@ interface QuoteState {
   attemptSubmission: () => Promise<void>;
   submitForApproval: () => Promise<void>;
   approveQuote: (comment?: string) => Promise<void>;
-  rejectQuote: (reason: string) => Promise<void>;
+  rejectQuote: (reason: string) => Promise<void>; // Manager Rejection (Back to Draft)
+  cancelQuote: (reason: string) => Promise<void>; // Terminal Rejection (Lost/Cancelled)
+  createRevision: () => Promise<void>;
 
   fetchQuotes: () => Promise<void>;
   saveQuote: () => Promise<void>;
@@ -168,6 +172,8 @@ const createDefaultOption = (quoteId: string, mode: TransportMode = 'SEA_LCL'): 
 const DEFAULT_STATE = {
   id: 'new',
   reference: 'Q-24-DRAFT',
+  masterReference: 'Q-24-DRAFT',
+  version: 1,
   customerReference: '',
   status: 'DRAFT' as const,
   clientId: '',
@@ -251,9 +257,15 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   ...DEFAULT_STATE,
 
   // --- INIT HELPER ---
-  // Initializes a quote with one default option if none exist
   createNewQuote: () => {
-    const newState = { ...DEFAULT_STATE, id: 'new', reference: `Q-24-${Math.floor(Math.random() * 10000)}` };
+    const randomRef = `Q-24-${Math.floor(Math.random() * 10000)}`;
+    const newState = { 
+        ...DEFAULT_STATE, 
+        id: 'new', 
+        reference: randomRef,
+        masterReference: randomRef,
+        version: 1
+    };
     const defaultOption = createDefaultOption(newState.id);
     
     set({
@@ -279,24 +291,17 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   },
 
   // --- OPTION MANAGEMENT ---
-  
   createOption: (mode) => {
       const { id, options } = get();
       const newOpt = createDefaultOption(id, mode);
-      
-      // Clone basics from first option if available to save typing
       if (options.length > 0) {
           const base = options[0];
           newOpt.pol = base.pol;
           newOpt.pod = base.pod;
           newOpt.incoterm = base.incoterm;
       }
-
-      set({ 
-          options: [...options, newOpt],
-          activeOptionId: newOpt.id 
-      });
-      get().setActiveOption(newOpt.id); // Triggers re-calculation and facade update
+      set({ options: [...options, newOpt], activeOptionId: newOpt.id });
+      get().setActiveOption(newOpt.id);
       useToast.getState().toast(`New ${mode} option added.`, "success");
   },
 
@@ -307,7 +312,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
       set({
           activeOptionId: optionId,
-          // Hydrate Facade
           mode: opt.mode,
           incoterm: opt.incoterm,
           pol: opt.pol,
@@ -323,7 +327,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           marginBuffer: opt.marginBuffer,
           quoteCurrency: opt.quoteCurrency
       });
-      // Trigger recalculation of financials for this option
       get().updateLineItem('trigger', 'description', 'trigger'); 
   },
 
@@ -335,7 +338,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       }
       const newOptions = options.filter(o => o.id !== optionId);
       set({ options: newOptions });
-      
       if (activeOptionId === optionId) {
           get().setActiveOption(newOptions[0].id);
       }
@@ -345,48 +347,40 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
      const { options } = get();
      const source = options.find(o => o.id === optionId);
      if (!source) return;
-
      const newOpt = { ...source, id: Math.random().toString(36).substring(7), name: `${source.name} (Copy)` };
      set({ options: [...options, newOpt] });
      get().setActiveOption(newOpt.id);
   },
 
-  // --- FACADE SETTERS (Updates the Active Option) ---
-
+  // --- FACADE SETTERS ---
   setMode: (mode) => {
       const { options, activeOptionId } = get();
       const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, mode } : o);
       set({ mode, options: updatedOptions });
-      get().updateCargo(get().cargoRows); // Recalculate chargeable weight
+      get().updateCargo(get().cargoRows);
   },
-
   setIncoterm: (incoterm) => {
       const { options, activeOptionId } = get();
       const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, incoterm } : o);
       set({ incoterm, options: updatedOptions });
   },
-
   setRouteLocations: (field, value) => {
       const { options, activeOptionId } = get();
       const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, [field]: value } : o);
       set({ [field]: value, options: updatedOptions });
   },
-
   setEquipment: (type, count) => {
       const { options, activeOptionId } = get();
       const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, equipmentType: type, containerCount: count } : o);
       set({ equipmentType: type, containerCount: count, options: updatedOptions });
   },
-
   setExchangeRate: (currency, rate) => {
     const { options, activeOptionId, exchangeRates } = get();
     const newRates = { ...exchangeRates, [currency]: rate };
-    
     const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, exchangeRates: newRates } : o);
     set({ exchangeRates: newRates, options: updatedOptions });
     get().updateLineItem('trigger', 'description', 'trigger');
   },
-
   setQuoteCurrency: (currency) => {
     const { options, activeOptionId } = get();
     const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, quoteCurrency: currency } : o);
@@ -394,12 +388,10 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     get().updateLineItem('trigger', 'description', 'trigger');
   },
 
-  // --- UPDATED CALCULATION LOGIC ---
+  // --- CALCULATION LOGIC ---
   updateCargo: (rows) => {
-    const { mode } = get(); // Gets from facade (active option)
-    let vol = 0;
-    let weight = 0;
-    let pkgs = 0;
+    const { mode } = get();
+    let vol = 0, weight = 0, pkgs = 0;
 
     rows.forEach(r => {
       const rowVol = (r.length * r.width * r.height * r.qty) / 1000000;
@@ -408,7 +400,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       pkgs += r.qty;
     });
     
-    // Expert Chargeable Weight Logic based on Active Option Mode
     let chargeable = 0;
     if (mode === 'AIR') chargeable = Math.max(weight, (vol * 1000000) / 6000); 
     else if (mode === 'SEA_LCL') chargeable = Math.max(weight, vol * 1000); 
@@ -429,11 +420,10 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
   addLineItem: (section) => {
     const { id, activeOptionId, options, items } = get();
-    
     const newItem: QuoteLineItem = {
       id: Math.random().toString(36).substring(7),
       quoteId: id,
-      optionId: activeOptionId, // NEW: Link to option
+      optionId: activeOptionId,
       section,
       description: '',
       buyPrice: 0,
@@ -441,13 +431,11 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       markupType: 'PERCENT',
       markupValue: 20, 
       vatRule: 'STD_20',
-      vendorId: '', // NEW
-      vendorName: '' // NEW
+      vendorId: '', 
+      vendorName: '' 
     };
-
     const newItems = [...items, newItem];
     const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, items: newItems } : o);
-
     set({ items: newItems, options: updatedOptions });
     get().updateLineItem('trigger', 'description', 'trigger');
   },
@@ -456,7 +444,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     const { items, options, activeOptionId } = get();
     const newItems = items.filter(i => i.id !== itemId);
     const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, items: newItems } : o);
-    
     set({ items: newItems, options: updatedOptions });
     get().updateLineItem('trigger', 'description', 'trigger'); 
   },
@@ -492,7 +479,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
       const { options } = get();
       const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, items: newItems } : o);
-
       set({ items: newItems, options: updatedOptions });
       get().updateLineItem('trigger', 'description', 'trigger');
       useToast.getState().toast("Pricing template applied successfully.", "success");
@@ -501,22 +487,17 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   updateLineItem: (id, field, value) => {
     const { items, exchangeRates, quoteCurrency, options, activeOptionId } = get();
     
-    // 1. Update the Item List
     const updatedItems = items.map(item => {
       if (item.id !== id && id !== 'trigger') return item;
       if (id !== 'trigger') return { ...item, [field]: value };
       return item;
     });
     
-    // 2. Calculate Financials for this specific Option
-    let totalCostMAD = 0;
-    let totalSellMAD = 0;
-    let totalTaxMAD = 0;
+    let totalCostMAD = 0, totalSellMAD = 0, totalTaxMAD = 0;
 
     updatedItems.forEach(item => {
         const buyRate = exchangeRates[item.buyCurrency] || 1;
         const costInMAD = item.buyPrice * buyRate;
-
         let sellInMAD = 0;
         if (item.markupType === 'PERCENT') {
             sellInMAD = costInMAD * (1 + (item.markupValue / 100));
@@ -524,9 +505,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
             const marginInMAD = item.markupValue * buyRate; 
             sellInMAD = costInMAD + marginInMAD;
         }
-        
         const taxAmountMAD = sellInMAD * getTaxRate(item.vatRule);
-
         totalCostMAD += costInMAD;
         totalSellMAD += sellInMAD;
         totalTaxMAD += taxAmountMAD;
@@ -535,18 +514,16 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     const targetRate = exchangeRates[quoteCurrency] || 1;
     const totalSellTarget = quoteCurrency === 'MAD' ? totalSellMAD : totalSellMAD / targetRate;
     const totalTaxTarget = quoteCurrency === 'MAD' ? totalTaxMAD : totalTaxMAD / targetRate;
-
     const totalMarginMAD = totalSellMAD - totalCostMAD;
     const marginPercent = totalSellMAD > 0 ? (totalMarginMAD / totalSellMAD) * 100 : 0;
     
     const requiresApproval = marginPercent < 15;
     const approvalReason = requiresApproval ? `Margin ${marginPercent.toFixed(1)}% is below 15% threshold` : null;
 
-    // 3. Sync back to Options Array
     const updatedOptions = options.map(o => o.id === activeOptionId ? { 
         ...o, 
         items: updatedItems,
-        totalTTC: totalSellMAD + totalTaxMAD // simplified storage
+        totalTTC: totalSellMAD + totalTaxMAD
     } : o);
 
     set({ 
@@ -621,6 +598,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       useToast.getState().toast("Quote Approved & Validated", "success");
   },
 
+  // MANAGER REJECTION (Internal loop)
   rejectQuote: async (reason) => {
       set({ 
           status: 'DRAFT', 
@@ -629,6 +607,41 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       get().addActivity(`Approval rejected: ${reason}`, 'APPROVAL', 'destructive');
       await get().saveQuote(); 
       useToast.getState().toast("Quote Rejected and reset to Draft", "info");
+  },
+
+  // TERMINAL REJECTION (Client Rejected or Cancelled)
+  cancelQuote: async (reason) => {
+      set({ status: 'REJECTED' });
+      get().addActivity(`Quote marked as LOST/REJECTED. Reason: ${reason}`, 'SYSTEM', 'destructive');
+      await get().saveQuote();
+      useToast.getState().toast("Quote marked as Rejected", "info");
+  },
+
+  createRevision: async () => {
+      const current = get();
+      const stateCopy = JSON.parse(JSON.stringify(current));
+      const newVersion = (stateCopy.version || 1) + 1;
+      
+      set({
+          ...stateCopy,
+          id: 'new', 
+          version: newVersion,
+          status: 'DRAFT',
+          approval: { requiresApproval: false, reason: null },
+          activities: [
+              {
+                  id: Math.random().toString(),
+                  text: `Created Revision v${newVersion} (from v${current.version})`,
+                  category: 'SYSTEM',
+                  tone: 'neutral',
+                  meta: 'System',
+                  timestamp: new Date()
+              }
+          ]
+      });
+
+      await get().saveQuote();
+      useToast.getState().toast(`Created Revision v${newVersion}`, "success");
   },
 
   // --- DATABASE ACTIONS ---
@@ -644,12 +657,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           status: row.status,
           clientName: row.client_name,
           validityDate: new Date(row.validity_date),
-          
-          // These top-level fields are legacy/display only now
           pol: row.pol,
           pod: row.pod,
-          
-          // Data Object Mapping
           clientId: '', 
           salespersonId: row.data.salespersonId || '',
           salespersonName: row.data.salespersonName || 'Admin',
@@ -666,11 +675,11 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           goodsDescription: row.data.goodsDescription || '',
           hsCode: row.data.hsCode || '',
           approval: row.data.approval || { requiresApproval: false, reason: null },
-          
-          // NEW: Map Options
           options: row.data.options || [],
           packagingType: 'PALLETS', 
           isStackable: true,
+          version: row.data.version || 1,
+          masterReference: row.data.masterReference || row.reference
       }));
 
       set({ quotes: mappedQuotes, isLoading: false });
@@ -683,11 +692,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       set({ isLoading: true });
       
       const jsonPayload = {
-          // New Structure: Arrays of Options
           options: state.options,
           activeOptionId: state.activeOptionId,
-
-          // Shared Data
           cargoRows: state.cargoRows,
           goodsDescription: state.goodsDescription,
           internalNotes: state.internalNotes,
@@ -707,14 +713,16 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           temperature: state.temperature,
           cargoValue: state.cargoValue,
           insuranceRequired: state.insuranceRequired,
-          approval: state.approval 
+          approval: state.approval,
+          version: state.version,
+          masterReference: state.masterReference
       };
 
       const dbRow = {
           reference: state.reference,
           status: state.status,
           client_name: state.clientName,
-          pol: state.pol, // Saving current active pol for quick search
+          pol: state.pol, 
           pod: state.pod,
           validity_date: state.validityDate,
           total_ttc: state.totalTTCMAD,
@@ -746,12 +754,10 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
       const json = data.data; 
       
-      // Handle Backward Compatibility
       let loadedOptions = json.options;
       let activeOptId = json.activeOptionId;
 
       if (!loadedOptions || loadedOptions.length === 0) {
-        // Migration: If loading old quote, convert legacy fields to Option 1
         const legacyOption: QuoteOption = {
             id: 'legacy-opt',
             quoteId: data.id,
@@ -782,6 +788,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           isLoading: false,
           id: data.id,
           reference: data.reference,
+          masterReference: json.masterReference || data.reference, 
+          version: json.version || 1,
           status: data.status,
           clientName: data.client_name,
           validityDate: data.validity_date,
@@ -809,8 +817,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           insuranceRequired: json.insuranceRequired || false,
           approval: json.approval || { requiresApproval: false, reason: null },
       });
-      
-      // Hydrate Facade with active option
       get().setActiveOption(activeOptId);
   },
 
@@ -824,7 +830,18 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
   duplicateQuote: () => {
     const current = get();
-    set({ ...current, id: 'new', reference: `${current.reference}-COPY`, status: 'DRAFT' });
+    const newRef = `${current.reference}-COPY`;
+    set({ 
+        ...current, 
+        id: 'new', 
+        reference: newRef, 
+        masterReference: newRef,
+        version: 1, 
+        status: 'DRAFT',
+        activities: [
+            { id: 'init', category: 'SYSTEM', text: 'Duplicated from ' + current.reference, meta: 'System', tone: 'neutral', timestamp: new Date() }
+        ]
+    });
     useToast.getState().toast("Duplicated!", "info");
   }
 }));

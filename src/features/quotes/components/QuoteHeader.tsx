@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/popover";
 import { 
     Save, ArrowLeft, Copy, Coins, Settings2, 
-    User, Calendar, Hash, Clock, Check, Send 
+    User, Calendar, Hash, Clock, Check, History, GitBranch
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { Currency } from "@/types/index";
@@ -30,14 +30,15 @@ const STEPS = [
 
 export function QuoteHeader({ onBack }: QuoteHeaderProps) {
   const { 
-    reference, status, clientName, validityDate,
+    reference, status, clientName, validityDate, version,
     salespersonName, cargoReadyDate, customerReference,
     quoteCurrency, exchangeRates,
-    setIdentity, setStatus, saveQuote, duplicateQuote, deleteQuote, id,
+    setIdentity, setStatus, saveQuote, duplicateQuote, createRevision, id,
     setQuoteCurrency, setExchangeRate
   } = useQuoteStore();
 
-  const isReadOnly = status === 'ACCEPTED' || status === 'REJECTED';
+  const isReadOnly = status === 'ACCEPTED' || status === 'REJECTED' || status === 'SENT';
+  const isLocked = status === 'ACCEPTED' || status === 'REJECTED';
 
   // --- COMPONENT: WORKFLOW STEPPER ---
   const StatusStepper = () => (
@@ -70,12 +71,6 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
       </div>
   );
 
-  const handleDelete = () => {
-      if(confirm('Are you sure you want to delete this quote?')) {
-          deleteQuote(id);
-      }
-  }
-
   // --- HELPER: Safe Date String ---
   // Ensures we pass a clean YYYY-MM-DD string to the input, regardless of how it's stored
   const formatDateForInput = (dateVal: string | Date) => {
@@ -84,6 +79,12 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
       if (typeof dateVal === 'string') return dateVal.split('T')[0];
       // Fallback if a Date object slipped in
       return dateVal.toISOString().split('T')[0];
+  };
+
+  const handleRevision = async () => {
+      if (confirm(`Create a new version (v${version + 1}) for negotiation? This will duplicate the current quote as a Draft.`)) {
+          await createRevision();
+      }
   };
 
   return (
@@ -107,7 +108,10 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
           <div className="flex flex-col">
               <div className="flex items-center gap-2">
                 <h1 className="font-bold text-lg tracking-tight text-slate-900">{reference}</h1>
-                {isReadOnly && <Badge variant="outline" className="text-[10px] h-5 bg-slate-50 text-slate-500">Locked</Badge>}
+                <Badge variant="secondary" className="text-[10px] h-5 bg-blue-50 text-blue-700 border-blue-100">
+                    v{version}
+                </Badge>
+                {isLocked && <Badge variant="outline" className="text-[10px] h-5 bg-slate-50 text-slate-500">Locked</Badge>}
               </div>
           </div>
         </div>
@@ -119,7 +123,7 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
 
            {/* Currency Selector */}
            <div className="flex items-center gap-1 mr-4">
-               <Select value={quoteCurrency} onValueChange={(v) => setQuoteCurrency(v as Currency)} disabled={isReadOnly}>
+               <Select value={quoteCurrency} onValueChange={(v) => setQuoteCurrency(v as Currency)} disabled={isLocked}>
                    <SelectTrigger className="h-8 w-24 text-xs font-semibold bg-slate-50 border-slate-200 focus:ring-0">
                        <SelectValue />
                    </SelectTrigger>
@@ -165,12 +169,21 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
 
            {/* Action Buttons */}
            <div className="flex gap-2 items-center">
-               {!isReadOnly && (
+               
+               {/* Always allow copying/templating */}
+               <Button variant="outline" size="sm" onClick={duplicateQuote} className="h-8 text-xs border-slate-200 text-slate-600">
+                   <Copy className="h-3.5 w-3.5 mr-2" /> Copy
+               </Button>
+
+               {/* REVISION BUTTON: Appears when we can no longer edit the current one safely */}
+               {isReadOnly && (
+                   <Button variant="outline" size="sm" onClick={handleRevision} className="h-8 text-xs border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100">
+                       <GitBranch className="h-3.5 w-3.5 mr-2" /> Revise (v{version+1})
+                   </Button>
+               )}
+
+               {!isLocked && (
                    <>
-                    <Button variant="outline" size="sm" onClick={duplicateQuote} className="h-8 text-xs border-slate-200 text-slate-600">
-                        <Copy className="h-3.5 w-3.5 mr-2" /> Copy
-                    </Button>
-                    
                     {/* INJECTED COMPONENT */}
                     <ApprovalAction />
 
@@ -180,7 +193,8 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                    </>
                )}
                
-               {isReadOnly && (
+               {/* Fallback to re-open if needed manually, but Revision is preferred */}
+               {isLocked && !isReadOnly && (
                    <Button size="sm" variant="outline" onClick={() => setStatus('DRAFT')} className="h-8 text-xs">
                         Re-open Quote
                    </Button>

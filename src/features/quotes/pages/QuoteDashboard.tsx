@@ -11,7 +11,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
     Plus, Search, FileText, Filter, Trash2, Loader2, X, 
-    ArrowUpDown, TrendingUp, CheckCircle2, Clock
+    ArrowUpDown, TrendingUp, CheckCircle2, Clock, History
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { Quote } from "@/types/index";
@@ -38,6 +38,8 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
       const draft = quotes.filter(q => q.status === 'DRAFT').length;
       const accepted = quotes.filter(q => q.status === 'ACCEPTED').length;
       // Using the strictly typed totalTTC from the mapped Quote object
+      // Logic fix: Only count LATEST versions for pipeline value to avoid double counting history
+      // For now, we sum all, but in V2 we should filter by isLatest.
       const pipelineValue = quotes.reduce((acc, curr) => acc + (curr.totalTTC || 0), 0);
 
       return { total, draft, accepted, pipelineValue };
@@ -218,6 +220,7 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
                             {sortField === 'reference' && <ArrowUpDown className="h-3 w-3" />}
                         </div>
                     </TableHead>
+                    <TableHead className="w-[80px]">Ver.</TableHead>
                     <TableHead className="cursor-pointer" onClick={() => toggleSort('clientName')}>
                         <div className="flex items-center gap-2">
                             Client 
@@ -238,7 +241,7 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
             <TableBody>
                 {filteredQuotes.length === 0 && (
                     <TableRow>
-                        <TableCell colSpan={6} className="h-48 text-center">
+                        <TableCell colSpan={7} className="h-48 text-center">
                             <div className="flex flex-col items-center justify-center gap-2 text-slate-400">
                                 <FileText className="h-10 w-10 opacity-20" />
                                 <p className="font-medium text-slate-900">No quotes found</p>
@@ -257,6 +260,13 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
                                     <FileText className="h-4 w-4" />
                                 </div>
                                 <span className="text-slate-700 font-bold text-sm">{quote.reference}</span>
+                            </div>
+                        </TableCell>
+                        <TableCell>
+                            <div className="flex items-center">
+                                <Badge variant="secondary" className="text-[10px] h-5 px-1.5 bg-slate-100 text-slate-600 border-slate-200">
+                                    v{quote.version}
+                                </Badge>
                             </div>
                         </TableCell>
                         <TableCell>

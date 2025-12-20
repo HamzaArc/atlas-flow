@@ -34,17 +34,17 @@ export interface QuoteApproval {
 
 export interface QuoteLineItem {
   id: string;
-  quoteId: string; // References the Parent Quote (RFQ)
-  optionId?: string; // NEW: References the specific Option (Air vs Sea)
+  quoteId: string;
+  optionId?: string;
   section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION';
   description: string;
   
   // Buying (Cost)
   buyPrice: number;
   buyCurrency: Currency;
-  vendorId?: string; // NEW: Link to CRM Supplier
-  vendorName?: string; // NEW: Snapshot of Supplier Name
-  validityDate?: Date; // NEW: Line-item specific validity (e.g., spot rate expiration)
+  vendorId?: string; 
+  vendorName?: string; 
+  validityDate?: Date; 
 
   // Selling (Revenue)
   markupType: 'PERCENT' | 'FIXED_AMOUNT';
@@ -52,14 +52,13 @@ export interface QuoteLineItem {
   vatRule: 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | 'DISBURSEMENT';
 }
 
-// NEW: The specific logistics solution (e.g. Option 1: Air Freight)
 export interface QuoteOption {
     id: string;
     quoteId: string;
-    name: string; // "Option A: Express Air"
+    name: string;
     isRecommended: boolean;
     
-    // Route & Mode (Specific to this option)
+    // Route & Mode
     mode: TransportMode;
     incoterm: Incoterm;
     pol: string;
@@ -71,7 +70,7 @@ export interface QuoteOption {
     equipmentType?: string;
     containerCount: number;
 
-    // Financials (Specific to this option)
+    // Financials
     items: QuoteLineItem[];
     totalTTC: number;
     baseCurrency: Currency;
@@ -83,6 +82,9 @@ export interface QuoteOption {
 export interface Quote {
   id: string;
   reference: string;
+  masterReference: string; 
+  version: number; 
+  
   customerReference?: string;
   status: 'DRAFT' | 'PRICING' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'REJECTED';
   
@@ -93,11 +95,17 @@ export interface Quote {
   salespersonName: string;
   
   // Global Dates
-  validityDate: Date; // The overall validity of the offer
+  validityDate: Date; 
   cargoReadyDate: Date;
   requestedDepartureDate?: Date;
+
+  // --- DASHBOARD DISPLAY FIELDS (Mapped from DB columns) ---
+  // These allow the dashboard to show data without parsing the options array
+  pol?: string;
+  pod?: string;
+  totalTTC?: number;
   
-  // Cargo (Shared across all options usually)
+  // Cargo
   cargoRows: any[];
   goodsDescription: string;
   hsCode?: string;
@@ -116,13 +124,10 @@ export interface Quote {
   activities: ActivityItem[];
   approval: QuoteApproval;
 
-  // NEW: Multi-Option Support
-  // We keep legacy fields on the Quote interface temporarily if needed for database mapping,
-  // but logically, the data now lives in 'options'.
   options: QuoteOption[];
 }
 
-// --- 3. DOSSIER (SHIPMENT) MODELS ---
+// --- 3. DOSSIER MODELS ---
 export type ShipmentStatus = 'BOOKED' | 'PICKUP' | 'AT_POL' | 'ON_WATER' | 'AT_POD' | 'CUSTOMS' | 'DELIVERED' | 'COMPLETED';
 
 export interface ShipmentParty {
@@ -136,10 +141,10 @@ export interface DossierContainer {
   number: string;
   type: '20DV' | '40HC' | '40RH' | '45HC' | 'LCL';
   seal: string;
-  weight: number; // kg
+  weight: number; 
   packages: number;
   packageType: PackagingType;
-  volume: number; // cbm
+  volume: number; 
   status: 'GATE_IN' | 'LOADED' | 'ON_WATER' | 'DISCHARGED' | 'DELIVERED' | 'EMPTY_RETURN';
   pickupDate?: string;
   returnDate?: string;
@@ -188,7 +193,7 @@ export interface Dossier {
   currency: Currency;
 }
 
-// --- 4. FINANCE ENGINE (RE-ARCHITECTED) ---
+// --- 4. FINANCE ENGINE ---
 export type ChargeType = 'INCOME' | 'EXPENSE';
 export type ChargeStatus = 'ESTIMATED' | 'ACCRUED' | 'READY_TO_INVOICE' | 'INVOICED' | 'POSTED' | 'PAID' | 'PARTIAL';
 export type InvoiceStatus = 'DRAFT' | 'ISSUED' | 'SENT' | 'PAID' | 'OVERDUE' | 'CANCELLED';
@@ -199,50 +204,44 @@ export interface ChargeLine {
     id: string;
     dossierId: string;
     type: ChargeType;
-    code: string; // e.g. 'OF', 'THC', 'DUM'
+    code: string; 
     description: string;
-    vendorId?: string; // For AP
-    vendorName?: string;
+    vendorId?: string; 
+    vendorName?: string; 
     
-    // Amounts
     currency: Currency;
-    amount: number; // The amount in original currency
-    exchangeRate: number; // ROE to Local (MAD)
-    amountLocal: number; // The amount in MAD
+    amount: number; 
+    exchangeRate: number; 
+    amountLocal: number; 
     
-    // Tax Logic
     vatRule: VatRule;
-    vatRate: number; // e.g. 0.20
+    vatRate: number; 
     vatAmount: number;
     totalAmount: number;
 
     status: ChargeStatus;
-    invoiceRef?: string; // Link to generated invoice
-    invoiceId?: string; // Relation ID
-    isBillable: boolean; // If expense, can we bill it?
+    invoiceRef?: string; 
+    invoiceId?: string; 
+    isBillable: boolean; 
     createdAt?: Date;
 }
 
 export interface Invoice {
     id: string;
     type: InvoiceType;
-    reference: string; // INV-24-001
+    reference: string; 
     dossierId: string;
     clientId: string;
     clientName: string;
     date: Date;
     dueDate: Date;
-    
-    // Explicitly using the InvoiceStatus type to fix TS2322
     status: InvoiceStatus;
-    
     currency: Currency;
     exchangeRate: number;
     subTotal: number;
     taxTotal: number;
     total: number;
     balanceDue: number;
-    
     lines: ChargeLine[];
 }
 
