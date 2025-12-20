@@ -19,15 +19,14 @@ const styles = StyleSheet.create({
   box: { flex: 1, backgroundColor: '#f8fafc', padding: 8, borderRadius: 2 },
   boxLabel: { fontSize: 7, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 },
   boxValue: { fontSize: 10, fontWeight: 'bold', color: '#1e293b' },
+  
+  // Highlight Badge in PDF
+  optionBadge: { marginTop: 4, padding: 4, backgroundColor: '#e0f2fe', color: '#0369a1', fontSize: 8, borderRadius: 2, alignSelf: 'flex-start' },
 
   // Table
   table: { width: '100%', marginBottom: 10 },
-  
-  // Section Header inside Table
   sectionRow: { backgroundColor: '#e2e8f0', padding: 4, paddingLeft: 8, marginTop: 8 },
   sectionText: { fontSize: 8, fontWeight: 'bold', color: '#475569', textTransform: 'uppercase' },
-
-  // Standard Row
   row: { flexDirection: 'row', borderBottom: '1px solid #f1f5f9', paddingVertical: 6, alignItems: 'center' },
   headerRow: { flexDirection: 'row', borderBottom: '1px solid #0f172a', paddingVertical: 6, marginBottom: 4 },
   
@@ -55,7 +54,6 @@ interface QuotePDFProps {
   incoterm: Incoterm;
   mode: TransportMode;
   items: QuoteLineItem[];
-  // Financials
   totalHT: number;
   totalTax: number;
   totalTTC: number;
@@ -64,16 +62,16 @@ interface QuotePDFProps {
   weight: number;
   volume: number;
   exchangeRates: Record<string, number>;
-  marginBuffer: number; // <--- FIXED: Added missing prop
+  marginBuffer: number;
+  optionName?: string; // NEW PROP
 }
 
 export const QuotePDF = ({ 
   reference, clientName, pol, pod, incoterm, mode, items, 
   totalHT, totalTax, totalTTC, currency, validityDate,
-  weight, volume, exchangeRates, marginBuffer
+  weight, volume, exchangeRates, optionName
 }: QuotePDFProps) => {
 
-  // Helper to render sections
   const renderSection = (title: string, sectionFilter: string) => {
       const sectionItems = items.filter(i => i.section === sectionFilter);
       if (sectionItems.length === 0) return null;
@@ -84,11 +82,8 @@ export const QuotePDF = ({
                   <Text style={styles.sectionText}>{title}</Text>
               </View>
               {sectionItems.map((item, i) => {
-                  // Re-calc logic for PDF consistency
                   const buyRate = exchangeRates[item.buyCurrency] || 1;
                   const targetRate = exchangeRates[currency] || 1;
-                  // Apply margin buffer to base cost if needed, or stick to raw buyPrice
-                  // (Logic here depends on if you want to show cost or sell. Usually PDF shows Sell Price)
                   const costInMAD = item.buyPrice * buyRate;
                   
                   let sellInMAD = 0;
@@ -113,7 +108,6 @@ export const QuotePDF = ({
     <Document>
       <Page size="A4" style={styles.page}>
         
-        {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.logoText}>Atlas Flow</Text>
@@ -126,7 +120,6 @@ export const QuotePDF = ({
           </View>
         </View>
 
-        {/* Cargo Context */}
         <View style={styles.boxContainer}>
             <View style={styles.box}>
                 <Text style={styles.boxLabel}>Customer</Text>
@@ -139,11 +132,11 @@ export const QuotePDF = ({
             <View style={styles.box}>
                 <Text style={styles.boxLabel}>Shipment Details</Text>
                 <Text style={styles.boxValue}>{mode} | {incoterm}</Text>
-                <Text style={{fontSize: 8, marginTop: 2}}>{weight} kg | {volume} m3</Text>
+                {/* NEW: Display Option Name clearly */}
+                {optionName && <Text style={styles.optionBadge}>{optionName}</Text>}
             </View>
         </View>
 
-        {/* Line Items */}
         <View style={styles.table}>
             <View style={styles.headerRow}>
                 <Text style={styles.colDesc}>Description</Text>
@@ -156,7 +149,6 @@ export const QuotePDF = ({
             {renderSection("Destination Charges", "DESTINATION")}
         </View>
 
-        {/* Totals */}
         <View style={styles.totalsContainer}>
             <View style={styles.totalsBox}>
                 <View style={styles.totalRow}>
@@ -174,7 +166,6 @@ export const QuotePDF = ({
             </View>
         </View>
 
-        {/* Footer */}
         <View style={styles.footer}>
             <Text>Terms and Conditions: Subject to equipment availability. Standard trading conditions apply.</Text>
             <Text>Atlas Flow SARL | Casablanca, Morocco | www.atlasflow.com</Text>

@@ -1,19 +1,18 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase'; 
-import { Quote, QuoteLineItem, TransportMode, Incoterm, Currency, Probability, PackagingType, ActivityItem, ActivityCategory, QuoteApproval } from '@/types/index';
+import { Quote, QuoteLineItem, QuoteOption, TransportMode, Incoterm, Currency, Probability, PackagingType, ActivityItem, ActivityCategory, QuoteApproval } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 
 // --- UPDATED TYPES ---
-// Expert Update: added pkgType and isStackable to the row definition
 interface CargoRow {
   id: string;
   qty: number;
-  pkgType: PackagingType; // granular control
+  pkgType: PackagingType; 
   length: number;
   width: number;
   height: number;
   weight: number;
-  isStackable: boolean; // crucial for load planning
+  isStackable: boolean; 
 }
 
 // TEMPLATE TYPES
@@ -24,7 +23,7 @@ interface QuoteState {
   quotes: Quote[];
   isLoading: boolean;
 
-  // --- EDITOR STATE ---
+  // --- EDITOR STATE (Global RFQ Context) ---
   id: string;
   reference: string;
   customerReference: string;
@@ -36,30 +35,33 @@ interface QuoteState {
   salespersonId: string;
   salespersonName: string;
   
-  // Dates & KPIs
+  // Dates & KPIs (Global)
   validityDate: string;
   cargoReadyDate: string;
   requestedDepartureDate: string;
   estimatedDepartureDate: string;
   estimatedArrivalDate: string;
-  transitTime: number; 
-  freeTime: number;    
+  
   probability: Probability;
   competitorInfo: string;
   
-  // Cargo Specifics
+  // Cargo Specifics (Shared across options usually)
   goodsDescription: string; 
   hsCode: string;
-  // packagingType: PackagingType; // REMOVED: Now handled per row
   isHazmat: boolean;
-  // isStackable: boolean; // REMOVED: Now handled per row
   isReefer: boolean;
   temperature: string;
   cargoValue: number;
   insuranceRequired: boolean;
   internalNotes: string;
 
-  // Route & Equipment
+  cargoRows: CargoRow[];
+  
+  // --- MULTI-OPTION ENGINE (New) ---
+  options: QuoteOption[];
+  activeOptionId: string; // The ID of the currently selected tab
+
+  // --- FACADE PROPERTIES (Mapped to Active Option for UI compatibility) ---
   mode: TransportMode;
   incoterm: Incoterm;
   pol: string;
@@ -68,44 +70,48 @@ interface QuoteState {
   placeOfDelivery: string;
   equipmentType: string;
   containerCount: number;
+  transitTime: number; 
+  freeTime: number;    
 
-  cargoRows: CargoRow[];
-  
-  // Financials
   items: QuoteLineItem[];
   exchangeRates: Record<string, number>;
   marginBuffer: number;
   quoteCurrency: Currency; 
-  
-  // Workflow Engine
-  approval: QuoteApproval;
-  
-  // Activity Feed
-  activities: ActivityItem[];
 
-  // Calculated Fields
+  // Calculated Fields (Active Option)
   totalVolume: number;
   totalWeight: number;
-  totalPackages: number; // New KPI
+  totalPackages: number; 
   chargeableWeight: number;
-  densityRatio: number; // New KPI
+  densityRatio: number; 
   
-  // Internal Reporting (MAD)
+  // Internal Reporting (MAD) (Active Option)
   totalCostMAD: number;
   totalSellMAD: number;
   totalMarginMAD: number;
   totalTaxMAD: number; 
   totalTTCMAD: number; 
   
-  // Client Facing (Target)
+  // Client Facing (Target) (Active Option)
   totalSellTarget: number; 
   totalTaxTarget: number;  
   totalTTCTarget: number;  
+
+  // Workflow Engine
+  approval: QuoteApproval;
+  activities: ActivityItem[];
 
   // --- ACTIONS ---
   setIdentity: (field: string, value: any) => void;
   setStatus: (status: QuoteState['status']) => void;
   
+  // Option Management
+  createOption: (mode: TransportMode) => void;
+  setActiveOption: (optionId: string) => void;
+  removeOption: (optionId: string) => void;
+  duplicateOption: (optionId: string) => void;
+
+  // Active Option Setters
   setMode: (mode: TransportMode) => void; 
   setIncoterm: (incoterm: Incoterm) => void;
   setRouteLocations: (field: 'pol' | 'pod' | 'placeOfLoading' | 'placeOfDelivery', value: string) => void;
@@ -135,6 +141,30 @@ interface QuoteState {
   duplicateQuote: () => void;
 }
 
+// Helper to generate a fresh option
+const createDefaultOption = (quoteId: string, mode: TransportMode = 'SEA_LCL'): QuoteOption => ({
+    id: Math.random().toString(36).substring(7),
+    quoteId,
+    name: mode === 'AIR' ? 'Air Freight Option' : 'Sea Freight Option',
+    isRecommended: true,
+    mode,
+    incoterm: mode === 'AIR' ? 'FCA' : 'FOB',
+    pol: 'CASABLANCA (MAP)',
+    pod: 'SHANGHAI (CN)',
+    placeOfLoading: '',
+    placeOfDelivery: '',
+    equipmentType: '',
+    containerCount: 1,
+    transitTime: 0,
+    freeTime: 0,
+    items: [],
+    baseCurrency: 'MAD',
+    quoteCurrency: 'MAD',
+    exchangeRates: { MAD: 1, USD: 9.80, EUR: 10.75, GBP: 12.50 },
+    marginBuffer: 1.02,
+    totalTTC: 0
+});
+
 const DEFAULT_STATE = {
   id: 'new',
   reference: 'Q-24-DRAFT',
@@ -151,14 +181,11 @@ const DEFAULT_STATE = {
   estimatedDepartureDate: '',
   estimatedArrivalDate: '',
   
-  transitTime: 0,
-  freeTime: 0,
   probability: 'MEDIUM' as Probability,
   competitorInfo: '',
 
   goodsDescription: '',
   hsCode: '',
-  // Default Removed
   isHazmat: false,
   isReefer: false,
   temperature: '',
@@ -166,28 +193,33 @@ const DEFAULT_STATE = {
   insuranceRequired: false,
   internalNotes: '',
   
+  cargoRows: [{ id: '1', qty: 1, pkgType: 'PALLETS' as PackagingType, length: 120, width: 80, height: 100, weight: 500, isStackable: true }],
+  
+  options: [],
+  activeOptionId: '',
+
+  // Facade Defaults (will be overwritten by active option)
   mode: 'SEA_LCL' as TransportMode,
   incoterm: 'FOB' as Incoterm,
-  pol: 'CASABLANCA (MAP)',
-  pod: 'SHANGHAI (CN)',
+  pol: '',
+  pod: '',
   placeOfLoading: '',
   placeOfDelivery: '',
   equipmentType: '',
   containerCount: 1,
+  transitTime: 0,
+  freeTime: 0,
+  items: [],
+  exchangeRates: { MAD: 1, USD: 9.80, EUR: 10.75, GBP: 12.50 },
+  marginBuffer: 1.02,
+  quoteCurrency: 'MAD' as Currency,
 
-  cargoRows: [{ id: '1', qty: 1, pkgType: 'PALLETS' as PackagingType, length: 120, width: 80, height: 100, weight: 500, isStackable: true }],
-  
   totalVolume: 0,
   totalWeight: 0,
   totalPackages: 0,
   chargeableWeight: 0,
   densityRatio: 0,
 
-  items: [],
-  exchangeRates: { MAD: 1, USD: 9.80, EUR: 10.75, GBP: 12.50 }, 
-  marginBuffer: 1.02,
-  quoteCurrency: 'MAD' as Currency,
-  
   approval: { requiresApproval: false, reason: null },
   
   activities: [
@@ -218,6 +250,27 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   isLoading: false,
   ...DEFAULT_STATE,
 
+  // --- INIT HELPER ---
+  // Initializes a quote with one default option if none exist
+  createNewQuote: () => {
+    const newState = { ...DEFAULT_STATE, id: 'new', reference: `Q-24-${Math.floor(Math.random() * 10000)}` };
+    const defaultOption = createDefaultOption(newState.id);
+    
+    set({
+        ...newState,
+        options: [defaultOption],
+        activeOptionId: defaultOption.id,
+        // Hydrate facade
+        mode: defaultOption.mode,
+        incoterm: defaultOption.incoterm,
+        pol: defaultOption.pol,
+        pod: defaultOption.pod,
+        items: defaultOption.items,
+        exchangeRates: defaultOption.exchangeRates
+    });
+    get().updateCargo(newState.cargoRows);
+  },
+
   setIdentity: (field, value) => set((state) => ({ ...state, [field]: value })),
   setStatus: async (status) => {
       set({ status });
@@ -225,69 +278,142 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       await get().saveQuote(); 
   },
 
-  setMode: (mode) => {
+  // --- OPTION MANAGEMENT ---
+  
+  createOption: (mode) => {
+      const { id, options } = get();
+      const newOpt = createDefaultOption(id, mode);
+      
+      // Clone basics from first option if available to save typing
+      if (options.length > 0) {
+          const base = options[0];
+          newOpt.pol = base.pol;
+          newOpt.pod = base.pod;
+          newOpt.incoterm = base.incoterm;
+      }
+
       set({ 
-          mode,
-          incoterm: mode === 'AIR' ? 'FCA' : 'FOB', 
-          equipmentType: '', 
-          containerCount: 1,
-          freeTime: 0, 
-          placeOfLoading: '',
-          placeOfDelivery: ''
+          options: [...options, newOpt],
+          activeOptionId: newOpt.id 
       });
-      get().updateCargo(get().cargoRows);
+      get().setActiveOption(newOpt.id); // Triggers re-calculation and facade update
+      useToast.getState().toast(`New ${mode} option added.`, "success");
+  },
+
+  setActiveOption: (optionId) => {
+      const { options } = get();
+      const opt = options.find(o => o.id === optionId);
+      if (!opt) return;
+
+      set({
+          activeOptionId: optionId,
+          // Hydrate Facade
+          mode: opt.mode,
+          incoterm: opt.incoterm,
+          pol: opt.pol,
+          pod: opt.pod,
+          placeOfLoading: opt.placeOfLoading || '',
+          placeOfDelivery: opt.placeOfDelivery || '',
+          equipmentType: opt.equipmentType || '',
+          containerCount: opt.containerCount || 1,
+          transitTime: opt.transitTime || 0,
+          freeTime: opt.freeTime || 0,
+          items: opt.items,
+          exchangeRates: opt.exchangeRates,
+          marginBuffer: opt.marginBuffer,
+          quoteCurrency: opt.quoteCurrency
+      });
+      // Trigger recalculation of financials for this option
+      get().updateLineItem('trigger', 'description', 'trigger'); 
+  },
+
+  removeOption: (optionId) => {
+      const { options, activeOptionId } = get();
+      if (options.length <= 1) {
+          useToast.getState().toast("Cannot delete the last option.", "error");
+          return;
+      }
+      const newOptions = options.filter(o => o.id !== optionId);
+      set({ options: newOptions });
+      
+      if (activeOptionId === optionId) {
+          get().setActiveOption(newOptions[0].id);
+      }
+  },
+
+  duplicateOption: (optionId) => {
+     const { options } = get();
+     const source = options.find(o => o.id === optionId);
+     if (!source) return;
+
+     const newOpt = { ...source, id: Math.random().toString(36).substring(7), name: `${source.name} (Copy)` };
+     set({ options: [...options, newOpt] });
+     get().setActiveOption(newOpt.id);
+  },
+
+  // --- FACADE SETTERS (Updates the Active Option) ---
+
+  setMode: (mode) => {
+      const { options, activeOptionId } = get();
+      const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, mode } : o);
+      set({ mode, options: updatedOptions });
+      get().updateCargo(get().cargoRows); // Recalculate chargeable weight
   },
 
   setIncoterm: (incoterm) => {
-      const isExw = incoterm === 'EXW';
-      const isDoorDelivery = ['DAP', 'DPU', 'DDP'].includes(incoterm);
-      set({ 
-          incoterm,
-          placeOfLoading: isExw ? get().placeOfLoading : '', 
-          placeOfDelivery: isDoorDelivery ? get().placeOfDelivery : '' 
-      });
+      const { options, activeOptionId } = get();
+      const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, incoterm } : o);
+      set({ incoterm, options: updatedOptions });
   },
 
   setRouteLocations: (field, value) => {
-      set((state) => ({ ...state, [field]: value }));
+      const { options, activeOptionId } = get();
+      const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, [field]: value } : o);
+      set({ [field]: value, options: updatedOptions });
   },
 
   setEquipment: (type, count) => {
-      set({ equipmentType: type, containerCount: count });
+      const { options, activeOptionId } = get();
+      const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, equipmentType: type, containerCount: count } : o);
+      set({ equipmentType: type, containerCount: count, options: updatedOptions });
   },
 
   setExchangeRate: (currency, rate) => {
-    const newRates = { ...get().exchangeRates, [currency]: rate };
-    set({ exchangeRates: newRates });
+    const { options, activeOptionId, exchangeRates } = get();
+    const newRates = { ...exchangeRates, [currency]: rate };
+    
+    const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, exchangeRates: newRates } : o);
+    set({ exchangeRates: newRates, options: updatedOptions });
     get().updateLineItem('trigger', 'description', 'trigger');
   },
 
   setQuoteCurrency: (currency) => {
-    set({ quoteCurrency: currency });
+    const { options, activeOptionId } = get();
+    const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, quoteCurrency: currency } : o);
+    set({ quoteCurrency: currency, options: updatedOptions });
     get().updateLineItem('trigger', 'description', 'trigger');
   },
 
   // --- UPDATED CALCULATION LOGIC ---
   updateCargo: (rows) => {
-    const { mode } = get();
+    const { mode } = get(); // Gets from facade (active option)
     let vol = 0;
     let weight = 0;
     let pkgs = 0;
 
     rows.forEach(r => {
-      // Calculate volume in m3
       const rowVol = (r.length * r.width * r.height * r.qty) / 1000000;
       vol += rowVol;
       weight += (r.weight * r.qty);
       pkgs += r.qty;
     });
     
-    // Expert Chargeable Weight Logic
+    // Expert Chargeable Weight Logic based on Active Option Mode
     let chargeable = 0;
-    if (mode === 'AIR') chargeable = Math.max(weight, (vol * 1000000) / 6000); // IATA Standard 1:6
-    else if (mode === 'SEA_LCL') chargeable = Math.max(weight, vol * 1000); // 1:1 Ratio
-    else if (mode === 'ROAD') chargeable = Math.max(weight, vol * 333); // 1:3 Ratio (common in Morocco/Europe)
-    else chargeable = weight; // FCL (Flat rates usually, but tracking weight is vital)
+    if (mode === 'AIR') chargeable = Math.max(weight, (vol * 1000000) / 6000); 
+    else if (mode === 'SEA_LCL') chargeable = Math.max(weight, vol * 1000); 
+    else if (mode === 'ROAD') chargeable = Math.max(weight, vol * 333); 
+    else chargeable = weight; 
     
     const densityRatio = vol > 0 ? weight / vol : 0;
 
@@ -302,9 +428,12 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   },
 
   addLineItem: (section) => {
+    const { id, activeOptionId, options, items } = get();
+    
     const newItem: QuoteLineItem = {
       id: Math.random().toString(36).substring(7),
-      quoteId: get().id,
+      quoteId: id,
+      optionId: activeOptionId, // NEW: Link to option
       section,
       description: '',
       buyPrice: 0,
@@ -312,22 +441,33 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       markupType: 'PERCENT',
       markupValue: 20, 
       vatRule: 'STD_20',
+      vendorId: '', // NEW
+      vendorName: '' // NEW
     };
-    set(state => ({ items: [...state.items, newItem] }));
+
+    const newItems = [...items, newItem];
+    const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, items: newItems } : o);
+
+    set({ items: newItems, options: updatedOptions });
     get().updateLineItem('trigger', 'description', 'trigger');
   },
 
-  removeLineItem: (id) => {
-    const newItems = get().items.filter(i => i.id !== id);
-    set({ items: newItems });
+  removeLineItem: (itemId) => {
+    const { items, options, activeOptionId } = get();
+    const newItems = items.filter(i => i.id !== itemId);
+    const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, items: newItems } : o);
+    
+    set({ items: newItems, options: updatedOptions });
     get().updateLineItem('trigger', 'description', 'trigger'); 
   },
 
   applyTemplate: (template) => {
+      const { activeOptionId } = get();
       const newItems: QuoteLineItem[] = [];
       const createItem = (section: any, desc: string, price: number, curr: Currency = 'MAD', markup = 20): QuoteLineItem => ({
           id: Math.random().toString(36).substring(7),
           quoteId: get().id,
+          optionId: activeOptionId,
           section,
           description: desc,
           buyPrice: price,
@@ -350,20 +490,25 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           newItems.push(createItem('DESTINATION', 'DTHC (Prepaid)', 120, 'EUR'));
       }
 
-      set({ items: newItems });
+      const { options } = get();
+      const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, items: newItems } : o);
+
+      set({ items: newItems, options: updatedOptions });
       get().updateLineItem('trigger', 'description', 'trigger');
       useToast.getState().toast("Pricing template applied successfully.", "success");
   },
 
   updateLineItem: (id, field, value) => {
-    const { items, exchangeRates, quoteCurrency } = get();
+    const { items, exchangeRates, quoteCurrency, options, activeOptionId } = get();
     
+    // 1. Update the Item List
     const updatedItems = items.map(item => {
       if (item.id !== id && id !== 'trigger') return item;
       if (id !== 'trigger') return { ...item, [field]: value };
       return item;
     });
     
+    // 2. Calculate Financials for this specific Option
     let totalCostMAD = 0;
     let totalSellMAD = 0;
     let totalTaxMAD = 0;
@@ -397,8 +542,16 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     const requiresApproval = marginPercent < 15;
     const approvalReason = requiresApproval ? `Margin ${marginPercent.toFixed(1)}% is below 15% threshold` : null;
 
+    // 3. Sync back to Options Array
+    const updatedOptions = options.map(o => o.id === activeOptionId ? { 
+        ...o, 
+        items: updatedItems,
+        totalTTC: totalSellMAD + totalTaxMAD // simplified storage
+    } : o);
+
     set({ 
         items: updatedItems, 
+        options: updatedOptions,
         totalCostMAD: parseFloat(totalCostMAD.toFixed(2)),
         totalSellMAD: parseFloat(totalSellMAD.toFixed(2)),
         totalMarginMAD: parseFloat(totalMarginMAD.toFixed(2)),
@@ -492,42 +645,30 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           clientName: row.client_name,
           validityDate: new Date(row.validity_date),
           
+          // These top-level fields are legacy/display only now
           pol: row.pol,
           pod: row.pod,
-          mode: row.data.mode || 'SEA_LCL',
-          incoterm: row.data.incoterm || 'FOB',
-          placeOfLoading: row.data.placeOfLoading || '',
-          placeOfDelivery: row.data.placeOfDelivery || '',
-          equipmentType: row.data.equipmentType || '',
-          containerCount: row.data.containerCount || 1,
-          transitTime: row.data.transitTime || 0,
-          freeTime: row.data.freeTime || 0,
-
+          
+          // Data Object Mapping
           clientId: '', 
           salespersonId: row.data.salespersonId || '',
           salespersonName: row.data.salespersonName || 'Admin',
-          baseCurrency: 'MAD',
-          quoteCurrency: row.data.quoteCurrency || 'MAD',
-          exchangeRates: row.data.exchangeRates || DEFAULT_STATE.exchangeRates,
-          marginBuffer: row.data.marginBuffer || 1.02,
-          items: [],
           cargoRows: row.data.cargoRows || [],
           internalNotes: row.data.internalNotes || '',
           activities: row.data.activities || [],
           cargoReadyDate: new Date(row.data.cargoReadyDate || new Date()),
           probability: row.data.probability || 'MEDIUM',
-          // packagingType removed
           isReefer: row.data.isReefer || false,
           temperature: row.data.temperature || '',
           cargoValue: row.data.cargoValue || 0,
           insuranceRequired: row.data.insuranceRequired || false,
           isHazmat: row.data.isHazmat || false,
-          // isStackable removed from global
           goodsDescription: row.data.goodsDescription || '',
           hsCode: row.data.hsCode || '',
           approval: row.data.approval || { requiresApproval: false, reason: null },
-          totalTTC: row.total_ttc || 0,
-          // Missing type mapping for packageType would default to PALLET if not in DB
+          
+          // NEW: Map Options
+          options: row.data.options || [],
           packagingType: 'PALLETS', 
           isStackable: true,
       }));
@@ -542,25 +683,15 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       set({ isLoading: true });
       
       const jsonPayload = {
-          mode: state.mode,
-          incoterm: state.incoterm,
-          pol: state.pol,
-          pod: state.pod,
-          placeOfLoading: state.placeOfLoading,
-          placeOfDelivery: state.placeOfDelivery,
-          equipmentType: state.equipmentType,
-          containerCount: state.containerCount,
-          transitTime: state.transitTime,
-          freeTime: state.freeTime,
+          // New Structure: Arrays of Options
+          options: state.options,
+          activeOptionId: state.activeOptionId,
 
+          // Shared Data
           cargoRows: state.cargoRows,
-          items: state.items,
           goodsDescription: state.goodsDescription,
           internalNotes: state.internalNotes,
           activities: state.activities, 
-          exchangeRates: state.exchangeRates,
-          marginBuffer: state.marginBuffer, 
-          quoteCurrency: state.quoteCurrency,
           salespersonName: state.salespersonName,
           salespersonId: state.salespersonId,
           probability: state.probability,
@@ -583,7 +714,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           reference: state.reference,
           status: state.status,
           client_name: state.clientName,
-          pol: state.pol,
+          pol: state.pol, // Saving current active pol for quick search
           pod: state.pod,
           validity_date: state.validityDate,
           total_ttc: state.totalTTCMAD,
@@ -614,6 +745,39 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       if (error || !data) { set({ isLoading: false }); return; }
 
       const json = data.data; 
+      
+      // Handle Backward Compatibility
+      let loadedOptions = json.options;
+      let activeOptId = json.activeOptionId;
+
+      if (!loadedOptions || loadedOptions.length === 0) {
+        // Migration: If loading old quote, convert legacy fields to Option 1
+        const legacyOption: QuoteOption = {
+            id: 'legacy-opt',
+            quoteId: data.id,
+            name: 'Standard Option',
+            isRecommended: true,
+            mode: json.mode || 'SEA_LCL',
+            incoterm: json.incoterm || 'FOB',
+            pol: json.pol || data.pol,
+            pod: json.pod || data.pod,
+            placeOfLoading: json.placeOfLoading || '',
+            placeOfDelivery: json.placeOfDelivery || '',
+            equipmentType: json.equipmentType || '',
+            containerCount: json.containerCount || 1,
+            transitTime: json.transitTime || 0,
+            freeTime: json.freeTime || 0,
+            items: json.items || [],
+            baseCurrency: 'MAD',
+            quoteCurrency: json.quoteCurrency || 'MAD',
+            exchangeRates: json.exchangeRates || DEFAULT_STATE.exchangeRates,
+            marginBuffer: json.marginBuffer || 1.02,
+            totalTTC: data.total_ttc || 0
+        };
+        loadedOptions = [legacyOption];
+        activeOptId = 'legacy-opt';
+      }
+
       set({
           isLoading: false,
           id: data.id,
@@ -622,25 +786,13 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           clientName: data.client_name,
           validityDate: data.validity_date,
           
-          mode: json.mode || 'SEA_LCL',
-          incoterm: json.incoterm || 'FOB',
-          pol: json.pol || data.pol,
-          pod: json.pod || data.pod,
-          placeOfLoading: json.placeOfLoading || '',
-          placeOfDelivery: json.placeOfDelivery || '',
-          equipmentType: json.equipmentType || '',
-          containerCount: json.containerCount || 1,
-          transitTime: json.transitTime || 0,
-          freeTime: json.freeTime || 0,
+          options: loadedOptions,
+          activeOptionId: activeOptId,
 
           cargoRows: json.cargoRows || [],
-          items: json.items || [],
           goodsDescription: json.goodsDescription || '',
           internalNotes: json.internalNotes || '',
           activities: json.activities || [],
-          exchangeRates: json.exchangeRates || DEFAULT_STATE.exchangeRates,
-          marginBuffer: json.marginBuffer || DEFAULT_STATE.marginBuffer, 
-          quoteCurrency: json.quoteCurrency || 'MAD',
           salespersonName: json.salespersonName || 'Admin',
           probability: json.probability || 'MEDIUM',
           customerReference: json.customerReference || '',
@@ -656,9 +808,10 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           cargoValue: json.cargoValue || 0,
           insuranceRequired: json.insuranceRequired || false,
           approval: json.approval || { requiresApproval: false, reason: null },
-          totalTTCMAD: data.total_ttc || 0,
       });
-      get().updateLineItem('trigger', 'description', 'trigger');
+      
+      // Hydrate Facade with active option
+      get().setActiveOption(activeOptId);
   },
 
   deleteQuote: async (id) => {
@@ -668,8 +821,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       await get().fetchQuotes();
       set({ isLoading: false });
   },
-
-  createNewQuote: () => set({ ...DEFAULT_STATE, id: 'new', reference: `Q-24-${Math.floor(Math.random() * 10000)}` }),
 
   duplicateQuote: () => {
     const current = get();

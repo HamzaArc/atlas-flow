@@ -6,9 +6,15 @@ import { Input } from "@/components/ui/input";
 import { 
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from "@/components/ui/select";
+import { 
+    Popover, PopoverContent, PopoverTrigger 
+} from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, Plus, MapPin, Ship, Anchor, Zap, Wand2 } from "lucide-react";
+import { 
+    Trash2, Plus, MapPin, Ship, Anchor, Zap, Wand2, 
+    Building2, Calendar, AlertTriangle, XCircle
+} from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { QuoteLineItem, Currency } from "@/types/index";
 import {
@@ -19,11 +25,37 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
-// Section Header Component with prepaid/collect logic visual
+// --- MOCK VENDOR DATA ---
+const SUGGESTED_VENDORS = [
+    { id: 'v1', name: 'Maersk Line' },
+    { id: 'v2', name: 'CMA CGM' },
+    { id: 'v3', name: 'MSC' },
+    { id: 'v4', name: 'Hapag-Lloyd' },
+    { id: 'v5', name: 'Air France KLM' },
+    { id: 'v6', name: 'Lufthansa Cargo' },
+    { id: 'v7', name: 'DHL Global Forwarding' },
+];
+
+// Helper: Compact Date Formatter (DD/MM)
+const formatDateCompact = (dateVal?: Date | string) => {
+    if (!dateVal) return "";
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return "";
+    return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+};
+
+// Helper: Safe Date Creator (Fixes Timezone Offsets)
+const createLocalOneDate = (dateString: string) => {
+    if (!dateString) return undefined;
+    const [y, m, d] = dateString.split('-').map(Number);
+    return new Date(y, m - 1, d);
+};
+
 const SectionHeader = ({ title, icon: Icon, onAdd, isCollect }: { title: string, icon: any, onAdd: () => void, isCollect?: boolean }) => (
     <TableRow className="hover:bg-transparent border-b border-slate-100 bg-slate-50/50">
-        <TableCell colSpan={8} className="py-2 pt-3">
+        <TableCell colSpan={9} className="py-2 pt-3">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                     <div className="p-1 rounded-md bg-white border shadow-sm text-slate-600">
@@ -31,7 +63,7 @@ const SectionHeader = ({ title, icon: Icon, onAdd, isCollect }: { title: string,
                     </div>
                     <span className="font-bold text-xs uppercase tracking-wider text-slate-700">{title}</span>
                     {isCollect !== undefined && (
-                        <Badge variant="outline" className={`text-[9px] h-5 px-1.5 ${isCollect ? 'border-orange-200 text-orange-600 bg-orange-50' : 'border-blue-200 text-blue-600 bg-blue-50'}`}>
+                        <Badge variant="outline" className={cn("text-[9px] h-5 px-1.5", isCollect ? 'border-orange-200 text-orange-600 bg-orange-50' : 'border-blue-200 text-blue-600 bg-blue-50')}>
                             {isCollect ? 'COLLECT' : 'PREPAID'}
                         </Badge>
                     )}
@@ -52,18 +84,35 @@ const SectionHeader = ({ title, icon: Icon, onAdd, isCollect }: { title: string,
 export function PricingTable() {
   const { 
       items, addLineItem, updateLineItem, removeLineItem, 
-      exchangeRates, quoteCurrency, status, applyTemplate 
+      exchangeRates, quoteCurrency, status, applyTemplate,
+      validityDate: quoteValidity 
   } = useQuoteStore();
 
   const isReadOnly = status !== 'DRAFT';
 
-  // --- HELPER: Calculation Logic Display ---
+  // --- HELPER: Expiry Logic ---
+  const checkValidityRisk = (itemValidity?: Date) => {
+      if (!itemValidity) return null;
+      const globalDate = new Date(quoteValidity);
+      const lineDate = new Date(itemValidity);
+      
+      // If line expires BEFORE the quote expires -> HIGH RISK
+      if (lineDate < globalDate) {
+          return { level: 'error', msg: 'Expires before Quote' };
+      }
+      // If line expires within 3 days of quote -> WARNING
+      const diffTime = Math.abs(lineDate.getTime() - globalDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+      if (diffDays < 3) {
+          return { level: 'warning', msg: 'Tight Validity' };
+      }
+      return null;
+  };
+
   const calculateSellDisplay = (item: QuoteLineItem) => {
-      // 1. Get Cost in MAD
       const buyRate = exchangeRates[item.buyCurrency] || 1;
       const costInMAD = item.buyPrice * buyRate;
 
-      // 2. Get Sell in MAD
       let sellInMAD = 0;
       if (item.markupType === 'PERCENT') {
           sellInMAD = costInMAD * (1 + (item.markupValue / 100));
@@ -72,7 +121,6 @@ export function PricingTable() {
           sellInMAD = costInMAD + marginInMAD;
       }
 
-      // 3. Convert to Quote Currency (Target)
       const targetRate = exchangeRates[quoteCurrency] || 1;
       const finalSell = quoteCurrency === 'MAD' ? sellInMAD : sellInMAD / targetRate;
 
@@ -84,25 +132,96 @@ export function PricingTable() {
       
       if (sectionItems.length === 0) return (
           <TableRow>
-              <TableCell colSpan={8} className="h-12 text-center text-xs text-slate-300 italic">
+              <TableCell colSpan={9} className="h-12 text-center text-xs text-slate-300 italic">
                   No items in {section.toLowerCase()} section.
               </TableCell>
           </TableRow>
       );
 
-      return sectionItems.map((item) => (
+      return sectionItems.map((item) => {
+        const risk = checkValidityRisk(item.validityDate);
+
+        return (
         <TableRow key={item.id} className="group border-b border-slate-50 hover:bg-blue-50/30 transition-colors">
-            <TableCell className="w-[30%] py-1 pl-4">
+            {/* 1. DESCRIPTION */}
+            <TableCell className="w-[25%] py-1 pl-4">
                 <Input 
                     disabled={isReadOnly}
                     className="h-8 border-transparent bg-transparent hover:bg-white focus:bg-white focus:border-blue-200 focus:ring-2 focus:ring-blue-100 font-medium text-slate-700 text-xs transition-all placeholder:text-slate-300 shadow-none" 
                     value={item.description}
-                    placeholder="Charge Name (e.g. THC)"
+                    placeholder="Item Name"
                     onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
                 />
             </TableCell>
 
-            {/* COSTING SIDE (Private) */}
+            {/* 2. VENDOR & VALIDITY (UPDATED) */}
+            <TableCell className="w-[18%] py-1">
+                <div className="flex items-center gap-1.5">
+                    {/* Vendor Select */}
+                    <div className="relative flex-1 min-w-0">
+                        <Building2 className="absolute left-2 top-2.5 h-3 w-3 text-slate-300" />
+                        <input 
+                            list="vendors"
+                            disabled={isReadOnly}
+                            className="h-8 w-full pl-7 rounded-md border border-transparent bg-transparent hover:bg-white focus:bg-white text-xs text-slate-600 shadow-none placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-100 truncate" 
+                            value={item.vendorName || ''}
+                            placeholder="Vendor..."
+                            onChange={(e) => updateLineItem(item.id, 'vendorName', e.target.value)}
+                        />
+                    </div>
+
+                    {/* POPOVER DATE PICKER (No Invisible Inputs) */}
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <button 
+                                disabled={isReadOnly}
+                                className={cn(
+                                    "h-7 min-w-[3.5rem] px-1.5 flex items-center justify-center gap-1 rounded border text-[9px] font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-100",
+                                    risk?.level === 'error' ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100" :
+                                    risk?.level === 'warning' ? "bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100" :
+                                    item.validityDate ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" :
+                                    "bg-white border-dashed border-slate-300 text-slate-400 hover:border-slate-400 hover:text-slate-600"
+                                )}
+                            >
+                                {item.validityDate ? (
+                                    <span>{formatDateCompact(item.validityDate)}</span>
+                                ) : (
+                                    <Calendar className="h-3.5 w-3.5" />
+                                )}
+                                {risk && <AlertTriangle className="h-3 w-3" />}
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-3" align="end">
+                            <div className="flex flex-col gap-3">
+                                <div className="space-y-1">
+                                    <h4 className="font-medium text-[10px] text-slate-500 uppercase tracking-wider">Rate Validity</h4>
+                                    <p className="text-[10px] text-slate-400">When does this specific price expire?</p>
+                                </div>
+                                
+                                <Input 
+                                    type="date" 
+                                    className="h-8 text-xs bg-slate-50"
+                                    value={item.validityDate ? new Date(item.validityDate).toISOString().split('T')[0] : ''}
+                                    onChange={(e) => updateLineItem(item.id, 'validityDate', createLocalOneDate(e.target.value))}
+                                />
+                                
+                                {item.validityDate && (
+                                    <Button 
+                                        variant="ghost" 
+                                        size="sm" 
+                                        className="h-6 w-full text-[10px] text-red-500 hover:text-red-600 hover:bg-red-50"
+                                        onClick={() => updateLineItem(item.id, 'validityDate', undefined)}
+                                    >
+                                        <XCircle className="h-3 w-3 mr-1.5" /> Clear Validity
+                                    </Button>
+                                )}
+                            </div>
+                        </PopoverContent>
+                    </Popover>
+                </div>
+            </TableCell>
+
+            {/* 3. COST PRICE */}
             <TableCell className="w-[10%] py-1">
                 <Input 
                     disabled={isReadOnly}
@@ -112,13 +231,15 @@ export function PricingTable() {
                     onChange={(e) => updateLineItem(item.id, 'buyPrice', parseFloat(e.target.value) || 0)}
                 />
             </TableCell>
-            <TableCell className="w-[10%] py-1">
+
+            {/* 4. CURRENCY */}
+            <TableCell className="w-[8%] py-1">
                 <Select 
                     disabled={isReadOnly}
                     value={item.buyCurrency} 
                     onValueChange={(v) => updateLineItem(item.id, 'buyCurrency', v as Currency)}
                 >
-                    <SelectTrigger className="h-8 border-transparent bg-slate-50/50 hover:bg-white text-xs font-semibold text-slate-500 shadow-none">
+                    <SelectTrigger className="h-8 border-transparent bg-slate-50/50 hover:bg-white text-xs font-semibold text-slate-500 shadow-none px-2">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -129,13 +250,13 @@ export function PricingTable() {
                 </Select>
             </TableCell>
 
-            {/* MARKUP */}
-            <TableCell className="w-[12%] py-1">
+            {/* 5. MARKUP */}
+            <TableCell className="w-[10%] py-1">
                  <div className="flex items-center gap-1">
                     <Input 
                         disabled={isReadOnly}
                         type="number"
-                        className="h-8 w-16 border-transparent bg-emerald-50/30 hover:bg-emerald-50 focus:bg-white text-right text-emerald-700 font-bold font-mono text-xs shadow-none" 
+                        className="h-8 w-full border-transparent bg-emerald-50/30 hover:bg-emerald-50 focus:bg-white text-right text-emerald-700 font-bold font-mono text-xs shadow-none" 
                         value={item.markupValue}
                         onChange={(e) => updateLineItem(item.id, 'markupValue', parseFloat(e.target.value) || 0)}
                     />
@@ -147,14 +268,14 @@ export function PricingTable() {
                  </div>
             </TableCell>
 
-            {/* SELLING SIDE (Public) */}
-            <TableCell className="w-[15%] py-1">
+            {/* 6. VAT */}
+            <TableCell className="w-[10%] py-1">
                 <Select 
                     disabled={isReadOnly}
                     value={item.vatRule} 
                     onValueChange={(v) => updateLineItem(item.id, 'vatRule', v)}
                 >
-                    <SelectTrigger className="h-8 border-transparent bg-transparent hover:bg-slate-50 text-xs text-slate-500 shadow-none">
+                    <SelectTrigger className="h-8 border-transparent bg-transparent hover:bg-slate-50 text-xs text-slate-500 shadow-none px-1">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -165,7 +286,8 @@ export function PricingTable() {
                 </Select>
             </TableCell>
 
-            <TableCell className="w-[15%] py-1 text-right pr-6">
+            {/* 7. SELL PRICE */}
+            <TableCell className="w-[12%] py-1 text-right pr-4">
                 <div className="flex flex-col items-end">
                     <span className="font-mono font-bold text-slate-800 text-sm">
                         {calculateSellDisplay(item)}
@@ -173,6 +295,7 @@ export function PricingTable() {
                 </div>
             </TableCell>
 
+            {/* 8. ACTIONS */}
             <TableCell className="w-[5%] py-1">
                 {!isReadOnly && (
                     <Button 
@@ -186,11 +309,16 @@ export function PricingTable() {
                 )}
             </TableCell>
         </TableRow>
-      ));
+      )});
   };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-white">
+      {/* Native Datalist for Vendors */}
+      <datalist id="vendors">
+          {SUGGESTED_VENDORS.map(v => <option key={v.id} value={v.name} />)}
+      </datalist>
+
       {/* Template Toolbar */}
       {!isReadOnly && (
           <div className="px-4 py-2 border-b border-dashed border-slate-200 flex justify-end bg-slate-50/30">
@@ -222,30 +350,28 @@ export function PricingTable() {
             <TableHeader className="bg-white sticky top-0 z-10 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
                 <TableRow className="hover:bg-transparent border-none">
                     <TableHead className="h-9 text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-4">Description</TableHead>
+                    <TableHead className="h-9 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vendor / Validity</TableHead>
                     <TableHead className="h-9 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Cost</TableHead>
                     <TableHead className="h-9 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Curr</TableHead>
-                    <TableHead className="h-9 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Margin</TableHead>
+                    <TableHead className="h-9 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Markup</TableHead>
                     <TableHead className="h-9 text-[10px] font-bold text-slate-400 uppercase tracking-widest">VAT</TableHead>
-                    <TableHead className="h-9 text-[10px] font-bold text-blue-600 uppercase tracking-widest text-right pr-6">Sell Price</TableHead>
+                    <TableHead className="h-9 text-[10px] font-bold text-blue-600 uppercase tracking-widest text-right pr-4">Sell Price</TableHead>
                     <TableHead className="h-9 w-10"></TableHead>
                 </TableRow>
             </TableHeader>
             <TableBody className="px-2">
-                {/* ORIGIN SECTION */}
                 <SectionHeader title="Origin Charges" icon={MapPin} onAdd={() => addLineItem('ORIGIN')} isCollect={false} />
                 {renderRows('ORIGIN')}
 
-                {/* FREIGHT SECTION */}
                 <SectionHeader title="Main Freight" icon={Ship} onAdd={() => addLineItem('FREIGHT')} isCollect={false} />
                 {renderRows('FREIGHT')}
 
-                {/* DESTINATION SECTION */}
                 <SectionHeader title="Destination Charges" icon={Anchor} onAdd={() => addLineItem('DESTINATION')} isCollect={true} />
                 {renderRows('DESTINATION')}
                 
                 {items.length === 0 && (
                     <TableRow>
-                        <TableCell colSpan={8} className="h-32 text-center">
+                        <TableCell colSpan={9} className="h-32 text-center">
                             <div className="flex flex-col items-center justify-center text-slate-400 gap-2">
                                 <Zap className="h-8 w-8 opacity-10" />
                                 <span className="text-sm font-medium">Pricing table is empty.</span>

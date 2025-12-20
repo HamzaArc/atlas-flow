@@ -34,14 +34,50 @@ export interface QuoteApproval {
 
 export interface QuoteLineItem {
   id: string;
-  quoteId: string;
+  quoteId: string; // References the Parent Quote (RFQ)
+  optionId?: string; // NEW: References the specific Option (Air vs Sea)
   section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION';
   description: string;
+  
+  // Buying (Cost)
   buyPrice: number;
   buyCurrency: Currency;
+  vendorId?: string; // NEW: Link to CRM Supplier
+  vendorName?: string; // NEW: Snapshot of Supplier Name
+  validityDate?: Date; // NEW: Line-item specific validity (e.g., spot rate expiration)
+
+  // Selling (Revenue)
   markupType: 'PERCENT' | 'FIXED_AMOUNT';
   markupValue: number;
   vatRule: 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | 'DISBURSEMENT';
+}
+
+// NEW: The specific logistics solution (e.g. Option 1: Air Freight)
+export interface QuoteOption {
+    id: string;
+    quoteId: string;
+    name: string; // "Option A: Express Air"
+    isRecommended: boolean;
+    
+    // Route & Mode (Specific to this option)
+    mode: TransportMode;
+    incoterm: Incoterm;
+    pol: string;
+    pod: string;
+    placeOfLoading?: string;
+    placeOfDelivery?: string;
+    transitTime?: number;
+    freeTime?: number;
+    equipmentType?: string;
+    containerCount: number;
+
+    // Financials (Specific to this option)
+    items: QuoteLineItem[];
+    totalTTC: number;
+    baseCurrency: Currency;
+    quoteCurrency: Currency;
+    exchangeRates: Record<string, number>;
+    marginBuffer: number;
 }
 
 export interface Quote {
@@ -49,25 +85,19 @@ export interface Quote {
   reference: string;
   customerReference?: string;
   status: 'DRAFT' | 'PRICING' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'REJECTED';
+  
+  // Client Identity
   clientId: string;
   clientName: string;
   salespersonId: string;
   salespersonName: string;
-  validityDate: Date;
+  
+  // Global Dates
+  validityDate: Date; // The overall validity of the offer
   cargoReadyDate: Date;
   requestedDepartureDate?: Date;
-  estimatedDepartureDate?: Date;
-  estimatedArrivalDate?: Date;
-  transitTime?: number;
-  freeTime?: number;
-  incoterm: Incoterm;
-  mode: TransportMode;
-  pol: string;
-  pod: string;
-  placeOfLoading?: string;
-  placeOfDelivery?: string;
-  equipmentType?: string;
-  containerCount: number;
+  
+  // Cargo (Shared across all options usually)
   cargoRows: any[];
   goodsDescription: string;
   hsCode?: string;
@@ -78,16 +108,18 @@ export interface Quote {
   temperature?: string;
   cargoValue?: number;
   insuranceRequired: boolean;
+  
+  // Workflow
   probability: Probability;
   competitorInfo?: string;
   internalNotes: string;
   activities: ActivityItem[];
-  baseCurrency: Currency; 
-  quoteCurrency: Currency; 
-  exchangeRates: Record<string, number>; 
-  items: QuoteLineItem[];
-  totalTTC: number; 
   approval: QuoteApproval;
+
+  // NEW: Multi-Option Support
+  // We keep legacy fields on the Quote interface temporarily if needed for database mapping,
+  // but logically, the data now lives in 'options'.
+  options: QuoteOption[];
 }
 
 // --- 3. DOSSIER (SHIPMENT) MODELS ---
