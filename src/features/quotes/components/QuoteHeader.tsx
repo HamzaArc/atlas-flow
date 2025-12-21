@@ -10,12 +10,13 @@ import {
 } from "@/components/ui/popover";
 import { 
     Save, ArrowLeft, Copy, Coins, Settings2, 
-    User, Calendar, Hash, Clock, Check, History, GitBranch
+    User, Calendar, Hash, Clock, Check, GitBranch, MessageSquare
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { Currency } from "@/types/index";
 import { cn } from "@/lib/utils";
 import { ApprovalAction } from "./ApprovalAction";
+import { useToast } from "@/components/ui/use-toast"; // Your custom toast hook
 
 interface QuoteHeaderProps {
     onBack: () => void;
@@ -32,10 +33,15 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
   const { 
     reference, status, clientName, validityDate, version,
     salespersonName, cargoReadyDate, customerReference,
-    quoteCurrency, exchangeRates,
-    setIdentity, setStatus, saveQuote, duplicateQuote, createRevision, id,
-    setQuoteCurrency, setExchangeRate
+    quoteCurrency, exchangeRates, paymentTerms,
+    setIdentity, setStatus, saveQuote, duplicateQuote, createRevision,
+    setQuoteCurrency, setExchangeRate,
+    // Access active option for WhatsApp summary
+    mode, incoterm, pol, pod, totalTTCTarget
   } = useQuoteStore();
+
+  // FIX: Destructure toast correctly from your store
+  const { toast } = useToast();
 
   const isReadOnly = status === 'ACCEPTED' || status === 'REJECTED' || status === 'SENT';
   const isLocked = status === 'ACCEPTED' || status === 'REJECTED';
@@ -72,13 +78,38 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
   );
 
   // --- HELPER: Safe Date String ---
-  // Ensures we pass a clean YYYY-MM-DD string to the input, regardless of how it's stored
   const formatDateForInput = (dateVal: string | Date) => {
       if (!dateVal) return '';
-      // If it's already a string (which it should be per Store type), just return the date part
       if (typeof dateVal === 'string') return dateVal.split('T')[0];
-      // Fallback if a Date object slipped in
       return dateVal.toISOString().split('T')[0];
+  };
+
+  // --- ACTION: WHATSAPP DIRECT LINK ---
+  const handleWhatsAppShare = () => {
+    try {
+        const totalDisplay = totalTTCTarget 
+            ? totalTTCTarget.toLocaleString('en-US', { maximumFractionDigits: 2 }) 
+            : '0.00';
+
+        const text = 
+`🚢 *Quote Ref: ${reference}*
+📍 ${pol || 'POL'} ➡️ ${pod || 'POD'}
+📦 ${mode} | ${incoterm}
+💰 *Total: ${totalDisplay} ${quoteCurrency}* (All In)
+⏳ Valid until: ${formatDateForInput(validityDate)}`;
+
+        // Encode and Open WhatsApp Web/App
+        const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+        window.open(url, '_blank');
+        
+        // FIX: Use simple string arguments supported by your useToast store
+        toast("WhatsApp opened in new tab", "success");
+        
+    } catch (error) {
+        console.error("WhatsApp Error:", error);
+        // FIX: Use simple string arguments supported by your useToast store
+        toast("Could not open WhatsApp window", "error");
+    }
   };
 
   const handleRevision = async () => {
@@ -170,6 +201,17 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
            {/* Action Buttons */}
            <div className="flex gap-2 items-center">
                
+               {/* WHATSAPP BUTTON (Direct Link) */}
+               <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleWhatsAppShare} 
+                    className="h-8 text-xs border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+                    title="Open in WhatsApp"
+               >
+                   <MessageSquare className="h-3.5 w-3.5 mr-2" /> WhatsApp
+               </Button>
+
                {/* Always allow copying/templating */}
                <Button variant="outline" size="sm" onClick={duplicateQuote} className="h-8 text-xs border-slate-200 text-slate-600">
                    <Copy className="h-3.5 w-3.5 mr-2" /> Copy
@@ -228,6 +270,28 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                   </Select>
               </div>
 
+               {/* Payment Terms Selector (Safe Guarded) */}
+               <div className="col-span-2 space-y-1">
+                  <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
+                      <Coins className="h-3 w-3" /> Payment Terms
+                  </Label>
+                  <Select 
+                      disabled={isReadOnly}
+                      value={paymentTerms || '30 Days'} 
+                      onValueChange={(v) => setIdentity('paymentTerms', v)}
+                  >
+                      <SelectTrigger className="h-8 bg-white border-slate-200 text-xs shadow-sm">
+                          <SelectValue placeholder="Terms" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          <SelectItem value="Cash">Cash / Immediate</SelectItem>
+                          <SelectItem value="30 Days">30 Days</SelectItem>
+                          <SelectItem value="60 Days">60 Days Check</SelectItem>
+                          <SelectItem value="90 Days">90 Days</SelectItem>
+                      </SelectContent>
+                  </Select>
+              </div>
+
               {/* Customer Reference */}
               <div className="col-span-2 space-y-1">
                   <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
@@ -241,8 +305,6 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                       disabled={isReadOnly}
                   />
               </div>
-
-              <div className="w-px bg-slate-200 h-8 mt-4 mx-2"></div>
 
               {/* TIMELINE SECTION (Valid To / Cargo Ready) */}
               <div className="col-span-2 space-y-1">
@@ -272,24 +334,15 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
               </div>
 
               {/* Sales Owner */}
-              <div className="col-span-2 space-y-1 ml-auto">
+              <div className="col-span-1 space-y-1 ml-auto">
                   <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
-                      <User className="h-3 w-3" /> Sales Rep
+                      <User className="h-3 w-3" /> Rep
                   </Label>
-                  <Select 
-                      disabled={isReadOnly}
-                      value={salespersonName} 
-                      onValueChange={(v) => setIdentity('salespersonName', v)}
-                  >
-                      <SelectTrigger className="h-8 bg-white border-slate-200 text-xs shadow-sm">
-                          <SelectValue placeholder="Assign Salesperson" />
-                      </SelectTrigger>
-                      <SelectContent>
-                          <SelectItem value="Youssef (Sales)">Youssef (Sales)</SelectItem>
-                          <SelectItem value="Fatima (Ops)">Fatima (Ops)</SelectItem>
-                          <SelectItem value="Admin">Admin</SelectItem>
-                      </SelectContent>
-                  </Select>
+                  <div className="h-8 flex items-center justify-end">
+                    <span className="text-xs font-semibold text-slate-600 truncate">
+                        {salespersonName ? salespersonName.split(' ')[0] : 'Admin'}
+                    </span>
+                  </div>
               </div>
           </div>
       </div>

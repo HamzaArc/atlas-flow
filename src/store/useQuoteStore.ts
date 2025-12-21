@@ -34,6 +34,7 @@ interface QuoteState {
   // CRM & Identity
   clientId: string;
   clientName: string;
+  paymentTerms: string; // NEW: Payment Terms
   salespersonId: string;
   salespersonName: string;
   
@@ -153,10 +154,7 @@ const checkStrictExpiry = (items: QuoteLineItem[]): boolean => {
 
     return items.some(item => {
         if (!item.validityDate) return false;
-        // Ensure we are working with a Date object
         const itemDate = new Date(item.validityDate);
-        // Expiry Logic: If item validity is LESS than today (yesterday or older), it is expired.
-        // If it equals today, it is still valid until midnight.
         return itemDate < today;
     });
 };
@@ -180,7 +178,7 @@ const createDefaultOption = (quoteId: string, mode: TransportMode = 'SEA_LCL'): 
     items: [],
     baseCurrency: 'MAD',
     quoteCurrency: 'MAD',
-    exchangeRates: { MAD: 1, USD: 9.80, EUR: 10.75 }, // REMOVED GBP
+    exchangeRates: { MAD: 1, USD: 9.80, EUR: 10.75 }, 
     marginBuffer: 1.02,
     totalTTC: 0
 });
@@ -194,6 +192,7 @@ const DEFAULT_STATE = {
   status: 'DRAFT' as const,
   clientId: '',
   clientName: '',
+  paymentTerms: '30 Days', // Default to common credit term
   salespersonId: 'user-1', 
   salespersonName: 'Youssef (Sales)',
   
@@ -232,7 +231,7 @@ const DEFAULT_STATE = {
   transitTime: 0,
   freeTime: 0,
   items: [],
-  exchangeRates: { MAD: 1, USD: 9.80, EUR: 10.75 }, // REMOVED GBP
+  exchangeRates: { MAD: 1, USD: 9.80, EUR: 10.75 }, 
   marginBuffer: 1.02,
   quoteCurrency: 'MAD' as Currency,
 
@@ -301,7 +300,14 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     get().updateCargo(newState.cargoRows);
   },
 
-  setIdentity: (field, value) => set((state) => ({ ...state, [field]: value })),
+  setIdentity: (field, value) => {
+      set((state) => ({ ...state, [field]: value }));
+      // If payment terms changed, re-evaluate margin guardrails
+      if (field === 'paymentTerms') {
+          get().updateLineItem('trigger', 'description', 'trigger');
+      }
+  },
+  
   setStatus: async (status) => {
       set({ status });
       get().addActivity(`Status manually changed to ${status}`, 'SYSTEM', 'neutral');
@@ -517,7 +523,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   },
 
   updateLineItem: (id, field, value) => {
-    const { items, exchangeRates, quoteCurrency, options, activeOptionId } = get();
+    const { items, exchangeRates, quoteCurrency, options, activeOptionId, paymentTerms } = get();
     
     const updatedItems = items.map(item => {
       if (item.id !== id && id !== 'trigger') return item;
@@ -549,8 +555,16 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     const totalMarginMAD = totalSellMAD - totalCostMAD;
     const marginPercent = totalSellMAD > 0 ? (totalMarginMAD / totalSellMAD) * 100 : 0;
     
-    const requiresApproval = marginPercent < 15;
-    const approvalReason = requiresApproval ? `Margin ${marginPercent.toFixed(1)}% is below 15% threshold` : null;
+    // --- PROFITABILITY GUARDRAIL (Payment Terms Logic) ---
+    // If Cash/Immediate: Allow lower margin (10%).
+    // If Credit (anything not Cash): Require higher margin (20%).
+    const isCashTerm = paymentTerms.toUpperCase().includes('CASH') || paymentTerms.toUpperCase().includes('IMMEDIATE');
+    const marginThreshold = isCashTerm ? 10 : 20;
+
+    const requiresApproval = marginPercent < marginThreshold;
+    const approvalReason = requiresApproval 
+        ? `Margin ${marginPercent.toFixed(1)}% is below ${marginThreshold}% threshold for terms "${paymentTerms}"` 
+        : null;
 
     const updatedOptions = options.map(o => o.id === activeOptionId ? { 
         ...o, 
@@ -570,7 +584,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         totalTaxTarget: parseFloat(totalTaxTarget.toFixed(2)),
         totalTTCTarget: parseFloat((totalSellTarget + totalTaxTarget).toFixed(2)),
         approval: { ...get().approval, requiresApproval, reason: approvalReason },
-        hasExpiredRates: checkStrictExpiry(updatedItems) // RE-CHECK VALIDITY ON UPDATE
+        hasExpiredRates: checkStrictExpiry(updatedItems) 
     });
   },
 
@@ -714,6 +728,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           pol: row.pol,
           pod: row.pod,
           clientId: '', 
+          // Extract Payment Terms
+          paymentTerms: row.data.paymentTerms || '30 Days',
           salespersonId: row.data.salespersonId || '',
           salespersonName: row.data.salespersonName || 'Admin',
           cargoRows: row.data.cargoRows || [],
@@ -769,7 +785,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           insuranceRequired: state.insuranceRequired,
           approval: state.approval,
           version: state.version,
-          masterReference: state.masterReference
+          masterReference: state.masterReference,
+          paymentTerms: state.paymentTerms // SAVE THIS
       };
 
       const dbRow = {
@@ -870,6 +887,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           cargoValue: json.cargoValue || 0,
           insuranceRequired: json.insuranceRequired || false,
           approval: json.approval || { requiresApproval: false, reason: null },
+          // LOAD PAYMENT TERMS
+          paymentTerms: json.paymentTerms || '30 Days'
       });
       get().setActiveOption(activeOptId);
   },

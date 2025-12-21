@@ -91,6 +91,9 @@ export interface Quote {
   // Client Identity
   clientId: string;
   clientName: string;
+  // NEW: Payment Terms for Risk Assessment
+  paymentTerms: string; 
+
   salespersonId: string;
   salespersonName: string;
   
