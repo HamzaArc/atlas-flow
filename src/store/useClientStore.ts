@@ -1,118 +1,18 @@
 import { create } from 'zustand';
 import { useToast } from "@/components/ui/use-toast";
-import { ActivityItem, ActivityCategory } from "@/types/index";
-
-// --- DOMAIN TYPES ---
-export type ClientStatus = 'ACTIVE' | 'PROSPECT' | 'SUSPENDED' | 'BLACKLISTED';
-export type ClientType = 'SHIPPER' | 'CONSIGNEE' | 'FORWARDER' | 'PARTNER';
-
-export interface ClientContact {
-  id: string;
-  name: string;
-  role: string;
-  email: string;
-  phone: string;
-  isPrimary: boolean;
-}
-
-export interface ClientRoute {
-  id: string;
-  origin: string;
-  destination: string;
-  mode: 'SEA' | 'AIR' | 'ROAD';
-  incoterm: 'EXW' | 'FOB' | 'CIF' | 'DAP' | 'DDP' | 'OTHER';
-  equipment: '20DV' | '40HC' | 'LCL' | 'AIR' | 'FTL' | 'LTL';
-  volume: number;
-  volumeUnit: 'TEU' | 'KG' | 'TRK';
-  frequency: 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'ADHOC';
-}
-
-export interface ClientDocument {
-  id: string;
-  name: string;
-  type: 'CONTRACT' | 'KYC' | 'NDA' | 'OTHER';
-  uploadDate: Date;
-  size: string;
-  url: string;
-}
-
-export interface ClientFinancials {
-  paymentTerms: string;
-  vatNumber: string;
-  currency: string;
-  ice?: string;
-  rc?: string;
-  taxId?: string;
-}
-
-// --- NEW INTELLIGENT TYPES ---
-export type SupplierRole = 'SEA_LINE' | 'AIRLINE' | 'HAULIER' | 'FORWARDER';
-export type SupplierTier = 'STRATEGIC' | 'APPROVED' | 'BACKUP' | 'BLOCKED';
-
-export interface ClientSupplier {
-  id: string;
-  name: string;
-  role: SupplierRole;
-  tier: SupplierTier;
-}
-
-export type CommoditySector = 'AUTOMOTIVE' | 'TEXTILE' | 'PERISHABLE' | 'RETAIL' | 'INDUSTRIAL' | 'TECH';
-
-export interface ClientCommodity {
-  id: string;
-  name: string;
-  sector: CommoditySector;
-  isHazmat: boolean;
-}
-
-// OPERATIONAL PROFILE
-export interface OperationalProfile {
-  hsCodes: string[];
-  requiresHazmat: boolean;
-  requiresReefer: boolean;
-  requiresOOG: boolean;
-  customsRegime: 'STANDARD' | 'TEMPORARY' | 'FREE_ZONE';
-  // Removed old string arrays, now handled by root collections
-}
-
-export interface Client {
-  id: string;
-  created_at: string;
-  updated_at?: string;
-  entityName: string;
-  status: ClientStatus;
-  type: ClientType;
-  email: string;
-  phone: string;
-  website?: string;
-  city: string;
-  country: string;
-  address?: string;
-  
-  // Financials
-  creditLimit: number;
-  creditUsed: number;
-  financials: ClientFinancials;
-  
-  // Sales & CRM
-  salesRepId: string;
-  tags: string[];
-  
-  // Sub-Resources
-  contacts: ClientContact[];
-  routes: ClientRoute[];
-  documents: ClientDocument[];
-  
-  // NEW: Rich Collections
-  suppliers: ClientSupplier[];
-  commodities: ClientCommodity[];
-  
-  // Logistics Intelligence
-  operational: OperationalProfile;
-  
-  // Collaboration
-  activities: ActivityItem[];
-}
+import { 
+    Client, 
+    ClientContact, 
+    ClientRoute, 
+    ClientDocument, 
+    ClientFinancials, 
+    ClientSupplier, 
+    ClientCommodity, 
+    OperationalProfile,
+    ActivityItem, 
+    ActivityCategory 
+} from "@/types/index";
+import { ClientService } from '@/services/client.service';
 
 interface ClientState {
   clients: Client[];
@@ -132,9 +32,10 @@ interface ClientState {
   saveClient: (client: Client) => Promise<void>;
   deleteClient: (id: string) => Promise<void>;
 
-  updateActiveField: (field: keyof Client, value: any) => void;
-  updateActiveFinancials: (field: keyof ClientFinancials, value: any) => void;
-  updateOperationalProfile: (field: keyof OperationalProfile, value: any) => void;
+  // STRICT TYPING GENERIC
+  updateActiveField: <K extends keyof Client>(field: K, value: Client[K]) => void;
+  updateActiveFinancials: <K extends keyof ClientFinancials>(field: K, value: ClientFinancials[K]) => void;
+  updateOperationalProfile: <K extends keyof OperationalProfile>(field: K, value: OperationalProfile[K]) => void;
   
   addContact: (contact: ClientContact) => void;
   removeContact: (contactId: string) => void;
@@ -146,7 +47,6 @@ interface ClientState {
   addTag: (tag: string) => void;
   removeTag: (tag: string) => void;
   
-  // NEW ACTIONS
   addSupplier: (supplier: ClientSupplier) => void;
   removeSupplier: (id: string) => void;
   addCommodity: (commodity: ClientCommodity) => void;
@@ -154,91 +54,6 @@ interface ClientState {
   
   addActivity: (text: string, category: ActivityCategory, tone?: 'success' | 'neutral' | 'warning' | 'destructive') => void;
 }
-
-const createEmptyClient = (): Client => ({
-  id: `new-${Date.now()}`,
-  created_at: new Date().toISOString(),
-  entityName: '',
-  status: 'PROSPECT',
-  type: 'SHIPPER',
-  email: '',
-  phone: '',
-  city: '',
-  country: 'Morocco',
-  creditLimit: 0,
-  creditUsed: 0,
-  salesRepId: 'Youssef (Sales)',
-  tags: [],
-  contacts: [],
-  routes: [],
-  documents: [],
-  suppliers: [],
-  commodities: [],
-  operational: {
-      hsCodes: [],
-      requiresHazmat: false,
-      requiresReefer: false,
-      requiresOOG: false,
-      customsRegime: 'STANDARD',
-  },
-  activities: [
-    { 
-        id: 'init', 
-        category: 'SYSTEM', 
-        text: 'Client profile initialized', 
-        meta: 'System', 
-        timestamp: new Date(), 
-        tone: 'neutral' 
-    }
-  ],
-  financials: {
-    paymentTerms: 'PREPAID',
-    vatNumber: '',
-    currency: 'MAD',
-    ice: '',
-    rc: ''
-  }
-});
-
-const MOCK_DB_CLIENTS: Client[] = [
-    {
-        id: 'cli_1', created_at: '2023-01-15T10:00:00Z', entityName: 'TexNord SARL', status: 'ACTIVE', type: 'SHIPPER',
-        email: 'logistics@texnord.ma', phone: '+212 522 00 00 00', website: 'www.texnord.ma',
-        city: 'Casablanca', country: 'Morocco', address: '123 Ind. Zone Sidi Maarouf',
-        creditLimit: 500000, creditUsed: 125000,
-        salesRepId: 'Youssef (Sales)', tags: ['VIP', 'Textile', 'Export'],
-        contacts: [
-            { id: 'ct_1', name: 'Ahmed Bennani', role: 'Logistics Manager', email: 'ahmed@texnord.ma', phone: '+212 600 11 22 33', isPrimary: true }
-        ], 
-        routes: [
-            { id: 'rt_1', origin: 'CASABLANCA', destination: 'LE HAVRE', mode: 'SEA', incoterm: 'CIF', equipment: '40HC', volume: 50, volumeUnit: 'TEU', frequency: 'WEEKLY' },
-            { id: 'rt_2', origin: 'CASABLANCA', destination: 'BARCELONA', mode: 'ROAD', incoterm: 'DAP', equipment: 'FTL', volume: 12, volumeUnit: 'TRK', frequency: 'MONTHLY' }
-        ],
-        documents: [
-            { id: 'doc_1', name: 'Commercial Contract 2024.pdf', type: 'CONTRACT', uploadDate: new Date('2024-01-01'), size: '2.4 MB', url: '#' }
-        ],
-        suppliers: [
-            { id: 'sup_1', name: 'Maersk', role: 'SEA_LINE', tier: 'STRATEGIC' },
-            { id: 'sup_2', name: 'CMA CGM', role: 'SEA_LINE', tier: 'APPROVED' },
-            { id: 'sup_3', name: 'DHL Aviation', role: 'AIRLINE', tier: 'BACKUP' }
-        ],
-        commodities: [
-            { id: 'com_1', name: 'Raw Cotton Fabric', sector: 'TEXTILE', isHazmat: false },
-            { id: 'com_2', name: 'Industrial Dyes', sector: 'INDUSTRIAL', isHazmat: true }
-        ],
-        operational: {
-            hsCodes: ['5208.10', '5209.42'],
-            requiresHazmat: true,
-            requiresReefer: false,
-            requiresOOG: false,
-            customsRegime: 'STANDARD',
-        },
-        activities: [
-            { id: 'a1', category: 'NOTE', text: 'Meeting with CEO next Tuesday regarding Q3 targets.', meta: 'Youssef', timestamp: new Date('2024-01-20'), tone: 'neutral' }
-        ], 
-        financials: { paymentTerms: 'NET_60', vatNumber: '12345', currency: 'MAD', ice: '001528829000054', rc: '34992' }
-    }
-];
 
 export const useClientStore = create<ClientState>((set, get) => ({
   clients: [],
@@ -250,43 +65,49 @@ export const useClientStore = create<ClientState>((set, get) => ({
   setFilterStatus: (status) => set((state) => ({ filters: { ...state.filters, status } })),
 
   fetchClients: async () => {
-    // PRESERVE STATE: Only fetch if empty to avoid wiping new local creations
     if (get().clients.length > 0) return;
 
     set({ isLoading: true });
-    setTimeout(() => {
-        set({ isLoading: false, clients: MOCK_DB_CLIENTS });
-    }, 600);
+    try {
+        const clients = await ClientService.fetchAll();
+        set({ isLoading: false, clients });
+    } catch (e) {
+        set({ isLoading: false });
+        useToast.getState().toast("Failed to load clients", "error");
+    }
   },
 
   createClient: () => {
-    set({ activeClient: createEmptyClient() });
+    set({ activeClient: ClientService.createEmpty() });
   },
 
   loadClient: async (id) => {
     set({ isLoading: true });
     const found = get().clients.find(c => c.id === id);
+    
+    // Simulate selection delay
     setTimeout(() => {
         set({ activeClient: found ? JSON.parse(JSON.stringify(found)) : null, isLoading: false });
-    }, 300);
+    }, 100);
   },
 
   saveClient: async (client) => {
     set({ isLoading: true });
-    setTimeout(() => {
-        const { clients } = get();
-        const existsIndex = clients.findIndex(c => c.id === client.id);
-        let updatedList = [...clients];
+    
+    await ClientService.save(client);
 
-        if (existsIndex >= 0) {
-            updatedList[existsIndex] = { ...client, updated_at: new Date().toISOString() };
-        } else {
-            updatedList = [{ ...client, id: client.id, created_at: new Date().toISOString() }, ...clients];
-        }
+    const { clients } = get();
+    const existsIndex = clients.findIndex(c => c.id === client.id);
+    let updatedList = [...clients];
 
-        set({ clients: updatedList, activeClient: client, isLoading: false });
-        useToast.getState().toast("Client profile saved successfully", "success");
-    }, 600);
+    if (existsIndex >= 0) {
+        updatedList[existsIndex] = { ...client, updated_at: new Date().toISOString() };
+    } else {
+        updatedList = [{ ...client, id: client.id, created_at: new Date().toISOString() }, ...clients];
+    }
+
+    set({ clients: updatedList, activeClient: client, isLoading: false });
+    useToast.getState().toast("Client profile saved successfully", "success");
   },
 
   deleteClient: async (id) => {
@@ -294,6 +115,7 @@ export const useClientStore = create<ClientState>((set, get) => ({
     useToast.getState().toast("Client removed from directory", "info");
   },
 
+  // --- GENERIC UPDATES ---
   updateActiveField: (field, value) => set(state => ({
       activeClient: state.activeClient ? { ...state.activeClient, [field]: value } : null
   })),
@@ -368,7 +190,6 @@ export const useClientStore = create<ClientState>((set, get) => ({
       } : null
   })),
 
-  // --- NEW RICH ACTIONS ---
   addSupplier: (supplier) => set(state => ({
       activeClient: state.activeClient ? {
           ...state.activeClient,

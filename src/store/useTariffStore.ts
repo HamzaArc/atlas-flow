@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import { SupplierRate, RateCharge, RateMode } from '@/types/tariff';
+import { SupplierRate, RateCharge } from '@/types/tariff';
 import { useToast } from "@/components/ui/use-toast";
+import { TariffService } from '@/services/tariff.service';
 
 interface TariffState {
     rates: SupplierRate[];
@@ -12,30 +13,22 @@ interface TariffState {
     createRate: () => void;
     loadRate: (id: string) => void;
     saveRate: () => Promise<void>;
-    deleteRate: (id: string) => void;
+    deleteRate: (id: string) => Promise<void>;
 
-    // Editor Actions
-    updateRateField: (field: keyof SupplierRate, value: any) => void;
+    // Editor Actions - STRICT TYPING
+    updateRateField: <K extends keyof SupplierRate>(field: K, value: SupplierRate[K]) => void;
+    
     addChargeRow: (section: 'freightCharges' | 'originCharges' | 'destCharges') => void;
-    updateChargeRow: (section: 'freightCharges' | 'originCharges' | 'destCharges', id: string, field: keyof RateCharge, value: any) => void;
+    
+    updateChargeRow: <K extends keyof RateCharge>(
+        section: 'freightCharges' | 'originCharges' | 'destCharges', 
+        id: string, 
+        field: K, 
+        value: RateCharge[K]
+    ) => void;
+    
     removeChargeRow: (section: 'freightCharges' | 'originCharges' | 'destCharges', id: string) => void;
 }
-
-// Mock Data for Dashboard
-const MOCK_RATES: SupplierRate[] = [
-    {
-        id: '1', reference: 'CN-MAE-2024-01', carrierId: 'sup_1', carrierName: 'Maersk Line',
-        mode: 'SEA_FCL', type: 'CONTRACT', status: 'ACTIVE',
-        validFrom: new Date('2024-01-01'), validTo: new Date('2024-12-31'),
-        pol: 'SHANGHAI (CN)', pod: 'CASABLANCA (MAP)', transitTime: 28, serviceLoop: 'AEU3',
-        currency: 'USD', incoterm: 'CY/CY', freeTime: 14, paymentTerms: 'PREPAID',
-        freightCharges: [
-            { id: 'c1', chargeHead: 'Ocean Freight', isSurcharge: false, price20DV: 1200, price40DV: 2200, price40HC: 2200, price40RF: 3500, currency: 'USD' },
-            { id: 'c2', chargeHead: 'BAF (Bunker)', isSurcharge: true, price20DV: 150, price40DV: 300, price40HC: 300, price40RF: 450, currency: 'USD' }
-        ],
-        originCharges: [], destCharges: [], remarks: 'Subject to GRI', updatedAt: new Date()
-    }
-];
 
 const EMPTY_RATE: SupplierRate = {
     id: 'new', reference: 'NEW-RATE', carrierId: '', carrierName: '',
@@ -53,8 +46,13 @@ export const useTariffStore = create<TariffState>((set, get) => ({
 
     fetchRates: async () => {
         set({ isLoading: true });
-        // Simulate API
-        setTimeout(() => set({ rates: MOCK_RATES, isLoading: false }), 500);
+        try {
+            const rates = await TariffService.fetchAll();
+            set({ rates, isLoading: false });
+        } catch (error) {
+            set({ isLoading: false });
+            useToast.getState().toast("Failed to load rates", "error");
+        }
     },
 
     createRate: () => {
@@ -68,25 +66,31 @@ export const useTariffStore = create<TariffState>((set, get) => ({
 
     saveRate: async () => {
         set({ isLoading: true });
-        setTimeout(() => {
-            const { rates, activeRate } = get();
-            if (!activeRate) return;
-            
-            const idx = rates.findIndex(r => r.id === activeRate.id);
-            const newRates = [...rates];
-            if (idx >= 0) newRates[idx] = { ...activeRate, status: 'ACTIVE' };
-            else newRates.unshift({ ...activeRate, status: 'ACTIVE' });
+        const { rates, activeRate } = get();
+        if (!activeRate) return;
 
-            set({ rates: newRates, isLoading: false });
-            useToast.getState().toast("Rate sheet saved successfully", "success");
-        }, 600);
+        await TariffService.save(activeRate);
+
+        const idx = rates.findIndex(r => r.id === activeRate.id);
+        const newRates = [...rates];
+        
+        // Optimistic Update
+        const savedRate = { ...activeRate, status: 'ACTIVE' as const, updatedAt: new Date() };
+        
+        if (idx >= 0) newRates[idx] = savedRate;
+        else newRates.unshift(savedRate);
+
+        set({ rates: newRates, activeRate: savedRate, isLoading: false });
+        useToast.getState().toast("Rate sheet saved successfully", "success");
     },
 
-    deleteRate: (id) => {
+    deleteRate: async (id) => {
+        await TariffService.delete(id);
         set(state => ({ rates: state.rates.filter(r => r.id !== id) }));
         useToast.getState().toast("Rate deleted", "info");
     },
 
+    // --- STRICT TYPE SAFETY IMPLEMENTATION ---
     updateRateField: (field, value) => {
         set(state => state.activeRate ? ({ activeRate: { ...state.activeRate, [field]: value } }) : {});
     },
@@ -94,12 +98,7 @@ export const useTariffStore = create<TariffState>((set, get) => ({
     addChargeRow: (section) => {
         set(state => {
             if (!state.activeRate) return {};
-            const newRow: RateCharge = {
-                id: Math.random().toString(36),
-                chargeHead: '', isSurcharge: false,
-                price20DV: 0, price40DV: 0, price40HC: 0, price40RF: 0,
-                currency: state.activeRate.currency
-            };
+            const newRow = TariffService.createChargeRow(state.activeRate.currency);
             return {
                 activeRate: {
                     ...state.activeRate,

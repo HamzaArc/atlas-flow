@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { supabase } from '@/lib/supabase'; 
+import { QuoteService } from '@/services/quote.service'; // NEW SERVICE IMPORT
 import { Quote, QuoteLineItem, QuoteOption, TransportMode, Incoterm, Currency, Probability, PackagingType, ActivityItem, ActivityCategory, QuoteApproval } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 
@@ -18,6 +18,7 @@ interface CargoRow {
 // TEMPLATE TYPES
 type PricingTemplate = 'IMPORT_STD' | 'EXPORT_STD' | 'CROSS_TRADE' | 'CLEARANCE_ONLY';
 
+// Define the shape of the Store
 interface QuoteState {
   // --- DATABASE STATE ---
   quotes: Quote[];
@@ -34,12 +35,12 @@ interface QuoteState {
   // CRM & Identity
   clientId: string;
   clientName: string;
-  paymentTerms: string; // NEW: Payment Terms
+  paymentTerms: string;
   salespersonId: string;
   salespersonName: string;
   
   // Dates & KPIs (Global)
-  validityDate: string;
+  validityDate: string; // Stored as string for Input Date Picker compatibility, converted on save
   cargoReadyDate: string;
   requestedDepartureDate: string;
   estimatedDepartureDate: string;
@@ -48,7 +49,7 @@ interface QuoteState {
   probability: Probability;
   competitorInfo: string;
   
-  // Cargo Specifics (Shared across options usually)
+  // Cargo Specifics
   goodsDescription: string; 
   hsCode: string;
   isHazmat: boolean;
@@ -60,11 +61,11 @@ interface QuoteState {
 
   cargoRows: CargoRow[];
   
-  // --- MULTI-OPTION ENGINE (New) ---
+  // --- MULTI-OPTION ENGINE ---
   options: QuoteOption[];
-  activeOptionId: string; // The ID of the currently selected tab
+  activeOptionId: string;
 
-  // --- FACADE PROPERTIES (Mapped to Active Option for UI compatibility) ---
+  // --- FACADE PROPERTIES (Mapped to Active Option) ---
   mode: TransportMode;
   incoterm: Incoterm;
   pol: string;
@@ -81,21 +82,21 @@ interface QuoteState {
   marginBuffer: number;
   quoteCurrency: Currency; 
 
-  // Calculated Fields (Active Option)
+  // Calculated Fields
   totalVolume: number;
   totalWeight: number;
   totalPackages: number; 
   chargeableWeight: number;
   densityRatio: number; 
   
-  // Internal Reporting (MAD) (Active Option)
+  // Internal Reporting (MAD)
   totalCostMAD: number;
   totalSellMAD: number;
   totalMarginMAD: number;
   totalTaxMAD: number; 
   totalTTCMAD: number; 
   
-  // Client Facing (Target) (Active Option)
+  // Client Facing (Target)
   totalSellTarget: number; 
   totalTaxTarget: number;  
   totalTTCTarget: number;  
@@ -103,7 +104,7 @@ interface QuoteState {
   // Workflow Engine
   approval: QuoteApproval;
   activities: ActivityItem[];
-  hasExpiredRates: boolean; // NEW: Strict Validity Flag
+  hasExpiredRates: boolean;
 
   // --- ACTIONS ---
   setIdentity: (field: string, value: any) => void;
@@ -135,8 +136,8 @@ interface QuoteState {
   attemptSubmission: () => Promise<void>;
   submitForApproval: () => Promise<void>;
   approveQuote: (comment?: string) => Promise<void>;
-  rejectQuote: (reason: string) => Promise<void>; // Manager Rejection (Back to Draft)
-  cancelQuote: (reason: string) => Promise<void>; // Terminal Rejection (Lost/Cancelled)
+  rejectQuote: (reason: string) => Promise<void>;
+  cancelQuote: (reason: string) => Promise<void>;
   createRevision: () => Promise<void>;
 
   fetchQuotes: () => Promise<void>;
@@ -147,10 +148,10 @@ interface QuoteState {
   duplicateQuote: () => void;
 }
 
-// Helper: Check for expired items in a list
+// Helper: Check for expired items
 const checkStrictExpiry = (items: QuoteLineItem[]): boolean => {
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Start of today
+    today.setHours(0, 0, 0, 0); 
 
     return items.some(item => {
         if (!item.validityDate) return false;
@@ -192,7 +193,7 @@ const DEFAULT_STATE = {
   status: 'DRAFT' as const,
   clientId: '',
   clientName: '',
-  paymentTerms: '30 Days', // Default to common credit term
+  paymentTerms: '30 Days',
   salespersonId: 'user-1', 
   salespersonName: 'Youssef (Sales)',
   
@@ -219,7 +220,6 @@ const DEFAULT_STATE = {
   options: [],
   activeOptionId: '',
 
-  // Facade Defaults (will be overwritten by active option)
   mode: 'SEA_LCL' as TransportMode,
   incoterm: 'FOB' as Incoterm,
   pol: '',
@@ -288,7 +288,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         ...newState,
         options: [defaultOption],
         activeOptionId: defaultOption.id,
-        // Hydrate facade
         mode: defaultOption.mode,
         incoterm: defaultOption.incoterm,
         pol: defaultOption.pol,
@@ -302,7 +301,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
   setIdentity: (field, value) => {
       set((state) => ({ ...state, [field]: value }));
-      // If payment terms changed, re-evaluate margin guardrails
       if (field === 'paymentTerms') {
           get().updateLineItem('trigger', 'description', 'trigger');
       }
@@ -404,7 +402,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     const newRates = { ...exchangeRates, [currency]: rate };
     const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, exchangeRates: newRates } : o);
     set({ exchangeRates: newRates, options: updatedOptions });
-    // Trigger recalculation
     get().updateLineItem('trigger', 'description', 'trigger');
   },
   setQuoteCurrency: (currency) => {
@@ -555,9 +552,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     const totalMarginMAD = totalSellMAD - totalCostMAD;
     const marginPercent = totalSellMAD > 0 ? (totalMarginMAD / totalSellMAD) * 100 : 0;
     
-    // --- PROFITABILITY GUARDRAIL (Payment Terms Logic) ---
-    // If Cash/Immediate: Allow lower margin (10%).
-    // If Credit (anything not Cash): Require higher margin (20%).
+    // --- PROFITABILITY GUARDRAIL ---
     const isCashTerm = paymentTerms.toUpperCase().includes('CASH') || paymentTerms.toUpperCase().includes('IMMEDIATE');
     const marginThreshold = isCashTerm ? 10 : 20;
 
@@ -605,7 +600,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   attemptSubmission: async () => {
       const { approval, hasExpiredRates } = get();
 
-      // STRICT VALIDITY GUARDRAIL
       if (hasExpiredRates) {
           useToast.getState().toast("Cannot Send: Active option contains expired rates.", "error");
           return;
@@ -624,7 +618,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   submitForApproval: async () => {
       const { approval, hasExpiredRates } = get();
 
-      // STRICT VALIDITY GUARDRAIL
       if (hasExpiredRates) {
           useToast.getState().toast("Cannot Submit: Active option contains expired rates.", "error");
           return;
@@ -646,7 +639,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   approveQuote: async (comment) => {
       const { approval, hasExpiredRates } = get();
 
-      // STRICT VALIDITY GUARDRAIL
       if (hasExpiredRates) {
         useToast.getState().toast("Cannot Approve: Option contains expired rates.", "error");
         return;
@@ -666,7 +658,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       useToast.getState().toast("Quote Approved & Validated", "success");
   },
 
-  // MANAGER REJECTION (Internal loop)
   rejectQuote: async (reason) => {
       set({ 
           status: 'DRAFT', 
@@ -677,7 +668,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       useToast.getState().toast("Quote Rejected and reset to Draft", "info");
   },
 
-  // TERMINAL REJECTION (Client Rejected or Cancelled)
   cancelQuote: async (reason) => {
       set({ status: 'REJECTED' });
       get().addActivity(`Quote marked as LOST/REJECTED. Reason: ${reason}`, 'SYSTEM', 'destructive');
@@ -712,47 +702,18 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       useToast.getState().toast(`Created Revision v${newVersion}`, "success");
   },
 
-  // --- DATABASE ACTIONS ---
+  // --- DATABASE ACTIONS (Delegated to QuoteService) ---
 
   fetchQuotes: async () => {
       set({ isLoading: true });
-      const { data, error } = await supabase.from('quotes').select('*').order('created_at', { ascending: false });
-      if (error) { set({ isLoading: false }); return; }
-
-      const mappedQuotes: Quote[] = data.map((row: any) => ({
-          id: row.id,
-          reference: row.reference,
-          status: row.status,
-          clientName: row.client_name,
-          validityDate: new Date(row.validity_date),
-          pol: row.pol,
-          pod: row.pod,
-          clientId: '', 
-          // Extract Payment Terms
-          paymentTerms: row.data.paymentTerms || '30 Days',
-          salespersonId: row.data.salespersonId || '',
-          salespersonName: row.data.salespersonName || 'Admin',
-          cargoRows: row.data.cargoRows || [],
-          internalNotes: row.data.internalNotes || '',
-          activities: row.data.activities || [],
-          cargoReadyDate: new Date(row.data.cargoReadyDate || new Date()),
-          probability: row.data.probability || 'MEDIUM',
-          isReefer: row.data.isReefer || false,
-          temperature: row.data.temperature || '',
-          cargoValue: row.data.cargoValue || 0,
-          insuranceRequired: row.data.insuranceRequired || false,
-          isHazmat: row.data.isHazmat || false,
-          goodsDescription: row.data.goodsDescription || '',
-          hsCode: row.data.hsCode || '',
-          approval: row.data.approval || { requiresApproval: false, reason: null },
-          options: row.data.options || [],
-          packagingType: 'PALLETS', 
-          isStackable: true,
-          version: row.data.version || 1,
-          masterReference: row.data.masterReference || row.reference
-      }));
-
-      set({ quotes: mappedQuotes, isLoading: false });
+      try {
+          const quotes = await QuoteService.fetchAll();
+          set({ quotes, isLoading: false });
+      } catch (error) {
+          console.error(error);
+          set({ isLoading: false });
+          useToast.getState().toast("Failed to load quotes.", "error");
+      }
   },
 
   saveQuote: async () => {
@@ -760,58 +721,57 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       if (!state.clientName) { useToast.getState().toast("Missing Client Name.", "error"); return; }
       
       set({ isLoading: true });
-      
-      const jsonPayload = {
-          options: state.options,
-          activeOptionId: state.activeOptionId,
+
+      // Assemble Domain Model from Store State
+      const quotePayload: Partial<Quote> = {
+          id: state.id,
+          reference: state.reference,
+          masterReference: state.masterReference,
+          version: state.version,
+          status: state.status,
+          clientName: state.clientName,
+          clientId: state.clientId,
+          paymentTerms: state.paymentTerms,
+          salespersonId: state.salespersonId,
+          salespersonName: state.salespersonName,
+          
+          validityDate: new Date(state.validityDate), // Conversion
+          cargoReadyDate: new Date(state.cargoReadyDate), // Conversion
+          requestedDepartureDate: state.requestedDepartureDate ? new Date(state.requestedDepartureDate) : undefined,
+          
+          pol: state.pol,
+          pod: state.pod,
+          totalTTC: state.totalTTCMAD,
+
           cargoRows: state.cargoRows,
           goodsDescription: state.goodsDescription,
-          internalNotes: state.internalNotes,
-          activities: state.activities, 
-          salespersonName: state.salespersonName,
-          salespersonId: state.salespersonId,
-          probability: state.probability,
-          cargoReadyDate: state.cargoReadyDate,
-          requestedDepartureDate: state.requestedDepartureDate,
-          estimatedDepartureDate: state.estimatedDepartureDate,
-          estimatedArrivalDate: state.estimatedArrivalDate,
-          competitorInfo: state.competitorInfo,
-          customerReference: state.customerReference,
           hsCode: state.hsCode,
           isHazmat: state.isHazmat,
           isReefer: state.isReefer,
           temperature: state.temperature,
           cargoValue: state.cargoValue,
           insuranceRequired: state.insuranceRequired,
+          
+          probability: state.probability,
+          competitorInfo: state.competitorInfo,
+          internalNotes: state.internalNotes,
+          activities: state.activities,
           approval: state.approval,
-          version: state.version,
-          masterReference: state.masterReference,
-          paymentTerms: state.paymentTerms // SAVE THIS
-      };
-
-      const dbRow = {
-          reference: state.reference,
-          status: state.status,
-          client_name: state.clientName,
-          pol: state.pol, 
-          pod: state.pod,
-          validity_date: state.validityDate,
-          total_ttc: state.totalTTCMAD,
-          data: jsonPayload
+          
+          options: state.options,
+          customerReference: state.customerReference
       };
 
       try {
+          const newId = await QuoteService.save(quotePayload, state.id === 'new');
+          
+          // Post-save actions
           if (state.id === 'new') {
-              const { data, error } = await supabase.from('quotes').insert([dbRow]).select().single();
-              if (error) throw error;
-              set({ id: data.id });
-          } else {
-              const { error } = await supabase.from('quotes').update(dbRow).eq('id', state.id);
-              if (error) throw error;
+              set({ id: newId });
           }
           await get().fetchQuotes();
           set({ isLoading: false });
-      } catch (error: any) {
+      } catch (error) {
           console.error(error);
           set({ isLoading: false });
           useToast.getState().toast("Save failed.", "error");
@@ -820,85 +780,76 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
   loadQuote: async (id) => {
       set({ isLoading: true });
-      const { data, error } = await supabase.from('quotes').select('*').eq('id', id).single();
-      if (error || !data) { set({ isLoading: false }); return; }
+      try {
+          const quote = await QuoteService.getById(id);
+          if (!quote) {
+              set({ isLoading: false });
+              return;
+          }
 
-      const json = data.data; 
-      
-      let loadedOptions = json.options;
-      let activeOptId = json.activeOptionId;
+          // Hydrate Store State from Domain Model
+          // We have to be careful to set the activeOption correctly
+          const activeOpt = quote.options.length > 0 ? quote.options[0] : null;
 
-      if (!loadedOptions || loadedOptions.length === 0) {
-        const legacyOption: QuoteOption = {
-            id: 'legacy-opt',
-            quoteId: data.id,
-            name: 'Standard Option',
-            isRecommended: true,
-            mode: json.mode || 'SEA_LCL',
-            incoterm: json.incoterm || 'FOB',
-            pol: json.pol || data.pol,
-            pod: json.pod || data.pod,
-            placeOfLoading: json.placeOfLoading || '',
-            placeOfDelivery: json.placeOfDelivery || '',
-            equipmentType: json.equipmentType || '',
-            containerCount: json.containerCount || 1,
-            transitTime: json.transitTime || 0,
-            freeTime: json.freeTime || 0,
-            items: json.items || [],
-            baseCurrency: 'MAD',
-            quoteCurrency: json.quoteCurrency || 'MAD',
-            exchangeRates: json.exchangeRates || DEFAULT_STATE.exchangeRates,
-            marginBuffer: json.marginBuffer || 1.02,
-            totalTTC: data.total_ttc || 0
-        };
-        loadedOptions = [legacyOption];
-        activeOptId = 'legacy-opt';
+          set({
+              isLoading: false,
+              id: quote.id,
+              reference: quote.reference,
+              masterReference: quote.masterReference,
+              version: quote.version,
+              status: quote.status,
+              clientName: quote.clientName,
+              paymentTerms: quote.paymentTerms,
+              
+              // Dates to String for Input handling
+              validityDate: quote.validityDate.toISOString().split('T')[0],
+              cargoReadyDate: quote.cargoReadyDate.toISOString().split('T')[0],
+              requestedDepartureDate: quote.requestedDepartureDate ? quote.requestedDepartureDate.toISOString().split('T')[0] : '',
+              
+              // Cargo
+              cargoRows: quote.cargoRows,
+              goodsDescription: quote.goodsDescription,
+              hsCode: quote.hsCode,
+              isHazmat: quote.isHazmat,
+              isReefer: quote.isReefer,
+              temperature: quote.temperature,
+              cargoValue: quote.cargoValue,
+              insuranceRequired: quote.insuranceRequired,
+              
+              // Workflow
+              probability: quote.probability,
+              competitorInfo: quote.competitorInfo,
+              internalNotes: quote.internalNotes,
+              activities: quote.activities,
+              approval: quote.approval,
+              customerReference: quote.customerReference,
+              
+              // Options
+              options: quote.options,
+              activeOptionId: activeOpt ? activeOpt.id : '', // setActiveOption will be called next
+          });
+
+          if (activeOpt) {
+              get().setActiveOption(activeOpt.id);
+          }
+      } catch (error) {
+          console.error(error);
+          set({ isLoading: false });
       }
-
-      set({
-          isLoading: false,
-          id: data.id,
-          reference: data.reference,
-          masterReference: json.masterReference || data.reference, 
-          version: json.version || 1,
-          status: data.status,
-          clientName: data.client_name,
-          validityDate: data.validity_date,
-          
-          options: loadedOptions,
-          activeOptionId: activeOptId,
-
-          cargoRows: json.cargoRows || [],
-          goodsDescription: json.goodsDescription || '',
-          internalNotes: json.internalNotes || '',
-          activities: json.activities || [],
-          salespersonName: json.salespersonName || 'Admin',
-          probability: json.probability || 'MEDIUM',
-          customerReference: json.customerReference || '',
-          cargoReadyDate: json.cargoReadyDate || new Date().toISOString().split('T')[0],
-          requestedDepartureDate: json.requestedDepartureDate || '',
-          estimatedDepartureDate: json.estimatedDepartureDate || '',
-          estimatedArrivalDate: json.estimatedArrivalDate || '',
-          competitorInfo: json.competitorInfo || '',
-          hsCode: json.hsCode || '',
-          isHazmat: json.isHazmat || false,
-          isReefer: json.isReefer || false,
-          temperature: json.temperature || '',
-          cargoValue: json.cargoValue || 0,
-          insuranceRequired: json.insuranceRequired || false,
-          approval: json.approval || { requiresApproval: false, reason: null },
-          // LOAD PAYMENT TERMS
-          paymentTerms: json.paymentTerms || '30 Days'
-      });
-      get().setActiveOption(activeOptId);
   },
 
   deleteQuote: async (id) => {
       if(!confirm("Confirm delete?")) return;
       set({ isLoading: true });
-      await supabase.from('quotes').delete().eq('id', id);
-      await get().fetchQuotes();
-      set({ isLoading: false });
+      try {
+          await QuoteService.delete(id);
+          await get().fetchQuotes();
+          set({ isLoading: false });
+      } catch (error) {
+          console.error(error);
+          set({ isLoading: false });
+          useToast.getState().toast("Delete failed.", "error");
+      }
   },
 
   duplicateQuote: () => {

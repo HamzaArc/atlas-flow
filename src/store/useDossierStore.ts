@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import { Dossier, DossierContainer, ShipmentStatus, ActivityItem, ActivityCategory, DossierAlert } from '@/types/index';
+import { Dossier, DossierContainer, ShipmentStatus, ActivityCategory } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
-import { differenceInDays } from 'date-fns';
+import { DossierService } from '@/services/dossier.service';
 
 interface DossierState {
   // Collection State
@@ -19,13 +19,15 @@ interface DossierState {
   
   // Active Dossier Edits
   setEditing: (isEditing: boolean) => void;
-  updateDossier: (field: keyof Dossier, value: any) => void;
+  
+  // STRICT TYPING GENERIC
+  updateDossier: <K extends keyof Dossier>(field: K, value: Dossier[K]) => void;
   updateParty: (party: 'shipper' | 'consignee' | 'notify', field: string, value: string) => void;
   setStatus: (status: ShipmentStatus) => void;
   
   // Container Actions
   addContainer: () => void;
-  updateContainer: (id: string, field: keyof DossierContainer, value: any) => void;
+  updateContainer: <K extends keyof DossierContainer>(id: string, field: K, value: DossierContainer[K]) => void;
   removeContainer: (id: string) => void;
 
   // Collaboration
@@ -34,31 +36,6 @@ interface DossierState {
   // Internal Logic
   runSmartChecks: () => void;
 }
-
-// --- MOCK DATA GENERATOR ---
-const generateMockDossiers = (): Dossier[] => [
-    {
-        id: '1', ref: 'IMP-24-0056', bookingRef: 'BK-998877', status: 'ON_WATER', clientId: 'cli_1', clientName: 'TexNord SARL',
-        mblNumber: 'MAEU123456789', hblNumber: 'ATL-IMP-0056', carrier: 'Maersk Line',
-        vesselName: 'CMA CGM JULES VERNE', voyageNumber: '0ME2QE1MA',
-        pol: 'SHANGHAI (CN)', pod: 'CASABLANCA (MAP)', etd: new Date('2024-11-20'), eta: new Date('2024-12-05'),
-        incoterm: 'FOB', mode: 'SEA_FCL', freeTimeDays: 7,
-        shipper: { name: 'Shanghai Textiles Ltd' }, consignee: { name: 'TexNord SARL' },
-        containers: [{ id: 'c1', number: 'MSKU9012345', type: '40HC', seal: '123456', weight: 12500, packages: 500, packageType: 'CARTONS', volume: 65, status: 'ON_WATER' }],
-        activities: [], totalRevenue: 45000, totalCost: 32000, currency: 'MAD',
-        alerts: [], nextAction: 'Track Vessel Arrival'
-    },
-    {
-        id: '2', ref: 'EXP-24-0102', bookingRef: 'CMA-112233', status: 'BOOKED', clientId: 'cli_2', clientName: 'AgriSouss',
-        mblNumber: '', hblNumber: 'ATL-EXP-0102', carrier: 'CMA CGM',
-        vesselName: 'TANGER EXPRESS', voyageNumber: 'TGX99',
-        pol: 'AGADIR (MAP)', pod: 'ROTTERDAM (NL)', etd: new Date('2024-12-10'), eta: new Date('2024-12-16'),
-        incoterm: 'CIF', mode: 'SEA_FCL', freeTimeDays: 5,
-        shipper: { name: 'AgriSouss' }, consignee: { name: 'Fresh Market BV' },
-        containers: [], activities: [], totalRevenue: 28000, totalCost: 21000, currency: 'EUR',
-        alerts: [], nextAction: 'Collect Containers'
-    }
-];
 
 const DEFAULT_DOSSIER: Dossier = {
     id: 'new', ref: 'NEW-FILE', bookingRef: '', status: 'BOOKED', clientId: '', clientName: '',
@@ -78,10 +55,13 @@ export const useDossierStore = create<DossierState>((set, get) => ({
 
   fetchDossiers: async () => {
       set({ isLoading: true });
-      setTimeout(() => {
-          set({ dossiers: generateMockDossiers(), isLoading: false });
-          get().runSmartChecks(); // Initial Check
-      }, 500);
+      try {
+          const dossiers = await DossierService.fetchAll();
+          set({ dossiers, isLoading: false });
+          // Run checks on all loaded? No, expensive. Run on active if any.
+      } catch (e) {
+          set({ isLoading: false });
+      }
   },
 
   createDossier: () => {
@@ -157,20 +137,21 @@ export const useDossierStore = create<DossierState>((set, get) => ({
   saveDossier: async () => {
       set({ isLoading: true });
       get().runSmartChecks(); // Final check before save
-      setTimeout(() => {
-          const state = get();
-          let newDossiers = [...state.dossiers];
-          const index = newDossiers.findIndex(d => d.id === state.dossier.id);
-          
-          if (index >= 0) {
-              newDossiers[index] = state.dossier;
-          } else {
-              newDossiers.unshift(state.dossier);
-          }
+      
+      const state = get();
+      await DossierService.save(state.dossier);
+      
+      let newDossiers = [...state.dossiers];
+      const index = newDossiers.findIndex(d => d.id === state.dossier.id);
+      
+      if (index >= 0) {
+          newDossiers[index] = state.dossier;
+      } else {
+          newDossiers.unshift(state.dossier);
+      }
 
-          set({ dossiers: newDossiers, isLoading: false, isEditing: false });
-          useToast.getState().toast("Shipment data saved securely.", "success");
-      }, 800);
+      set({ dossiers: newDossiers, isLoading: false, isEditing: false });
+      useToast.getState().toast("Shipment data saved securely.", "success");
   },
 
   deleteDossier: async (id) => {
@@ -192,70 +173,11 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       }
   })),
 
-  // --- THE EXPERT LOGIC ENGINE ---
+  // --- LOGIC DELEGATED TO SERVICE ---
   runSmartChecks: () => {
-      const d = get().dossier;
-      const alerts: DossierAlert[] = [];
-      let nextAction = "Monitor Status";
-
-      // 1. FINANCIAL CHECK (Margin Integrity)
-      const margin = d.totalRevenue - d.totalCost;
-      const marginPercent = d.totalRevenue > 0 ? (margin / d.totalRevenue) : 0;
+      const { dossier } = get();
+      const { alerts, nextAction } = DossierService.analyzeHealth(dossier);
       
-      if (marginPercent < 0.10 && d.totalRevenue > 0) {
-          alerts.push({
-              id: 'fin-1', type: 'WARNING', 
-              message: `Low Margin Warning (${(marginPercent*100).toFixed(1)}%)`,
-              actionRequired: 'Review costs or request manager approval'
-          });
-      }
-      if (margin < 0) {
-          alerts.push({
-              id: 'fin-2', type: 'BLOCKER',
-              message: 'Negative Profit Detected',
-              actionRequired: 'Hold release until costs verified'
-          });
-      }
-
-      // 2. DOCUMENTATION & COMPLIANCE
-      if (d.status === 'ON_WATER' && !d.mblNumber) {
-          alerts.push({
-              id: 'doc-1', type: 'BLOCKER',
-              message: 'Missing Master Bill of Lading (MBL)',
-              actionRequired: 'Enter MBL to enable tracking'
-          });
-          nextAction = "Update MBL Number";
-      }
-
-      // 3. OPERATIONAL DEADLINES (Demurrage Risk)
-      const today = new Date();
-      if (d.status === 'AT_POD') {
-          const etaDate = new Date(d.eta);
-          const daysAtPort = differenceInDays(today, etaDate);
-          const daysLeft = d.freeTimeDays - daysAtPort;
-
-          if (daysLeft < 0) {
-              alerts.push({
-                  id: 'ops-1', type: 'BLOCKER',
-                  message: `DEMURRAGE ALERT: ${Math.abs(daysLeft)} Days Overdue`,
-                  actionRequired: 'Urgent: Clear Customs & Return Empty'
-              });
-              nextAction = "Expedite Clearance";
-          } else if (daysLeft <= 2) {
-              alerts.push({
-                  id: 'ops-2', type: 'WARNING',
-                  message: `Free Time Critical: ${daysLeft} Days Left`,
-                  actionRequired: 'Prioritize delivery'
-              });
-              nextAction = "Schedule Haulage";
-          }
-      }
-
-      // 4. NEXT BEST ACTION DERIVATION
-      if (d.status === 'BOOKED') nextAction = "Confirm Departure (ETD)";
-      else if (d.status === 'ON_WATER' && alerts.length === 0) nextAction = "Pre-Alert & Invoicing";
-      else if (d.status === 'CUSTOMS') nextAction = "Monitor DUM Status";
-
       set((state) => ({
           dossier: { ...state.dossier, alerts, nextAction }
       }));

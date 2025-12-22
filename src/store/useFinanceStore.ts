@@ -1,37 +1,7 @@
 import { create } from 'zustand';
-import { ChargeLine, Invoice, ChargeType, Currency, VatRule, InvoiceStatus } from '@/types/index';
+import { ChargeLine, Invoice, InvoiceStatus, VatRule } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
-import { pdf } from '@react-pdf/renderer';
-import { InvoicePDF } from '@/features/finance/components/InvoicePDF';
-import React from 'react';
-
-// --- MOCK DATA FOR DEMO ---
-const MOCK_LEDGER: ChargeLine[] = [
-    {
-        id: '1', dossierId: '1', type: 'EXPENSE', code: 'OF', description: 'Ocean Freight (Buy)',
-        vendorName: 'MAERSK', currency: 'USD', amount: 1200, exchangeRate: 10.0, amountLocal: 12000,
-        vatRule: 'EXPORT_0_ART92', vatRate: 0, vatAmount: 0, totalAmount: 12000, 
-        status: 'ACCRUED', isBillable: true, createdAt: new Date()
-    },
-    {
-        id: '2', dossierId: '1', type: 'INCOME', code: 'OF', description: 'Ocean Freight (Sell)',
-        currency: 'USD', amount: 1550, exchangeRate: 10.0, amountLocal: 15500,
-        vatRule: 'EXPORT_0_ART92', vatRate: 0, vatAmount: 0, totalAmount: 15500, 
-        status: 'READY_TO_INVOICE', isBillable: true, createdAt: new Date()
-    },
-    {
-        id: '3', dossierId: '1', type: 'EXPENSE', code: 'THC', description: 'THC Origin',
-        vendorName: 'MARSA MAROC', currency: 'MAD', amount: 1600, exchangeRate: 1.0, amountLocal: 1600,
-        vatRule: 'STD_20', vatRate: 0.2, vatAmount: 320, totalAmount: 1920, 
-        status: 'ACCRUED', isBillable: true, createdAt: new Date()
-    },
-    {
-        id: '4', dossierId: '1', type: 'INCOME', code: 'THC', description: 'THC Origin (Rebill)',
-        currency: 'MAD', amount: 1850, exchangeRate: 1.0, amountLocal: 1850,
-        vatRule: 'STD_20', vatRate: 0.2, vatAmount: 370, totalAmount: 2220, 
-        status: 'READY_TO_INVOICE', isBillable: true, createdAt: new Date()
-    }
-];
+import { FinanceService } from '@/services/finance.service';
 
 interface FinanceState {
     ledger: ChargeLine[];
@@ -45,7 +15,7 @@ interface FinanceState {
         marginPercent: number;
     };
 
-    // Global KPIs (Fixes TS2339)
+    // Global KPIs
     globalRevenue: number;
     globalOverdue: number;
     globalMargin: number;
@@ -58,26 +28,12 @@ interface FinanceState {
     updateCharge: (id: string, updates: Partial<ChargeLine>) => void;
     deleteCharge: (id: string) => void;
     
-    generateInvoice: (dossierId: string, lineIds: string[], type?: 'INVOICE' | 'CREDIT_NOTE') => Promise<void>;
+    // Updated: Returns the Invoice object. PDF Generation must be handled by the UI.
+    generateInvoice: (dossierId: string, lineIds: string[], type?: 'INVOICE' | 'CREDIT_NOTE') => Promise<Invoice | null>;
+    
     createManualInvoice: (invoice: Partial<Invoice>) => Promise<void>;
     updateInvoiceStatus: (id: string, status: InvoiceStatus) => void;
     createCreditNote: (invoiceId: string) => void;
-}
-
-const calculateVat = (amount: number, rule: VatRule): number => {
-    switch(rule) {
-        case 'STD_20': return amount * 0.20;
-        case 'ROAD_14': return amount * 0.14;
-        default: return 0;
-    }
-};
-
-const getVatRate = (rule: VatRule): number => {
-    switch(rule) {
-        case 'STD_20': return 0.20;
-        case 'ROAD_14': return 0.14;
-        default: return 0;
-    }
 }
 
 export const useFinanceStore = create<FinanceState>((set, get) => ({
@@ -88,9 +44,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     globalOverdue: 0,
     globalMargin: 0,
 
-    loadLedger: (dossierId) => {
-        // In real app, fetch from Supabase. Using Mock for now.
-        const dossierLines = MOCK_LEDGER.filter(l => l.dossierId === dossierId || l.dossierId === '1'); 
+    loadLedger: async (dossierId) => {
+        const dossierLines = await FinanceService.fetchLedger(dossierId);
         
         // Recalc Stats
         let rev = 0;
@@ -109,7 +64,6 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     },
 
     fetchGlobalStats: () => {
-        // Mocking aggregation for dashboard
         set({ 
             globalRevenue: 145000, 
             globalOverdue: 12000, 
@@ -118,7 +72,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     },
 
     addCharge: (charge) => {
-        const vatAmt = calculateVat(charge.amount || 0, charge.vatRule as VatRule || 'STD_20');
+        const vatRule = (charge.vatRule as VatRule) || 'STD_20';
+        const vatAmt = FinanceService.calculateVat(charge.amount || 0, vatRule);
         const exRate = charge.exchangeRate || 1;
         
         const newLine: ChargeLine = {
@@ -132,10 +87,10 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
             amount: charge.amount || 0,
             exchangeRate: exRate,
             amountLocal: (charge.amount || 0) * exRate,
-            vatRule: charge.vatRule as VatRule || 'STD_20',
-            vatRate: getVatRate(charge.vatRule as VatRule || 'STD_20'),
+            vatRule: vatRule,
+            vatRate: FinanceService.getVatRate(vatRule),
             vatAmount: vatAmt, 
-            totalAmount: ((charge.amount || 0) + vatAmt) * exRate, // Simple local conversion logic
+            totalAmount: ((charge.amount || 0) + vatAmt) * exRate,
             status: charge.type === 'EXPENSE' ? 'ACCRUED' : 'ESTIMATED',
             isBillable: true,
             createdAt: new Date(),
@@ -155,9 +110,9 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
             // Recalculate logic if amounts changed
             const newAmount = updates.amount !== undefined ? updates.amount : l.amount;
             const newRate = updates.exchangeRate !== undefined ? updates.exchangeRate : l.exchangeRate;
-            const newVatRule = updates.vatRule !== undefined ? updates.vatRule : l.vatRule;
+            const newVatRule = (updates.vatRule as VatRule) !== undefined ? (updates.vatRule as VatRule) : l.vatRule;
             
-            const vatAmt = calculateVat(newAmount, newVatRule as VatRule);
+            const vatAmt = FinanceService.calculateVat(newAmount, newVatRule);
             
             return { 
                 ...l, 
@@ -166,7 +121,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
                 exchangeRate: newRate,
                 amountLocal: newAmount * newRate,
                 vatAmount: vatAmt,
-                totalAmount: (newAmount + vatAmt) * newRate // Simplified
+                totalAmount: (newAmount + vatAmt) * newRate 
             };
         });
         
@@ -182,38 +137,16 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
 
     generateInvoice: async (dossierId, lineIds, type = 'INVOICE') => {
         const selectedLines = get().ledger.filter(l => lineIds.includes(l.id));
-        if (selectedLines.length === 0) return;
+        if (selectedLines.length === 0) return null;
 
         // Validation: Ensure all lines have same currency
         const currency = selectedLines[0].currency;
         if(selectedLines.some(l => l.currency !== currency)) {
             useToast.getState().toast("Error: Cannot invoice mixed currencies.", "error");
-            return;
+            return null;
         }
 
-        const subTotal = selectedLines.reduce((acc, l) => acc + l.amount, 0);
-        const taxTotal = selectedLines.reduce((acc, l) => acc + l.vatAmount, 0);
-        const total = subTotal + taxTotal;
-
-        const newInvoice: Invoice = {
-            id: Math.random().toString(36),
-            reference: `${type === 'CREDIT_NOTE' ? 'CN' : 'INV'}-24-${Math.floor(Math.random() * 1000)}`,
-            type: type as any,
-            dossierId,
-            clientId: 'cli_1',
-            clientName: 'TexNord SARL',
-            date: new Date(),
-            dueDate: new Date(new Date().setDate(new Date().getDate() + 30)),
-            // Correct status assignment from new Type Union
-            status: 'ISSUED',
-            currency: currency,
-            exchangeRate: selectedLines[0].exchangeRate,
-            subTotal,
-            taxTotal,
-            total: type === 'CREDIT_NOTE' ? -total : total,
-            balanceDue: type === 'CREDIT_NOTE' ? 0 : total,
-            lines: selectedLines
-        };
+        const newInvoice = FinanceService.buildInvoiceObject(dossierId, selectedLines, type);
 
         set(state => ({ invoices: [newInvoice, ...state.invoices] }));
         
@@ -223,16 +156,10 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         );
         set({ ledger: newLedger });
         
-        // PDF Gen
-        try {
-            const blob = await pdf(<InvoicePDF invoice={newInvoice} />).toBlob();
-            const url = URL.createObjectURL(blob);
-            window.open(url, '_blank');
-            useToast.getState().toast(`${type === 'CREDIT_NOTE' ? 'Credit Note' : 'Invoice'} generated`, "success");
-        } catch (e) {
-            console.error(e);
-            useToast.getState().toast("Failed to generate PDF", "error");
-        }
+        useToast.getState().toast(`${type === 'CREDIT_NOTE' ? 'Credit Note' : 'Invoice'} generated`, "success");
+        
+        // Return the object so the UI can handle PDF generation
+        return newInvoice;
     },
 
     createManualInvoice: async (data) => {
@@ -269,6 +196,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         const targetInv = get().invoices.find(i => i.id === invoiceId);
         if(!targetInv) return;
 
+        // Uses Service logic implicitly via data cloning, but we can extract if needed.
+        // For now, keeping simple logic here is fine as it's state manipulation.
         const cn: Invoice = {
             ...targetInv,
             id: Math.random().toString(36),

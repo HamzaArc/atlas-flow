@@ -38,15 +38,11 @@ export interface QuoteLineItem {
   optionId?: string;
   section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION';
   description: string;
-  
-  // Buying (Cost)
   buyPrice: number;
   buyCurrency: Currency;
   vendorId?: string; 
   vendorName?: string; 
   validityDate?: Date; 
-
-  // Selling (Revenue)
   markupType: 'PERCENT' | 'FIXED_AMOUNT';
   markupValue: number;
   vatRule: 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | 'DISBURSEMENT';
@@ -57,8 +53,6 @@ export interface QuoteOption {
     quoteId: string;
     name: string;
     isRecommended: boolean;
-    
-    // Route & Mode
     mode: TransportMode;
     incoterm: Incoterm;
     pol: string;
@@ -69,8 +63,6 @@ export interface QuoteOption {
     freeTime?: number;
     equipmentType?: string;
     containerCount: number;
-
-    // Financials
     items: QuoteLineItem[];
     totalTTC: number;
     baseCurrency: Currency;
@@ -84,31 +76,19 @@ export interface Quote {
   reference: string;
   masterReference: string; 
   version: number; 
-  
   customerReference?: string;
   status: 'DRAFT' | 'PRICING' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'REJECTED';
-  
-  // Client Identity
   clientId: string;
   clientName: string;
-  // NEW: Payment Terms for Risk Assessment
   paymentTerms: string; 
-
   salespersonId: string;
   salespersonName: string;
-  
-  // Global Dates
   validityDate: Date; 
   cargoReadyDate: Date;
   requestedDepartureDate?: Date;
-
-  // --- DASHBOARD DISPLAY FIELDS (Mapped from DB columns) ---
-  // These allow the dashboard to show data without parsing the options array
   pol?: string;
   pod?: string;
   totalTTC?: number;
-  
-  // Cargo
   cargoRows: any[];
   goodsDescription: string;
   hsCode?: string;
@@ -119,14 +99,11 @@ export interface Quote {
   temperature?: string;
   cargoValue?: number;
   insuranceRequired: boolean;
-  
-  // Workflow
   probability: Probability;
   competitorInfo?: string;
   internalNotes: string;
   activities: ActivityItem[];
   approval: QuoteApproval;
-
   options: QuoteOption[];
 }
 
@@ -211,17 +188,14 @@ export interface ChargeLine {
     description: string;
     vendorId?: string; 
     vendorName?: string; 
-    
     currency: Currency;
     amount: number; 
     exchangeRate: number; 
     amountLocal: number; 
-    
     vatRule: VatRule;
     vatRate: number; 
     vatAmount: number;
     totalAmount: number;
-
     status: ChargeStatus;
     invoiceRef?: string; 
     invoiceId?: string; 
@@ -248,36 +222,106 @@ export interface Invoice {
     lines: ChargeLine[];
 }
 
+// --- 5. CLIENT INTELLIGENCE MODELS (Moved from Store) ---
+
+export type ClientStatus = 'ACTIVE' | 'PROSPECT' | 'SUSPENDED' | 'BLACKLISTED';
+export type ClientType = 'SHIPPER' | 'CONSIGNEE' | 'FORWARDER' | 'PARTNER';
+export type SupplierRole = 'SEA_LINE' | 'AIRLINE' | 'HAULIER' | 'FORWARDER';
+export type SupplierTier = 'STRATEGIC' | 'APPROVED' | 'BACKUP' | 'BLOCKED';
+export type CommoditySector = 'AUTOMOTIVE' | 'TEXTILE' | 'PERISHABLE' | 'RETAIL' | 'INDUSTRIAL' | 'TECH';
+
+export interface ClientContact {
+  id: string;
+  name: string;
+  role: string;
+  email: string;
+  phone: string;
+  isPrimary: boolean;
+}
+
+export interface ClientRoute {
+  id: string;
+  origin: string;
+  destination: string;
+  mode: 'SEA' | 'AIR' | 'ROAD';
+  incoterm: 'EXW' | 'FOB' | 'CIF' | 'DAP' | 'DDP' | 'OTHER';
+  equipment: '20DV' | '40HC' | 'LCL' | 'AIR' | 'FTL' | 'LTL';
+  volume: number;
+  volumeUnit: 'TEU' | 'KG' | 'TRK';
+  frequency: 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'ADHOC';
+}
+
+export interface ClientDocument {
+  id: string;
+  name: string;
+  type: 'CONTRACT' | 'KYC' | 'NDA' | 'OTHER';
+  uploadDate: Date;
+  size: string;
+  url: string;
+}
+
+export interface ClientFinancials {
+  paymentTerms: string;
+  vatNumber: string;
+  currency: string;
+  ice?: string;
+  rc?: string;
+  taxId?: string;
+}
+
+export interface ClientSupplier {
+  id: string;
+  name: string;
+  role: SupplierRole;
+  tier: SupplierTier;
+}
+
+export interface ClientCommodity {
+  id: string;
+  name: string;
+  sector: CommoditySector;
+  isHazmat: boolean;
+}
+
+export interface OperationalProfile {
+  hsCodes: string[];
+  requiresHazmat: boolean;
+  requiresReefer: boolean;
+  requiresOOG: boolean;
+  customsRegime: 'STANDARD' | 'TEMPORARY' | 'FREE_ZONE';
+}
+
+// --- MAIN CLIENT INTERFACE ---
 export interface Client {
   id: string;
   created_at: string;
   updated_at?: string;
   entityName: string;
-  status: 'ACTIVE' | 'PROSPECT' | 'SUSPENDED' | 'BLACKLISTED';
-  type: 'SHIPPER' | 'CONSIGNEE' | 'FORWARDER' | 'PARTNER';
+  status: ClientStatus;
+  type: ClientType;
   email: string;
   phone: string;
   website?: string;
   city: string;
   country: string;
   address?: string;
+  
   creditLimit: number;
   creditUsed: number;
-  financials: {
-      paymentTerms: string;
-      vatNumber: string;
-      currency: string;
-      ice?: string;
-      rc?: string;
-      taxId?: string;
-  };
+  financials: ClientFinancials;
+  
   salesRepId: string;
   tags: string[];
-  contacts: any[];
-  routes: any[];
-  documents: any[];
-  suppliers: any[];
-  commodities: any[];
-  operational: any;
+  
+  contacts: ClientContact[];
+  routes: ClientRoute[];
+  documents: ClientDocument[];
+  
+  // Rich Collections (Now Strictly Typed)
+  suppliers: ClientSupplier[];
+  commodities: ClientCommodity[];
+  
+  operational: OperationalProfile;
+  
   activities: ActivityItem[];
 }
