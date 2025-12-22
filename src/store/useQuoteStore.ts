@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { QuoteService } from '@/services/quote.service';
-import { Quote, QuoteLineItem, QuoteOption, TransportMode, Incoterm, Currency, Probability, PackagingType, ActivityItem, ActivityCategory, QuoteApproval } from '@/types/index';
+import { Quote, QuoteLineItem, QuoteOption, TransportMode, Incoterm, Currency, Probability, PackagingType, ActivityItem, ActivityCategory, QuoteApproval, ApprovalTrigger } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 
 // --- UPDATED TYPES ---
@@ -151,6 +151,40 @@ interface QuoteState {
   duplicateQuote: () => void;
 }
 
+// --- RISK EVALUATION ENGINE ---
+const evaluateRisk = (paymentTerms: string, totalSellMAD: number, marginPercent: number): ApprovalTrigger[] => {
+    const triggers: ApprovalTrigger[] = [];
+
+    // Rule 1: Margin Rule
+    if (marginPercent < 15) {
+        triggers.push({
+            code: 'MARGIN_LOW',
+            message: `Margin ${marginPercent.toFixed(1)}% is below 15% threshold`,
+            severity: 'HIGH'
+        });
+    }
+
+    // Rule 2: Credit Rule
+    if (paymentTerms.includes('60') || paymentTerms.includes('90')) {
+        triggers.push({
+            code: 'CREDIT_EXTENDED',
+            message: `Extended Payment Terms: ${paymentTerms}`,
+            severity: 'MEDIUM'
+        });
+    }
+
+    // Rule 3: Volume Rule
+    if (totalSellMAD > 100000) {
+        triggers.push({
+            code: 'HIGH_VALUE',
+            message: `High Value Exposure (>100k MAD)`,
+            severity: 'HIGH'
+        });
+    }
+
+    return triggers;
+};
+
 const checkStrictExpiry = (items: QuoteLineItem[]): boolean => {
     const today = new Date();
     today.setHours(0, 0, 0, 0); 
@@ -243,7 +277,7 @@ const DEFAULT_STATE = {
   chargeableWeight: 0,
   densityRatio: 0,
 
-  approval: { requiresApproval: false, reason: null },
+  approval: { requiresApproval: false, reason: null, triggers: [] },
   hasExpiredRates: false,
   
   activities: [] as ActivityItem[],
@@ -572,13 +606,13 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     const totalMarginMAD = totalSellMAD - totalCostMAD;
     const marginPercent = totalSellMAD > 0 ? (totalMarginMAD / totalSellMAD) * 100 : 0;
     
-    // --- PROFITABILITY GUARDRAIL ---
-    const isCashTerm = paymentTerms.toUpperCase().includes('CASH') || paymentTerms.toUpperCase().includes('IMMEDIATE');
-    const marginThreshold = isCashTerm ? 10 : 20;
-
-    const requiresApproval = marginPercent < marginThreshold;
+    // --- UPDATED RISK ANALYSIS ENGINE ---
+    const riskTriggers = evaluateRisk(paymentTerms, totalSellMAD, marginPercent);
+    const requiresApproval = riskTriggers.length > 0;
+    
+    // Aggregate reasons for legacy summary field
     const approvalReason = requiresApproval 
-        ? `Margin ${marginPercent.toFixed(1)}% is below ${marginThreshold}% threshold for terms "${paymentTerms}"` 
+        ? riskTriggers.map(t => t.message).join(' | ') 
         : null;
 
     const updatedOptions = options.map(o => o.id === activeOptionId ? { 
@@ -598,7 +632,12 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         totalSellTarget: parseFloat(totalSellTarget.toFixed(2)),
         totalTaxTarget: parseFloat(totalTaxTarget.toFixed(2)),
         totalTTCTarget: parseFloat((totalSellTarget + totalTaxTarget).toFixed(2)),
-        approval: { ...get().approval, requiresApproval, reason: approvalReason },
+        approval: { 
+            ...get().approval, 
+            requiresApproval, 
+            reason: approvalReason, 
+            triggers: riskTriggers 
+        },
         hasExpiredRates: checkStrictExpiry(updatedItems) 
     });
   },
@@ -651,7 +690,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               requestedAt: new Date()
           }
       });
-      get().addActivity(`Requested approval: ${approval.reason}`, 'APPROVAL', 'warning');
+      get().addActivity(`Requested approval: ${approval.triggers.map(t => t.message).join(', ') || approval.reason}`, 'APPROVAL', 'warning');
       await get().saveQuote(); 
       useToast.getState().toast("Submitted for Manager Approval", "success");
   },
@@ -705,7 +744,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           id: 'new', 
           version: newVersion,
           status: 'DRAFT',
-          approval: { requiresApproval: false, reason: null },
+          approval: { requiresApproval: false, reason: null, triggers: [] },
           activities: [
               {
                   id: Math.random().toString(),
@@ -807,6 +846,19 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
           const activeOpt = quote.options.length > 0 ? quote.options[0] : null;
 
+          // Legacy Data Migration: If triggers are missing but reason exists, mock a trigger
+          let migratedApproval = quote.approval;
+          if (quote.approval && quote.approval.requiresApproval && (!quote.approval.triggers || quote.approval.triggers.length === 0)) {
+              migratedApproval = {
+                  ...quote.approval,
+                  triggers: quote.approval.reason ? [{
+                      code: 'LEGACY_RISK',
+                      message: quote.approval.reason,
+                      severity: 'MEDIUM'
+                  }] : []
+              };
+          }
+
           set({
               isLoading: false,
               id: quote.id,
@@ -837,7 +889,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               competitorInfo: quote.competitorInfo,
               internalNotes: quote.internalNotes,
               activities: quote.activities,
-              approval: quote.approval,
+              approval: migratedApproval,
               customerReference: quote.customerReference,
               
               options: quote.options,

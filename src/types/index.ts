@@ -22,9 +22,17 @@ export interface ActivityItem {
   timestamp: Date;
 }
 
+// NEW: Granular Risk Trigger
+export interface ApprovalTrigger {
+    code: string;
+    message: string;
+    severity: 'HIGH' | 'MEDIUM';
+}
+
 export interface QuoteApproval {
     requiresApproval: boolean;
-    reason: string | null;
+    triggers: ApprovalTrigger[]; // New Multi-Factor Array
+    reason: string | null;       // Deprecated (kept for backward compatibility/summary)
     requestedBy?: string;
     requestedAt?: Date;
     approvedBy?: string;

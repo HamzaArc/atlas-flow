@@ -5,7 +5,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { 
-    AlertTriangle, Send, CheckCircle2, XCircle, ShieldAlert, Ban, Trash2, Lock 
+    AlertTriangle, Send, CheckCircle2, XCircle, ShieldAlert, Ban, Trash2, Lock, AlertCircle 
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 export function ApprovalAction() {
   const { 
@@ -117,9 +122,41 @@ export function ApprovalAction() {
           <>
             <div className="flex items-center gap-2">
                 {approval.requiresApproval ? (
-                    <div className="flex items-center gap-2 px-2 py-1 bg-amber-50 border border-amber-200 rounded-md mr-1">
-                        <ShieldAlert className="h-3.5 w-3.5 text-amber-600" />
-                        <span className="text-[10px] font-bold text-amber-700 uppercase">Approval Needed</span>
+                    <>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <div className="flex items-center gap-2 px-2 py-1 bg-amber-50 border border-amber-200 rounded-md mr-1 cursor-pointer hover:bg-amber-100 transition-colors">
+                                    <ShieldAlert className="h-3.5 w-3.5 text-amber-600" />
+                                    <span className="text-[10px] font-bold text-amber-700 uppercase">Approval Needed</span>
+                                    <div className="bg-amber-200 text-amber-800 text-[9px] px-1.5 rounded-full">
+                                        {approval.triggers.length || 1}
+                                    </div>
+                                </div>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-80 p-3" align="end">
+                                <div className="space-y-2">
+                                    <h4 className="font-semibold text-sm flex items-center gap-2 text-amber-700">
+                                        <AlertCircle className="h-4 w-4" /> Risk Factors Detected
+                                    </h4>
+                                    <div className="grid gap-1">
+                                        {approval.triggers.length > 0 ? (
+                                            approval.triggers.map((trigger, idx) => (
+                                                <div key={idx} className="flex items-start gap-2 text-xs bg-amber-50 p-2 rounded border border-amber-100">
+                                                    <span className={`mt-0.5 h-1.5 w-1.5 rounded-full ${trigger.severity === 'HIGH' ? 'bg-red-500' : 'bg-orange-400'}`} />
+                                                    <span className="text-slate-700">{trigger.message}</span>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="text-xs text-slate-500">{approval.reason || "Manual approval required."}</div>
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 border-t pt-2 mt-2">
+                                        Manager approval is required before sending to client.
+                                    </p>
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+
                         <Button 
                             size="sm" 
                             onClick={submitForApproval}
@@ -127,7 +164,7 @@ export function ApprovalAction() {
                         >
                             Submit
                         </Button>
-                    </div>
+                    </>
                 ) : (
                     <Button 
                         size="sm" 
@@ -161,9 +198,30 @@ export function ApprovalAction() {
           <>
             <div className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1 duration-300">
                 <div className="mr-2 flex flex-col items-end">
-                    <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 mb-0.5">
-                        Pending Review
-                    </Badge>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 mb-0.5 cursor-pointer hover:bg-purple-100">
+                                Pending Review ({approval.triggers.length})
+                            </Badge>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80" align="end">
+                            <div className="space-y-2">
+                                <h4 className="font-semibold text-sm border-b pb-1 mb-2">Triggers for Approval</h4>
+                                {approval.triggers.length > 0 ? (
+                                    approval.triggers.map((trigger, idx) => (
+                                        <div key={idx} className="flex items-center gap-2 text-xs">
+                                            <Badge variant="outline" className={`${trigger.severity === 'HIGH' ? 'border-red-200 bg-red-50 text-red-700' : 'border-orange-200 bg-orange-50 text-orange-700'}`}>
+                                                {trigger.severity}
+                                            </Badge>
+                                            <span className="text-slate-600">{trigger.message}</span>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <span className="text-xs text-slate-500">{approval.reason}</span>
+                                )}
+                            </div>
+                        </PopoverContent>
+                    </Popover>
                     <span className="text-[9px] text-slate-400">Requested by {approval.requestedBy?.split(' ')[0]}</span>
                 </div>
 
