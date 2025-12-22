@@ -7,35 +7,29 @@ export type ContainerType = '20DV' | '40DV' | '40HC' | '40RF';
 // NEW: Granular Charge Logic
 export type ChargeBasis = 'CONTAINER' | 'WEIGHT' | 'VOLUME' | 'TAXABLE_WEIGHT' | 'FLAT' | 'PERCENTAGE';
 export type ChargeSection = 'FREIGHT' | 'ORIGIN' | 'DESTINATION';
+export type VatRule = 'STD_20' | 'ROAD_14' | 'EXPORT_0' | 'EXEMPT';
 
 export interface RateCharge {
     id: string;
-    chargeHead: string; // e.g., "Ocean Freight", "BAF", "ISPS"
+    chargeHead: string; 
     isSurcharge: boolean;
-    
-    // Logic Configuration
     basis: ChargeBasis;
-    tierMin?: number; // For tiered rates (e.g. > 100kg)
-    tierMax?: number; 
-    
-    // Pricing columns
     price20DV: number;
     price40DV: number;
     price40HC: number;
     price40RF: number;
-    
-    // Non-Container Pricing
-    unitPrice: number; // For Per KG, Per CBM, or Flat
-    percentage: number; // For ad-valorem
-
+    unitPrice: number;
+    minPrice: number;
+    percentage: number;
     currency: string;
+    vatRule: VatRule;
 }
 
 export interface SupplierRate {
     id: string;
-    reference: string; // e.g. "NAC-TEX-24"
+    reference: string; 
     carrierId: string;
-    carrierName: string; // Denormalized for UI speed
+    carrierName: string;
     mode: RateMode;
     type: RateType;
     status: 'DRAFT' | 'ACTIVE' | 'EXPIRED' | 'ARCHIVED';
@@ -45,15 +39,15 @@ export interface SupplierRate {
     validTo: Date;
     
     // Route Logic
-    pol: string; // Port of Loading
-    pod: string; // Port of Discharge
-    transitTime: number; // Days
-    serviceLoop?: string; // e.g. "AEU3"
+    pol: string; 
+    pod: string; 
+    transitTime: number; 
+    serviceLoop?: string; 
     
     // Commercials
     currency: string;
-    incoterm: string; // Scope (e.g. CY/CY)
-    freeTime: number; // Detention days
+    incoterm: string; // Updated: Now a first-class citizen
+    freeTime: number; 
     paymentTerms: 'PREPAID' | 'COLLECT';
     
     // Matrix
@@ -61,7 +55,6 @@ export interface SupplierRate {
     originCharges: RateCharge[];
     destCharges: RateCharge[];
     
-    // Meta
     remarks: string;
     updatedAt: Date;
 }

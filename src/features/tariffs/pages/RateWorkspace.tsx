@@ -4,11 +4,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Save, Ship, Calendar, Anchor, Clock, DollarSign, Calculator, Plane, Truck, Box } from "lucide-react";
+import { ArrowLeft, Save, Ship, Calendar, Anchor, Clock, Calculator, Plane, Truck, MapPin, Handshake } from "lucide-react";
 import { useTariffStore } from "@/store/useTariffStore";
 import { RateGrid } from "../components/RateGrid";
-import { RouteSelector } from "@/features/quotes/components/RouteSelector"; 
+import { SmartPortSelector } from "@/features/quotes/components/RouteSelector"; 
 import { cn } from "@/lib/utils";
+
+const INCOTERMS = [
+    "CY/CY", "CY/FO", "FO/CY", "FO/FO", // Port-to-Port variants
+    "EXW", "FCA", "FOB", "DAP", "DDP" // Door variants
+];
 
 interface RateWorkspaceProps {
     onBack: () => void;
@@ -67,7 +72,7 @@ export default function RateWorkspace({ onBack }: RateWorkspaceProps) {
             {/* Split Layout */}
             <div className="flex-1 overflow-hidden flex">
                 
-                {/* LEFT: Context & Configuration (WIDENED to 450px) */}
+                {/* LEFT: Context & Configuration */}
                 <div className="w-[420px] border-r border-slate-200 bg-white flex flex-col overflow-y-auto shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-10">
                     <div className="p-6 space-y-8">
                         
@@ -101,14 +106,48 @@ export default function RateWorkspace({ onBack }: RateWorkspaceProps) {
                             </div>
                         </div>
 
-                        {/* 2. Route Definition */}
-                        <div className="space-y-3">
-                            <Label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Route Logic</Label>
-                            <div className="h-64 border rounded-xl overflow-hidden shadow-sm ring-1 ring-slate-100 relative">
-                                {/* Assuming RouteSelector handles internal state updates or binds to Store props if updated */}
-                                <RouteSelector /> 
-                                <div className="absolute top-2 right-2 bg-white/90 px-2 py-1 rounded text-[10px] font-mono border text-slate-500">
-                                    {activeRate.pol} ➔ {activeRate.pod}
+                        {/* 2. Route Definition & Scope (RESTORED INCOTERM) */}
+                        <div className="space-y-4 pt-2 border-t border-slate-200 border-dashed">
+                            <div className="flex items-center justify-between">
+                                <Label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Route Logic</Label>
+                            </div>
+                            
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 gap-4">
+                                    <SmartPortSelector 
+                                        label="Port of Loading"
+                                        value={activeRate.pol}
+                                        onChange={(val) => updateRateField('pol', val)}
+                                        icon={MapPin}
+                                    />
+                                    <div className="flex justify-center -my-2 z-10">
+                                        <div className="bg-slate-100 p-1 rounded-full border border-slate-200">
+                                            <Anchor className="h-3 w-3 text-slate-400" />
+                                        </div>
+                                    </div>
+                                    <SmartPortSelector 
+                                        label="Port of Discharge"
+                                        value={activeRate.pod}
+                                        onChange={(val) => updateRateField('pod', val)}
+                                        icon={Anchor}
+                                    />
+                                </div>
+
+                                {/* CRITICAL RESTORATION: Service Scope / Incoterm */}
+                                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                                    <div className="flex items-center gap-2 text-slate-700">
+                                        <Handshake className="h-3.5 w-3.5" />
+                                        <span className="text-xs font-bold uppercase">Service Scope (Incoterm)</span>
+                                    </div>
+                                    <Select value={activeRate.incoterm} onValueChange={(v) => updateRateField('incoterm', v)}>
+                                        <SelectTrigger className="h-8 bg-white border-slate-200 text-xs font-medium"><SelectValue placeholder="Select Scope" /></SelectTrigger>
+                                        <SelectContent>
+                                            {INCOTERMS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-[10px] text-slate-400">
+                                        Defines the responsibility boundaries (e.g. CY/CY does not include trucking).
+                                    </p>
                                 </div>
                             </div>
                         </div>

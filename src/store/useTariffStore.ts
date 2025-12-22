@@ -27,7 +27,7 @@ interface TariffState {
     removeChargeRow: (section: 'freightCharges' | 'originCharges' | 'destCharges', id: string) => void;
 
     // Smart Pricing Selector
-    findBestMatch: (params: { pol: string; pod: string; mode: string; date: Date }) => SupplierRate | undefined;
+    findBestMatch: (params: { pol: string; pod: string; mode: string; incoterm: string; date: Date }) => SupplierRate | undefined;
 }
 
 const EMPTY_RATE: SupplierRate = {
@@ -97,7 +97,6 @@ export const useTariffStore = create<TariffState>((set, get) => ({
     addChargeRow: (section) => {
         set(state => {
             if (!state.activeRate) return {};
-            // Updated to default to CONTAINER basis for FCL, WEIGHT for Air
             const mode = state.activeRate.mode;
             const defaultBasis = mode === 'AIR' ? 'TAXABLE_WEIGHT' : 'CONTAINER';
             
@@ -107,8 +106,9 @@ export const useTariffStore = create<TariffState>((set, get) => ({
                 isSurcharge: false,
                 basis: defaultBasis,
                 price20DV: 0, price40DV: 0, price40HC: 0, price40RF: 0,
-                unitPrice: 0, percentage: 0,
-                currency: state.activeRate.currency
+                unitPrice: 0, minPrice: 0, percentage: 0,
+                currency: state.activeRate.currency,
+                vatRule: 'STD_20'
             };
             
             return {
@@ -146,15 +146,16 @@ export const useTariffStore = create<TariffState>((set, get) => ({
         });
     },
 
-    // --- INTELLIGENCE LAYER ---
-    findBestMatch: ({ pol, pod, mode, date }) => {
+    // --- INTELLIGENCE LAYER (UPDATED) ---
+    findBestMatch: ({ pol, pod, mode, incoterm, date }) => {
         const { rates } = get();
-        // 1. Filter by Route & Mode & Status
+        
+        // 1. Strict Match: Route + Mode + Status
         const candidates = rates.filter(r => 
             r.status === 'ACTIVE' &&
             r.mode === mode &&
-            r.pol.toLowerCase() === pol.toLowerCase() &&
-            r.pod.toLowerCase() === pod.toLowerCase()
+            r.pol === pol && 
+            r.pod === pod
         );
 
         if (candidates.length === 0) return undefined;
@@ -166,8 +167,14 @@ export const useTariffStore = create<TariffState>((set, get) => ({
             return date >= from && date <= to;
         });
 
-        // 3. Selection Strategy: Prioritize Contracts over Spot, then newest
-        return validCandidates.sort((a, b) => {
+        // 3. Filter by Incoterm (Service Scope)
+        const scopeMatches = validCandidates.filter(r => 
+            r.incoterm === incoterm || 
+            (incoterm === 'CY/CY' && !r.incoterm) // Fallback for legacy data
+        );
+
+        // 4. Selection Strategy: Prioritize Contracts over Spot, then newest
+        return scopeMatches.sort((a, b) => {
             if (a.type !== b.type) return a.type === 'CONTRACT' ? -1 : 1;
             return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
         })[0];

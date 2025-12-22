@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { 
     Search, Filter, Plus, Calendar, 
     ArrowRight, MoreHorizontal, TrendingUp, AlertCircle,
-    Activity, LineChart, Layers
+    Activity, LineChart, Layers, Globe
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,18 +32,27 @@ export default function RateDashboard({ onNavigate }: { onNavigate: (page: 'dash
     const stats = useMemo(() => {
         const now = new Date();
         const active = rates.filter(r => r.status === 'ACTIVE');
+        
         const expiringSoon = rates.filter(r => {
             const validTo = new Date(r.validTo);
             const diff = (validTo.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
             return diff >= 0 && diff <= 7;
         });
-        const laneSet = new Set(rates.map(r => `${r.pol}-${r.pod}`));
+        
+        const laneSet = new Set(rates.filter(r => r.pol && r.pod).map(r => `${r.pol}-${r.pod}`));
+        
+        // Smarter Price Calculation: Sum of all FREIGHT section charges for 40HC
         const baseRates = rates
-            .map(rate => rate.freightCharges.find(c => c.chargeHead === 'Ocean Freight')?.price40HC || 0)
-            .filter(Boolean);
+            .map(rate => {
+                const totalFreight = rate.freightCharges.reduce((acc, c) => acc + (c.price40HC || c.unitPrice || 0), 0);
+                return totalFreight;
+            })
+            .filter(p => p > 0);
+
         const avgBase = baseRates.length ? baseRates.reduce((acc, val) => acc + val, 0) / baseRates.length : 0;
         const maxBase = baseRates.length ? Math.max(...baseRates) : 0;
         const minBase = baseRates.length ? Math.min(...baseRates) : 0;
+        
         const lastUpdated = rates.reduce((latest, rate) => {
             const updated = new Date(rate.updatedAt).getTime();
             return updated > latest ? updated : latest;
@@ -75,12 +84,12 @@ export default function RateDashboard({ onNavigate }: { onNavigate: (page: 'dash
             {/* Header */}
             <div className="px-8 py-6 bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm flex justify-between items-center">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Tariff Library & Rate Intelligence</h1>
-                    <p className="text-sm text-slate-500 mt-1">Monitor carrier pricing, lane coverage, and market signals in one dashboard.</p>
+                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Tariff Library</h1>
+                    <p className="text-sm text-slate-500 mt-1">Monitor carrier pricing, lane coverage, and market signals.</p>
                 </div>
                 <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" className="text-slate-600 border-slate-200">
-                        <Layers className="h-3.5 w-3.5 mr-2" /> Import Tariff
+                        <Layers className="h-3.5 w-3.5 mr-2" /> Import Excel
                     </Button>
                     <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 shadow-sm">
                         <Plus className="h-4 w-4 mr-2" /> Add Rate Sheet
@@ -116,10 +125,10 @@ export default function RateDashboard({ onNavigate }: { onNavigate: (page: 'dash
                         </CardContent>
                     </Card>
                     <Card className="border-slate-200 shadow-sm bg-blue-50/50">
-                        <CardHeader className="p-4 pb-2"><CardTitle className="text-xs uppercase text-blue-600 font-bold tracking-wider">Avg Base 40HC</CardTitle></CardHeader>
+                        <CardHeader className="p-4 pb-2"><CardTitle className="text-xs uppercase text-blue-600 font-bold tracking-wider">Avg Base Rate</CardTitle></CardHeader>
                         <CardContent className="p-4 pt-0">
                             <div className="text-2xl font-bold text-blue-700">
-                                {stats.avgBase ? stats.avgBase.toFixed(0) : '—'}
+                                {stats.avgBase ? stats.avgBase.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
                             </div>
                             <p className="text-[10px] text-blue-400 mt-1 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Market benchmark</p>
                         </CardContent>
@@ -127,7 +136,7 @@ export default function RateDashboard({ onNavigate }: { onNavigate: (page: 'dash
                 </div>
 
                 <div className="grid grid-cols-12 gap-6">
-                    {/* Tariff Library */}
+                    {/* Tariff Library Table */}
                     <div className="col-span-8 space-y-4">
                         <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
                             <div className="relative w-96">
@@ -151,18 +160,25 @@ export default function RateDashboard({ onNavigate }: { onNavigate: (page: 'dash
                                         <TableHead>Carrier & Mode</TableHead>
                                         <TableHead>Route (POL → POD)</TableHead>
                                         <TableHead>Validity</TableHead>
-                                        <TableHead className="text-right">Base 40HC</TableHead>
+                                        <TableHead>Term</TableHead>
+                                        <TableHead className="text-right">Total Freight</TableHead>
                                         <TableHead></TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {filteredRates.map(rate => {
-                                        const baseRate = rate.freightCharges.find(c => c.chargeHead === 'Ocean Freight')?.price40HC || 0;
+                                        // Sum up all freight section charges for 40HC (or UnitPrice for Air)
+                                        const totalFreight = rate.freightCharges.reduce((acc, c) => acc + (c.price40HC || c.unitPrice || 0), 0);
+                                        
                                         return (
                                             <TableRow key={rate.id} className="cursor-pointer hover:bg-slate-50" onClick={() => handleEdit(rate.id)}>
                                                 <TableCell className="font-medium text-slate-700 text-xs">
                                                     {rate.reference}
-                                                    <div className="mt-1"><Badge variant="outline" className="text-[9px]">{rate.type}</Badge></div>
+                                                    <div className="mt-1">
+                                                        <Badge variant={rate.type === 'SPOT' ? 'secondary' : 'outline'} className="text-[9px]">
+                                                            {rate.type}
+                                                        </Badge>
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="flex items-center gap-3">
@@ -188,8 +204,14 @@ export default function RateDashboard({ onNavigate }: { onNavigate: (page: 'dash
                                                         {new Date(rate.validTo).toLocaleDateString()}
                                                     </div>
                                                 </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                                                        <Globe className="h-3 w-3" />
+                                                        {rate.incoterm || 'CY/CY'}
+                                                    </div>
+                                                </TableCell>
                                                 <TableCell className="text-right font-mono font-bold text-slate-700">
-                                                    {baseRate ? baseRate.toLocaleString() : '—'} {rate.currency}
+                                                    {totalFreight > 0 ? totalFreight.toLocaleString() : '—'} {rate.currency}
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     <Button variant="ghost" size="icon" onClick={(e) => {e.stopPropagation(); deleteRate(rate.id);}}>
@@ -201,7 +223,7 @@ export default function RateDashboard({ onNavigate }: { onNavigate: (page: 'dash
                                     })}
                                     {filteredRates.length === 0 && (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="text-center text-sm text-slate-400 py-10">
+                                            <TableCell colSpan={7} className="text-center text-sm text-slate-400 py-10">
                                                 No tariffs match your search.
                                             </TableCell>
                                         </TableRow>
@@ -211,7 +233,7 @@ export default function RateDashboard({ onNavigate }: { onNavigate: (page: 'dash
                         </div>
                     </div>
 
-                    {/* Rate Intelligence */}
+                    {/* Rate Intelligence - Right Side */}
                     <div className="col-span-4 space-y-4">
                         <Card className="border-slate-200 shadow-sm">
                             <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
@@ -220,9 +242,9 @@ export default function RateDashboard({ onNavigate }: { onNavigate: (page: 'dash
                             </CardHeader>
                             <CardContent className="p-4 pt-0 space-y-2">
                                 <div className="text-2xl font-bold text-slate-800">
-                                    {stats.avgBase ? stats.avgBase.toFixed(0) : '—'} USD
+                                    {stats.avgBase ? stats.avgBase.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'} USD
                                 </div>
-                                <div className="text-[11px] text-slate-400">Average base 40HC across active tariffs</div>
+                                <div className="text-[11px] text-slate-400">Average freight across active tariffs</div>
                                 <div className="flex items-center gap-2 text-xs text-emerald-600">
                                     <LineChart className="h-3.5 w-3.5" />
                                     Stable vs last cycle
@@ -232,16 +254,16 @@ export default function RateDashboard({ onNavigate }: { onNavigate: (page: 'dash
 
                         <Card className="border-slate-200 shadow-sm">
                             <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-                                <CardTitle className="text-xs uppercase text-slate-500 font-bold tracking-wider">Price Range (40HC)</CardTitle>
+                                <CardTitle className="text-xs uppercase text-slate-500 font-bold tracking-wider">Price Range</CardTitle>
                                 <TrendingUp className="h-4 w-4 text-blue-500" />
                             </CardHeader>
                             <CardContent className="p-4 pt-0">
                                 <div className="flex items-baseline gap-2">
-                                    <span className="text-lg font-bold text-slate-800">{stats.minBase || '—'}</span>
+                                    <span className="text-lg font-bold text-slate-800">{stats.minBase.toLocaleString() || '—'}</span>
                                     <span className="text-xs text-slate-400">min</span>
                                 </div>
                                 <div className="flex items-baseline gap-2 mt-1">
-                                    <span className="text-lg font-bold text-slate-800">{stats.maxBase || '—'}</span>
+                                    <span className="text-lg font-bold text-slate-800">{stats.maxBase.toLocaleString() || '—'}</span>
                                     <span className="text-xs text-slate-400">max</span>
                                 </div>
                                 <div className="mt-2 text-[10px] text-slate-400">Latest update: {stats.lastUpdated ? new Date(stats.lastUpdated).toLocaleDateString() : '—'}</div>
@@ -256,7 +278,7 @@ export default function RateDashboard({ onNavigate }: { onNavigate: (page: 'dash
                             <CardContent className="p-4 pt-0 space-y-3">
                                 {rates.slice(0, 3).map(rate => (
                                     <div key={rate.id} className="flex items-center justify-between text-xs text-slate-600">
-                                        <span className="font-medium">{rate.pol.split('(')[0]} → {rate.pod.split('(')[0]}</span>
+                                        <span className="font-medium truncate max-w-[150px]">{rate.pol.split('(')[0]} → {rate.pod.split('(')[0]}</span>
                                         <Badge variant="outline" className="text-[9px]">{rate.status}</Badge>
                                     </div>
                                 ))}

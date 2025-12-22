@@ -41,7 +41,7 @@ const MAP_HEIGHT = 458.627;
 const WORLD_MAP_URL = "/world-map-dark.svg";
 
 // Extended Port Data with Real Geo for Math & Display Metadata
-type PortData = { 
+export type PortData = { 
   id: string; 
   mapLat: number; 
   mapLon: number; 
@@ -52,7 +52,7 @@ type PortData = {
   tier?: boolean;
 };
 
-const PORT_DB: PortData[] = [
+export const PORT_DB: PortData[] = [
   { id: "CASABLANCA (MAP)", mapLat: 8.0, mapLon: -16.0, realLat: 33.57, realLon: -7.58, country: "Morocco", code: "MACAS" },
   { id: "TANGER MED (MAP)", mapLat: 10.3, mapLon: -13.9, realLat: 35.88, realLon: -5.54, country: "Morocco", code: "MAPTM", tier: true },
   { id: "AGADIR (MAP)", mapLat: 4.8, mapLon: -18.0, realLat: 30.42, realLon: -9.60, country: "Morocco", code: "MAAGA" },
@@ -140,7 +140,7 @@ const IncotermResponsibilityRuler = ({ incoterm }: { incoterm: string }) => {
 // SUB-COMPONENT: SMART PORT SEARCH (Combobox)
 // -----------------------------------------------------------------------------
 
-const SmartPortSelector = ({ 
+export const SmartPortSelector = ({ 
   value, 
   onChange, 
   label, 
@@ -185,7 +185,6 @@ const SmartPortSelector = ({
                 {PORT_DB.map((port) => (
                   <CommandItem
                     key={port.id}
-                    // FIXED: Replaced port.name with port.id since name doesn't exist
                     value={`${port.id} ${port.code}`}
                     onSelect={() => {
                       onChange(port.id);
@@ -196,7 +195,6 @@ const SmartPortSelector = ({
                     <div className="flex items-center w-full gap-2">
                       <div className={cn("w-1 h-8 rounded-full", port.tier ? "bg-blue-500" : "bg-slate-300")} />
                       <div className="flex flex-col">
-                        {/* FIXED: Replaced port.name with port.id */}
                         <span className="font-bold text-slate-700">{port.id}</span>
                         <span className="text-[10px] text-slate-400 flex items-center gap-1">
                           {port.country} • <span className="font-mono text-blue-500">{port.code}</span>

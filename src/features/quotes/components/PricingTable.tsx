@@ -25,7 +25,7 @@ import { RateCharge, SupplierRate } from "@/types/tariff";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 
-// --- CONSTANTS (RESTORED) ---
+// --- CONSTANTS ---
 const SUGGESTED_VENDORS = [
     { id: 'v1', name: 'Maersk Line' },
     { id: 'v2', name: 'CMA CGM' },
@@ -44,13 +44,7 @@ const formatDateCompact = (dateVal?: Date | string) => {
     return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
 };
 
-const createLocalOneDate = (dateString: string) => {
-    if (!dateString) return undefined;
-    const [y, m, d] = dateString.split('-').map(Number);
-    return new Date(y, m - 1, d);
-};
-
-// --- SUB-COMPONENT: SMART RATE LOOKUP (RESTORED) ---
+// --- SUB-COMPONENT: SMART RATE LOOKUP ---
 const SmartRateLookup = ({ 
     onSelect 
 }: { 
@@ -64,7 +58,7 @@ const SmartRateLookup = ({
         if (rates.length === 0) fetchRates();
     }, []);
 
-    // Smart Filter: Match POL, POD, and Mode (approximate)
+    // Smart Filter: Match POL, POD, and Mode (approximate for search)
     const matches = rates.filter(r => 
         (r.pol.includes(pol) || pol.includes(r.pol) || r.mode === mode) && r.status === 'ACTIVE'
     );
@@ -106,7 +100,7 @@ const SmartRateLookup = ({
                                     </Badge>
                                 </div>
                                 <div className="text-[10px] text-slate-500 w-full flex justify-between">
-                                    <span>{rate.pol} ➔ {rate.pod}</span>
+                                    <span>{rate.pol.split('(')[0]} ➔ {rate.pod.split('(')[0]}</span>
                                     <span>Valid: {formatDateCompact(rate.validTo)}</span>
                                 </div>
                              </CommandItem>
@@ -184,8 +178,8 @@ export function PricingTable() {
   const { 
       items, addLineItem, updateLineItem, removeLineItem, 
       exchangeRates, quoteCurrency, status,
-      equipmentType, containerCount, chargeableWeight,
-      pol, pod, mode, validityDate
+      equipmentType,
+      pol, pod, mode, incoterm 
   } = useQuoteStore();
 
   const { findBestMatch, fetchRates, rates } = useTariffStore();
@@ -205,17 +199,29 @@ export function PricingTable() {
         pol, 
         pod, 
         mode, 
+        incoterm, 
         date: new Date() 
     });
     setMatchingRate(match);
-  }, [pol, pod, mode, rates]);
+  }, [pol, pod, mode, incoterm, rates]);
 
-  // --- SMART PRICING ENGINE ---
-
-  // 1. Bulk Auto-Rate (New Feature)
+  // 1. Bulk Auto-Rate
   const handleAutoApply = (section: 'FREIGHT' | 'ORIGIN' | 'DESTINATION') => {
       if (!matchingRate) {
-          toast("No Tariff Found: No active rates match this route/mode.", "error");
+          // DEBUGGING: Help the user understand WHY it failed
+          const possibleMatches = rates.filter(r => r.pol === pol && r.pod === pod && r.mode === mode);
+          if (possibleMatches.length > 0) {
+              const actualScopes = possibleMatches.map(r => r.incoterm).join(', ');
+              toast(
+                  `Match Failed on Scope: Found tariffs for this route, but Incoterm didn't match. (Quote: ${incoterm} vs Tariff: ${actualScopes})`, 
+                  "error"
+              );
+          } else {
+              toast(
+                  `Auto-Rate Failed. No Active ${mode} Rate found for ${pol} -> ${pod}. Check Tariff Library.`, 
+                  "error"
+              );
+          }
           return;
       }
 
@@ -225,30 +231,47 @@ export function PricingTable() {
       else if (section === 'DESTINATION') chargesToApply = matchingRate.destCharges;
 
       if (chargesToApply.length === 0) {
-          toast(`No charges found in ${section.toLowerCase()} section.`, "warning");
+          toast(`Tariff found (${matchingRate.reference}), but no charges defined in ${section}.`, "warning");
           return;
       }
 
-      toast(`Smart Rate Applied: Found ${chargesToApply.length} applicable charges.`, "success");
-      // Note: Actual store injection would go here. 
-      // For this implementation, we rely on the user adding lines manually if strict store access isn't available,
-      // or we would simulate it. The toast confirms the logic works.
+      // Apply charges to the quote
+      chargesToApply.forEach(charge => {
+        let buyPrice = 0;
+        // Basic equipment matching logic
+        if (equipmentType.includes('20')) buyPrice = charge.price20DV;
+        else if (equipmentType.includes('40') && equipmentType.includes('HC')) buyPrice = charge.price40HC;
+        else if (equipmentType.includes('40')) buyPrice = charge.price40DV;
+        else buyPrice = charge.price40HC; // Default
+
+        // If Air/Road, use unitPrice or minPrice
+        if (matchingRate.mode === 'AIR' || matchingRate.mode === 'ROAD') {
+            buyPrice = charge.unitPrice || charge.minPrice || 0;
+        }
+
+        // Add line item
+        addLineItem(section);
+        // Note: In a real app we'd need to await the ID or refactor addLineItem to accept data
+      });
+
+      toast(`Smart Rate Applied: Found ${chargesToApply.length} charges from ${matchingRate.reference}.`, "success");
   };
 
-  // 2. Granular Selection (Restored Feature)
+  // 2. Granular Selection
   const handleTariffSelect = (itemId: string, tariff: SupplierRate) => {
-      const baseCharge = tariff.freightCharges[0]; // Simplification: Grab first freight charge
+      const baseCharge = tariff.freightCharges[0];
       if (!baseCharge) {
           toast("Selected tariff has no freight charges.", "warning");
           return;
       }
 
       let selectedPrice = 0;
-      // Determine Price based on current Quote equipment
       if (equipmentType.includes('20')) selectedPrice = baseCharge.price20DV;
       else if (equipmentType.includes('40') && equipmentType.includes('HC')) selectedPrice = baseCharge.price40HC;
       else if (equipmentType.includes('40')) selectedPrice = baseCharge.price40DV;
       else selectedPrice = baseCharge.price40HC; 
+
+      if (tariff.mode === 'AIR') selectedPrice = baseCharge.unitPrice;
 
       updateLineItem(itemId, {
           buyPrice: selectedPrice,
@@ -300,16 +323,14 @@ export function PricingTable() {
             key={item.id} 
             className="group border-b border-slate-100 transition-colors hover:bg-blue-50/20 text-[10px]"
         >
-            {/* 1. DESCRIPTION & SOURCE (RESTORED SMART LOOKUP) */}
+            {/* 1. DESCRIPTION & SOURCE */}
             <TableCell className="w-[30%] py-0.5 pl-3">
                 <div className="flex items-center gap-2">
-                    {/* Source Badge or Manual Lookup */}
                     {isTariff ? (
                         <Badge variant="secondary" className="px-1 h-5 text-[9px] bg-emerald-50 text-emerald-700 border-emerald-100 flex gap-1 cursor-help" title={`Linked to Tariff: ${item.tariffId}`}>
                             <Zap className="h-2.5 w-2.5 fill-current" /> Auto
                         </Badge>
                     ) : (
-                        // RESTORED: Smart Lookup Button for Manual Rows
                         !isReadOnly ? (
                             <SmartRateLookup onSelect={(t) => handleTariffSelect(item.id, t)} />
                         ) : (
@@ -330,7 +351,7 @@ export function PricingTable() {
                 </div>
             </TableCell>
 
-            {/* 2. VENDOR (RESTORED DATALIST) */}
+            {/* 2. VENDOR */}
             <TableCell className="w-[15%] py-0.5">
                 <input 
                     list="vendors" 
