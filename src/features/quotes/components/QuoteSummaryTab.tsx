@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
 import { 
-  Building2, Calendar, CreditCard, User, 
-  MapPin, ArrowRight, Wallet, History, Send, MessageSquareText,
+  Building2, CreditCard, User, 
+  Wallet, History, Send, MessageSquareText,
   FileBadge
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,7 +22,7 @@ export function QuoteSummaryTab() {
     // Logistics
     mode, incoterm, pol, pod, 
     // Financials
-    totalCostMAD, totalSellMAD, totalMarginMAD, totalTTCMAD, quoteCurrency,
+    totalCostMAD, totalSellMAD, totalMarginMAD, totalTTCMAD,
     // Narrative
     internalNotes, setIdentity, activities, addActivity
   } = useQuoteStore();
@@ -45,13 +45,13 @@ export function QuoteSummaryTab() {
 
   const marginPercent = totalSellMAD > 0 ? ((totalMarginMAD / totalSellMAD) * 100).toFixed(1) : "0.0";
 
-  // Modern Card Styles
-  const cardStyle = "bg-white border border-slate-200 shadow-[0_2px_10px_rgba(0,0,0,0.03)] rounded-xl overflow-hidden";
+  // Modern Card Style (Matching Workspace)
+  const cardStyle = "bg-white border border-slate-200 shadow-[0_2px_15px_rgba(0,0,0,0.04)] rounded-xl overflow-hidden";
   const headerStyle = "py-4 px-5 border-b border-slate-100 bg-white";
   const titleStyle = "text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2";
 
   return (
-    <div className="h-full p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 bg-slate-50/50 overflow-y-auto max-w-[1600px] mx-auto">
+    <div className="h-full p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 bg-slate-50/50 overflow-y-auto w-full">
       
       {/* --- LEFT COLUMN: THE SNAPSHOT (READ ONLY) --- */}
       <div className="lg:col-span-4 space-y-6">

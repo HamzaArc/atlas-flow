@@ -2,8 +2,7 @@ import { useState } from "react";
 import { 
   Ship, Plane, Truck, Copy, Trash2, 
   Plus, MoreHorizontal, AlertCircle, FileOutput, 
-  RefreshCw, LayoutGrid, ArrowRightLeft, Anchor, CircleDollarSign, FileText,
-  MapPin, PackageOpen
+  RefreshCw, LayoutGrid, ArrowRightLeft, Anchor, CircleDollarSign, FileText
 } from "lucide-react";
 
 import { QuoteHeader } from "./components/QuoteHeader"; 
@@ -22,7 +21,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
@@ -52,6 +50,9 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
   const marginPercent = totalSellMAD > 0 ? ((totalMarginMAD / totalSellMAD) * 100).toFixed(1) : "0.0";
   const activeOption = options.find(o => o.id === activeOptionId);
   const optionName = activeOption?.name || mode;
+  
+  // Logic for highlighting critical cargo modes
+  const isCriticalMode = mode === 'AIR' || mode === 'SEA_LCL';
 
   // --- PDF GENERATION ---
   const handleGeneratePDF = async () => {
@@ -69,10 +70,8 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
       return <Ship className="h-3 w-3" />;
   }
 
-  // Common Card Style for Consistency
-  const cardStyle = "bg-white border border-slate-200 shadow-[0_2px_10px_rgba(0,0,0,0.03)] rounded-xl overflow-hidden flex flex-col h-full";
-  const headerStyle = "py-3 px-5 border-b border-slate-100 bg-white shrink-0";
-  const titleStyle = "text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2";
+  // Modern Enterprise Card Style
+  const modernCardClass = "bg-white border border-slate-200 shadow-[0_2px_15px_rgba(0,0,0,0.04)] rounded-xl overflow-hidden h-full flex flex-col transition-all duration-200";
 
   return (
     <div className="h-screen flex flex-col bg-slate-50/50 overflow-hidden font-sans">
@@ -125,8 +124,8 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
           
           {/* Tab Navigation */}
-          <div className="px-8 pt-6 pb-2 shrink-0">
-            <TabsList className="inline-flex h-9 items-center justify-center rounded-lg bg-slate-100 p-1 text-slate-500">
+          <div className="px-6 pt-4 shrink-0">
+            <TabsList className="inline-flex h-9 items-center justify-center rounded-lg bg-slate-200/50 p-1 text-slate-500">
                 <TabsTrigger value="logistics" className="gap-2 px-4 text-xs font-semibold data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm rounded-md transition-all">
                     <Anchor className="h-3.5 w-3.5" /> Logistics & Cargo
                 </TabsTrigger>
@@ -139,48 +138,31 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
             </TabsList>
           </div>
 
-          {/* --- TAB 1: LOGISTICS & CARGO (SIDE-BY-SIDE LAYOUT) --- */}
+          {/* --- TAB 1: LOGISTICS & CARGO (Full Width Split) --- */}
           <TabsContent value="logistics" className="flex-1 p-6 min-h-0 data-[state=inactive]:hidden animate-in fade-in duration-300">
-              <div className="h-full grid grid-cols-12 gap-6 min-h-0 max-w-[1600px] mx-auto">
+              <div className="h-full grid grid-cols-12 gap-6 min-h-0 w-full">
                   
                   {/* Left Pane: Route & Schedule */}
                   <div className="col-span-12 lg:col-span-4 h-full flex flex-col min-h-0">
-                      <Card className={cardStyle}>
-                          <CardHeader className={headerStyle}>
-                             <CardTitle className={titleStyle}>
-                                <div className="p-1.5 bg-blue-50 text-blue-600 rounded-md"><MapPin className="h-3.5 w-3.5" /></div>
-                                Route & Schedule
-                             </CardTitle>
-                          </CardHeader>
-                          <CardContent className="flex-1 p-0 overflow-y-auto">
-                              <RouteSelector />
-                          </CardContent>
-                      </Card>
+                      <div className={modernCardClass}>
+                          <RouteSelector />
+                      </div>
                   </div>
 
                   {/* Right Pane: Cargo Manifest */}
                   <div className="col-span-12 lg:col-span-8 h-full flex flex-col min-h-0">
-                      <Card className={cardStyle}>
-                          <CardHeader className={headerStyle}>
-                             <CardTitle className={titleStyle}>
-                                <div className="p-1.5 bg-amber-50 text-amber-600 rounded-md"><PackageOpen className="h-3.5 w-3.5" /></div>
-                                Cargo Manifest
-                             </CardTitle>
-                          </CardHeader>
-                          <CardContent className="flex-1 p-0 overflow-y-auto min-h-0">
-                              <CargoEngine />
-                          </CardContent>
-                      </Card>
+                      <div className={cn(modernCardClass, isCriticalMode && "ring-2 ring-amber-400/30 bg-amber-50/10")}>
+                          <CargoEngine />
+                      </div>
                   </div>
               </div>
           </TabsContent>
-
 
           {/* --- TAB 2: COMMERCIAL OFFER --- */}
           <TabsContent value="commercial" className="flex-1 flex flex-col min-h-0 data-[state=inactive]:hidden bg-slate-50/30 animate-in fade-in duration-300">
              
              {/* Toolbar inside Commercial Tab */}
-             <div className="px-8 py-3 flex justify-between items-center bg-white border-b border-slate-200 shrink-0 shadow-sm z-10">
+             <div className="px-6 py-3 flex justify-between items-center bg-white border-b border-slate-200 shrink-0 shadow-sm z-10">
                 <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
                     <button onClick={() => setViewMode('EDITOR')} className={cn("px-4 py-1.5 rounded-[6px] text-xs font-bold flex items-center gap-2 transition-all", viewMode === 'EDITOR' ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
                         <LayoutGrid className="h-3.5 w-3.5" /> Pricing Editor
@@ -231,10 +213,10 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
                 {viewMode === 'COMPARE' ? (
                     <QuoteComparison onSelect={() => setViewMode('EDITOR')} />
                 ) : (
-                    <div className="h-full flex flex-col max-w-[1600px] mx-auto w-full">
+                    <div className="h-full flex flex-col w-full">
                         <div className="flex-1 overflow-hidden p-6">
-                             {/* Wrapped in the same modern card style */}
-                             <div className="bg-white border border-slate-200 shadow-[0_2px_15px_rgba(0,0,0,0.04)] rounded-xl overflow-hidden h-full flex flex-col">
+                             {/* Pricing Table with Modern Shell */}
+                             <div className={modernCardClass}>
                                 <PricingTable />
                              </div>
                         </div>
@@ -275,7 +257,9 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
 
           {/* --- TAB 3: SUMMARY & AUDIT --- */}
           <TabsContent value="summary" className="flex-1 min-h-0 data-[state=inactive]:hidden animate-in fade-in duration-300">
-              <QuoteSummaryTab />
+              <div className="w-full h-full">
+                  <QuoteSummaryTab />
+              </div>
           </TabsContent>
 
       </Tabs>

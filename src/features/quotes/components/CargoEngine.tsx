@@ -1,4 +1,3 @@
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -7,7 +6,7 @@ import {
 } from "@/components/ui/select";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { 
-    Package, Plus, Trash2, AlertCircle, 
+    Package, Plus, Trash2, 
     Layers, Scale, Thermometer,
     ArrowDownToLine, Zap
 } from "lucide-react";
@@ -57,48 +56,43 @@ export function CargoEngine() {
       updateCargo(cargoRows.filter(r => r.id !== id));
   };
 
-  // Logic: Highlight if cargo details are critical for the selected mode
   const isCritical = mode === 'AIR' || mode === 'SEA_LCL';
 
+  // --- UPDATED: Main div instead of Card with borders ---
   return (
-    <Card className={cn(
-        "h-full flex flex-col transition-all duration-300 overflow-hidden border-none",
-        isCritical 
-            ? "bg-amber-50/30 ring-2 ring-amber-400/30 shadow-md" 
-            : "bg-white shadow-sm ring-1 ring-slate-100"
-    )}>
+    <div className="h-full flex flex-col bg-transparent overflow-hidden">
       
       {/* 1. FIXED HEADER (Ergonomic Stats) */}
-      <div className="px-4 py-3 border-b border-slate-100 shrink-0 bg-slate-50/50">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
-              <div className={cn("p-1.5 rounded-md transition-colors", isCritical ? "bg-amber-100 text-amber-700" : "bg-blue-50 text-blue-600")}>
-                  <Package className="h-4 w-4" />
+      <div className="px-5 py-3 border-b border-slate-100 shrink-0 bg-white">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2 text-slate-700 font-bold text-xs uppercase tracking-wider">
+              <div className={cn("p-1.5 rounded-md transition-colors", isCritical ? "bg-amber-100 text-amber-700" : "bg-amber-50 text-amber-600")}>
+                  <Package className="h-3.5 w-3.5" />
               </div>
-              <span className="tracking-tight">Cargo Manifest</span>
+              <span className="tracking-widest">Cargo Manifest</span>
             </div>
             {isHazmat && <Badge variant="destructive" className="h-5 px-1.5 text-[9px]">IMO / ADR</Badge>}
           </div>
           
           {/* Quick Stats Grid */}
           <div className="grid grid-cols-4 gap-2">
-              <div className="bg-white rounded border border-slate-100 p-1.5 flex flex-col items-center">
-                  <span className="text-[9px] text-slate-400 uppercase font-bold">Pkgs</span>
+              <div className="bg-slate-50 rounded border border-slate-100 p-2 flex flex-col items-center">
+                  <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Pkgs</span>
                   <span className="text-xs font-bold text-slate-700">{totalPackages}</span>
               </div>
-              <div className="bg-white rounded border border-slate-100 p-1.5 flex flex-col items-center">
-                  <span className="text-[9px] text-slate-400 uppercase font-bold">W (kg)</span>
-                  <span className="text-xs font-bold text-slate-700">{totalWeight}</span>
+              <div className="bg-slate-50 rounded border border-slate-100 p-2 flex flex-col items-center">
+                  <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Weight</span>
+                  <span className="text-xs font-bold text-slate-700">{totalWeight} <span className="text-[9px] font-normal text-slate-400">kg</span></span>
               </div>
-              <div className="bg-white rounded border border-slate-100 p-1.5 flex flex-col items-center">
-                  <span className="text-[9px] text-slate-400 uppercase font-bold">V (m³)</span>
-                  <span className="text-xs font-bold text-slate-700">{totalVolume}</span>
+              <div className="bg-slate-50 rounded border border-slate-100 p-2 flex flex-col items-center">
+                  <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Volume</span>
+                  <span className="text-xs font-bold text-slate-700">{totalVolume} <span className="text-[9px] font-normal text-slate-400">m³</span></span>
               </div>
               <div className={cn(
-                  "rounded border p-1.5 flex flex-col items-center",
+                  "rounded border p-2 flex flex-col items-center",
                   densityRatio < 167 && mode === 'AIR' ? "bg-red-50 border-red-100" : "bg-emerald-50 border-emerald-100"
               )}>
-                  <span className={cn("text-[9px] uppercase font-bold", densityRatio < 167 && mode === 'AIR' ? "text-red-400" : "text-emerald-500")}>Dens.</span>
+                  <span className={cn("text-[9px] uppercase font-bold tracking-wider", densityRatio < 167 && mode === 'AIR' ? "text-red-400" : "text-emerald-500")}>Ratio</span>
                   <span className={cn("text-xs font-bold", densityRatio < 167 && mode === 'AIR' ? "text-red-700" : "text-emerald-700")}>
                       1:{densityRatio}
                   </span>
@@ -107,33 +101,33 @@ export function CargoEngine() {
       </div>
 
       {/* 2. SCROLLABLE CONTENT AREA */}
-      <ScrollArea className="flex-1">
-          <div className="p-4 space-y-5">
+      <ScrollArea className="flex-1 bg-white">
+          <div className="p-5 space-y-5">
               
               {/* Global Settings */}
-              <div className="space-y-3 p-3 bg-white border border-slate-100 rounded-lg shadow-sm">
-                  <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-3 p-4 bg-slate-50 border border-slate-100 rounded-lg">
+                  <div className="grid grid-cols-2 gap-5">
                       
                       {/* HS CODE SECTION */}
                       <div className="space-y-1.5">
                           {/* Header aligns with Temp Header */}
-                          <div className="flex items-center h-6">
+                          <div className="flex items-center h-5">
                               <Label className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">HS Code</Label>
                           </div>
                           <div className="relative">
                               <Input 
-                                  className="h-8 text-xs pl-7 bg-slate-50 border-slate-200 focus:bg-white transition-colors" 
+                                  className="h-8 text-xs pl-8 bg-white border-slate-200 focus:bg-white transition-colors shadow-sm" 
                                   placeholder="0000.00"
                                   value={hsCode}
                                   onChange={(e) => setIdentity('hsCode', e.target.value)}
                               />
-                              <Scale className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
+                              <Scale className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
                           </div>
                       </div>
                       
                       {/* TEMP CONTROL SECTION */}
                       <div className="space-y-1.5">
-                          <div className="flex justify-between items-center h-6">
+                          <div className="flex justify-between items-center h-5">
                               <Label className={cn("text-[10px] uppercase font-bold tracking-wider transition-colors", isReefer ? "text-blue-600" : "text-slate-400")}>
                                   {isReefer ? "Reefer" : "Temp. Control"}
                               </Label>
@@ -144,34 +138,34 @@ export function CargoEngine() {
                                   <Switch 
                                       checked={isReefer} 
                                       onCheckedChange={(c) => setIdentity('isReefer', c)} 
-                                      className="data-[state=checked]:bg-blue-600 shadow-sm"
+                                      className="h-4 w-8 data-[state=checked]:bg-blue-600 shadow-sm scale-90"
                                   />
                               </div>
                           </div>
                           <div className="relative">
                               <Input 
                                   disabled={!isReefer}
-                                  className="h-8 text-xs pl-7 bg-slate-50 border-slate-200 disabled:opacity-50 disabled:bg-slate-100 focus:bg-white transition-colors" 
+                                  className="h-8 text-xs pl-8 bg-white border-slate-200 disabled:opacity-50 disabled:bg-slate-100 focus:bg-white transition-colors shadow-sm" 
                                   placeholder="Ambient"
                                   value={temperature}
                                   onChange={(e) => setIdentity('temperature', e.target.value)}
                               />
-                              <Thermometer className={cn("absolute left-2.5 top-2 h-3.5 w-3.5 transition-colors", isReefer ? "text-blue-500" : "text-slate-300")} />
+                              <Thermometer className={cn("absolute left-2.5 top-2.5 h-3.5 w-3.5 transition-colors", isReefer ? "text-blue-500" : "text-slate-300")} />
                           </div>
                       </div>
                   </div>
 
                   {/* Hazmat Toggle */}
-                  <div className="flex items-center gap-2 pt-1">
-                      <div className={cn("flex-1 flex items-center justify-between p-2 rounded border transition-colors", isHazmat ? "bg-red-50 border-red-200" : "bg-slate-50 border-slate-100")}>
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-200/50 mt-2">
+                      <div className={cn("flex-1 flex items-center justify-between p-2 rounded border transition-colors", isHazmat ? "bg-red-50 border-red-200" : "bg-white border-slate-200")}>
                           <span className={cn("text-[10px] font-bold uppercase tracking-wider", isHazmat ? "text-red-700" : "text-slate-400")}>Dangerous Goods (IMO)</span>
-                          <Switch checked={isHazmat} onCheckedChange={(c) => setIdentity('isHazmat', c)} className="data-[state=checked]:bg-red-600" />
+                          <Switch checked={isHazmat} onCheckedChange={(c) => setIdentity('isHazmat', c)} className="data-[state=checked]:bg-red-600 h-4 w-8 scale-90" />
                       </div>
                   </div>
               </div>
 
               {/* Rows List */}
-              <div className="space-y-2">
+              <div className="space-y-3">
                   <div className="flex justify-between items-end px-1">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Package List</span>
                       <Button variant="ghost" size="sm" onClick={addRow} className="h-6 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 -mr-1">
@@ -180,14 +174,14 @@ export function CargoEngine() {
                   </div>
 
                   {cargoRows.map((row, idx) => (
-                      <div key={row.id} className="group relative bg-white border border-slate-200 rounded-lg p-3 hover:border-blue-300 hover:shadow-sm transition-all">
+                      <div key={row.id} className="group relative bg-white border border-slate-200 rounded-lg p-3 hover:border-blue-300 hover:shadow-md transition-all">
                           
                           {/* Row Header: Type & Stackability */}
-                          <div className="flex justify-between items-center mb-2">
+                          <div className="flex justify-between items-center mb-3">
                               <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-[9px] h-5 bg-slate-100 border-slate-200 text-slate-500">#{idx + 1}</Badge>
+                                  <Badge variant="outline" className="text-[9px] h-5 bg-slate-50 border-slate-200 text-slate-500 font-mono">#{idx + 1}</Badge>
                                   <Select value={row.pkgType} onValueChange={(v) => updateRow(row.id, 'pkgType', v)}>
-                                      <SelectTrigger className="h-6 w-24 text-[10px] border-none bg-slate-50 font-medium focus:ring-0">
+                                      <SelectTrigger className="h-6 w-28 text-[10px] border-none bg-slate-50 font-medium focus:ring-0">
                                           <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
@@ -199,7 +193,7 @@ export function CargoEngine() {
                                   <button 
                                       onClick={() => updateRow(row.id, 'isStackable', !row.isStackable)}
                                       title={row.isStackable ? "Stackable" : "Non-Stackable"}
-                                      className={cn("p-1 rounded transition-colors", row.isStackable ? "bg-green-100 text-green-600" : "bg-red-50 text-red-400")}
+                                      className={cn("p-1 rounded transition-colors", row.isStackable ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-400")}
                                   >
                                       <Layers className="h-3.5 w-3.5" />
                                   </button>
@@ -210,40 +204,40 @@ export function CargoEngine() {
                           </div>
 
                           {/* Dimensions Grid */}
-                          <div className="grid grid-cols-5 gap-2 items-end">
+                          <div className="grid grid-cols-5 gap-3 items-end">
                               <div className="col-span-1">
-                                  <Label className="text-[9px] text-slate-400">Qty</Label>
-                                  <Input className="h-7 text-xs text-center px-0 font-bold text-slate-700 bg-slate-50 border-transparent focus:bg-white focus:border-blue-200" 
+                                  <Label className="text-[9px] text-slate-400 block mb-1">Qty</Label>
+                                  <Input className="h-8 text-xs text-center px-0 font-bold text-slate-700 bg-slate-50 border-slate-100 focus:bg-white focus:border-blue-200" 
                                       type="number" min={1} value={row.qty} 
                                       onChange={(e) => updateRow(row.id, 'qty', parseInt(e.target.value) || 0)} 
                                   />
                               </div>
-                              <div className="col-span-3 grid grid-cols-3 gap-1">
+                              <div className="col-span-3 grid grid-cols-3 gap-1.5">
                                   <div>
-                                      <Label className="text-[9px] text-slate-400 pl-1">L</Label>
-                                      <Input className="h-7 text-xs text-center px-0 bg-slate-50 border-transparent focus:bg-white" placeholder="cm"
+                                      <Label className="text-[9px] text-slate-400 pl-1 block mb-1">L</Label>
+                                      <Input className="h-8 text-xs text-center px-0 bg-slate-50 border-slate-100 focus:bg-white" placeholder="cm"
                                           type="number" value={row.length} 
                                           onChange={(e) => updateRow(row.id, 'length', parseInt(e.target.value) || 0)} 
                                       />
                                   </div>
                                   <div>
-                                      <Label className="text-[9px] text-slate-400 pl-1">W</Label>
-                                      <Input className="h-7 text-xs text-center px-0 bg-slate-50 border-transparent focus:bg-white" placeholder="cm"
+                                      <Label className="text-[9px] text-slate-400 pl-1 block mb-1">W</Label>
+                                      <Input className="h-8 text-xs text-center px-0 bg-slate-50 border-slate-100 focus:bg-white" placeholder="cm"
                                           type="number" value={row.width} 
                                           onChange={(e) => updateRow(row.id, 'width', parseInt(e.target.value) || 0)} 
                                       />
                                   </div>
                                   <div>
-                                      <Label className="text-[9px] text-slate-400 pl-1">H</Label>
-                                      <Input className="h-7 text-xs text-center px-0 bg-slate-50 border-transparent focus:bg-white" placeholder="cm"
+                                      <Label className="text-[9px] text-slate-400 pl-1 block mb-1">H</Label>
+                                      <Input className="h-8 text-xs text-center px-0 bg-slate-50 border-slate-100 focus:bg-white" placeholder="cm"
                                           type="number" value={row.height} 
                                           onChange={(e) => updateRow(row.id, 'height', parseInt(e.target.value) || 0)} 
                                       />
                                   </div>
                               </div>
                               <div className="col-span-1">
-                                  <Label className="text-[9px] text-slate-400">Kg/Unit</Label>
-                                  <Input className="h-7 text-xs text-center px-0 font-medium bg-slate-50 border-transparent focus:bg-white" 
+                                  <Label className="text-[9px] text-slate-400 block mb-1">Kg/Unit</Label>
+                                  <Input className="h-8 text-xs text-center px-0 font-medium bg-slate-50 border-slate-100 focus:bg-white" 
                                       type="number" value={row.weight} 
                                       onChange={(e) => updateRow(row.id, 'weight', parseInt(e.target.value) || 0)} 
                                   />
@@ -282,6 +276,6 @@ export function CargoEngine() {
               </div>
           </div>
       </div>
-    </Card>
+    </div>
   );
 }

@@ -1,4 +1,3 @@
-import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
@@ -10,22 +9,14 @@ import {
 } from "@/components/ui/select";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import {
-  Plane,
-  Ship,
-  Truck,
-  Map as MapIcon,
-  MapPin,
-  Container,
-  Clock,
-  Calendar,
-  Anchor
+  Plane, Ship, Truck, Map as MapIcon, MapPin, Container, Clock, Calendar, Anchor
 } from "lucide-react";
 import { TransportMode, Incoterm } from "@/types/index";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
 // -----------------------------------------------------------------------------
-// CONSTANTS & MAP
+// CONSTANTS & MAP (Kept simplified for brevity, logic remains identical)
 // -----------------------------------------------------------------------------
 
 const MAP_WIDTH = 784.077;
@@ -34,7 +25,6 @@ const WORLD_MAP_URL = "/world-map-dark.svg";
 
 type PortGeo = { lat: number; lon: number };
 
-// Must match the datalist options exactly for the map to work
 const PORT_GEO: Record<string, PortGeo> = {
   "CASABLANCA (MAP)": { lat: 8.0,  lon: -16.0 },
   "TANGER MED (MAP)": { lat: 10.3, lon: -13.9 },
@@ -74,7 +64,6 @@ const WorldMap = ({ pol, pod, mode, transitTime }: any) => {
   const start = getPortCoords(pol);
   const end = getPortCoords(pod);
   
-  // Calculate quadratic bezier curve
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const dist = Math.sqrt(dx * dx + dy * dy);
@@ -84,7 +73,6 @@ const WorldMap = ({ pol, pod, mode, transitTime }: any) => {
   const pathD = `M${start.x},${start.y} Q${cx},${cy} ${end.x},${end.y}`;
   const routeColor = mode === "AIR" ? "#fbbf24" : mode === "ROAD" ? "#22c55e" : "#3b82f6";
   
-  // Extract Clean Names for the HUD
   const polName = pol.split('(')[0].trim().substring(0, 15);
   const podName = pod.split('(')[0].trim().substring(0, 15);
   const polCode = pol.match(/\((.*?)\)/)?.[1] || "ORIGIN";
@@ -92,10 +80,8 @@ const WorldMap = ({ pol, pod, mode, transitTime }: any) => {
 
   return (
     <div className="relative w-full h-48 rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-inner group shrink-0">
-      {/* Background Gradient */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.15),_transparent_70%),radial-gradient(circle_at_bottom,_rgba(15,23,42,0.95),_transparent_65%)]" />
       
-      {/* SVG Map Layer - Clean visibility */}
       <svg viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid slice">
         <defs>
           <linearGradient id="darkenOverlay" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -108,23 +94,17 @@ const WorldMap = ({ pol, pod, mode, transitTime }: any) => {
           </linearGradient>
         </defs>
         
-        {/* World Map Image */}
         <image x="0" y="0" width={MAP_WIDTH} height={MAP_HEIGHT} preserveAspectRatio="xMidYMid slice" xlinkHref={WORLD_MAP_URL} />
         <rect x="0" y="0" width={MAP_WIDTH} height={MAP_HEIGHT} fill="url(#darkenOverlay)" />
-        
-        {/* The Route Line */}
         <path d={pathD} fill="none" stroke="url(#routeGradient)" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 8">
             <animate attributeName="stroke-dashoffset" from="28" to="0" dur="2.5s" repeatCount="indefinite" />
         </path>
-        
-        {/* Points */}
         <circle cx={start.x} cy={start.y} r="3" fill="#3b82f6" />
         <circle cx={end.x} cy={end.y} r="3" fill="#22c55e" />
       </svg>
 
-      {/* --- HUD OVERLAY (Floating Info) --- */}
+      {/* HUD OVERLAY */}
       <div className="absolute top-4 left-4 right-4 flex justify-between pointer-events-none">
-          {/* Origin Badge */}
           <div className="flex flex-col items-start bg-slate-900/90 backdrop-blur-md border border-slate-700/60 rounded-lg px-3 py-2 shadow-2xl">
               <span className="text-[9px] text-slate-400 font-bold tracking-wider mb-0.5">POL</span>
               <div className="flex items-baseline gap-2">
@@ -133,12 +113,10 @@ const WorldMap = ({ pol, pod, mode, transitTime }: any) => {
               </div>
           </div>
 
-          {/* Mode Icon (Center) */}
           <div className="mt-2 flex items-center justify-center w-8 h-8 rounded-full bg-slate-800/90 border border-slate-600 shadow-xl backdrop-blur-sm">
              {mode === 'AIR' ? <Plane className="h-4 w-4 text-amber-400" /> : mode === 'ROAD' ? <Truck className="h-4 w-4 text-emerald-400" /> : <Ship className="h-4 w-4 text-blue-400" />}
           </div>
 
-          {/* Dest Badge */}
           <div className="flex flex-col items-end bg-slate-900/90 backdrop-blur-md border border-slate-700/60 rounded-lg px-3 py-2 shadow-2xl">
               <span className="text-[9px] text-slate-400 font-bold tracking-wider mb-0.5 text-right">POD</span>
               <div className="flex flex-row-reverse items-baseline gap-2">
@@ -148,7 +126,6 @@ const WorldMap = ({ pol, pod, mode, transitTime }: any) => {
           </div>
       </div>
 
-      {/* Transit Time Badge (Bottom Right) */}
       {transitTime > 0 && (
         <div className="absolute bottom-3 right-3 flex items-center gap-2 bg-emerald-950/80 backdrop-blur-md px-2.5 py-1 rounded border border-emerald-500/30 text-emerald-400 shadow-lg">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
@@ -170,7 +147,6 @@ export function RouteSelector() {
       requestedDepartureDate, estimatedArrivalDate 
   } = useQuoteStore();
 
-  // --- LOGIC HELPERS ---
   const isAir = mode === 'AIR';
   const isSeaFCL = mode === 'SEA_FCL';
   const isSeaLCL = mode === 'SEA_LCL';
@@ -190,24 +166,24 @@ export function RouteSelector() {
 
   const showEquipment = isSeaFCL || isRoad;
   const showContainerCount = isSeaFCL;
-  // UPDATED: Free Time for both FCL and LCL
   const showFreeTime = isSeaFCL || isSeaLCL; 
 
   const handleLocationChange = (field: 'pol' | 'pod', value: string) => {
       setRouteLocations(field, value.toUpperCase());
   }
 
+  // --- UPDATED: Main div instead of Card with border-none ---
   return (
-    <Card className="h-full flex flex-col bg-white overflow-hidden border-none shadow-sm ring-1 ring-slate-100">
+    <div className="h-full flex flex-col bg-white overflow-hidden">
       
-      {/* 1. Header (Matching Cargo Engine Style) */}
-      <div className="px-4 py-3 border-b border-slate-100 shrink-0 bg-slate-50/50">
+      {/* 1. Header (Built-in) */}
+      <div className="px-5 py-3 border-b border-slate-100 shrink-0 bg-white">
         <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 font-bold text-slate-800">
+            <div className="flex items-center gap-2 font-bold text-slate-700">
                 <div className="p-1.5 rounded-md bg-blue-50 text-blue-600">
-                    <MapIcon className="h-4 w-4" />
+                    <MapIcon className="h-3.5 w-3.5" />
                 </div>
-                <span className="text-sm tracking-tight">Route & Schedule</span>
+                <span className="text-xs uppercase tracking-wider">Route & Schedule</span>
             </div>
             <Badge variant="outline" className="text-[9px] h-5 bg-white text-slate-500 border-slate-200">
                 GEO-LINK™
@@ -216,16 +192,16 @@ export function RouteSelector() {
       </div>
 
       {/* 2. Scrollable Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-5">
+      <div className="flex-1 overflow-y-auto p-5 space-y-6">
           
           {/* Map Visualization */}
           <WorldMap pol={pol} pod={pod} mode={mode} transitTime={transitTime} />
 
           {/* Configuration Group */}
-          <div className="bg-slate-50/50 rounded-lg p-3 border border-slate-100 space-y-3">
+          <div className="bg-slate-50 rounded-lg p-4 border border-slate-100 space-y-4">
               
               {/* LEVEL 1: MODE & INCOTERM */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-5">
                   <div className="space-y-1.5">
                     <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Transport Mode</Label>
                     <Select value={mode} onValueChange={(val) => setMode(val as TransportMode)}>
@@ -257,20 +233,20 @@ export function RouteSelector() {
               </div>
 
               {/* LEVEL 2: LOCATIONS */}
-              <div className="space-y-3">
+              <div className="space-y-4">
                   {showPlaceOfLoading && (
                       <div className="space-y-1 animate-in slide-in-from-top-1 fade-in duration-300">
                           <Label className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Pickup Address</Label>
                           <div className="relative group">
-                              <Input className="h-8 bg-white border-amber-200 text-xs pl-8 focus:border-amber-400 transition-all shadow-sm" placeholder="Factory Address" 
+                              <Input className="h-9 bg-white border-amber-200 text-xs pl-9 focus:border-amber-400 transition-all shadow-sm" placeholder="Factory Address" 
                                   value={placeOfLoading} onChange={(e) => setRouteLocations('placeOfLoading', e.target.value)} 
                               />
-                              <Truck className="absolute left-2.5 top-2 h-4 w-4 text-amber-500" />
+                              <Truck className="absolute left-3 top-2.5 h-4 w-4 text-amber-500" />
                           </div>
                       </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-5">
                       <div className="space-y-1">
                           <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{getOriginLabel()}</Label>
                           <div className="relative group">
@@ -281,7 +257,7 @@ export function RouteSelector() {
                                 value={pol} 
                                 onChange={(e) => handleLocationChange('pol', e.target.value)}
                             />
-                            <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
+                            <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
                           </div>
                       </div>
                       <div className="space-y-1">
@@ -294,7 +270,7 @@ export function RouteSelector() {
                                 value={pod} 
                                 onChange={(e) => handleLocationChange('pod', e.target.value)}
                             />
-                            <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
+                            <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
                           </div>
                       </div>
                   </div>
@@ -303,10 +279,10 @@ export function RouteSelector() {
                       <div className="space-y-1 animate-in slide-in-from-bottom-1 fade-in duration-300">
                           <Label className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Final Delivery Address</Label>
                           <div className="relative group">
-                              <Input className="h-8 bg-white border-blue-200 text-xs pl-8 focus:border-blue-400 transition-all shadow-sm" placeholder="Warehouse Address" 
+                              <Input className="h-9 bg-white border-blue-200 text-xs pl-9 focus:border-blue-400 transition-all shadow-sm" placeholder="Warehouse Address" 
                                   value={placeOfDelivery} onChange={(e) => setRouteLocations('placeOfDelivery', e.target.value)}
                               />
-                              <MapPin className="absolute left-2.5 top-2 h-4 w-4 text-blue-500" />
+                              <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-blue-500" />
                           </div>
                       </div>
                   )}
@@ -314,7 +290,7 @@ export function RouteSelector() {
           </div>
 
           {/* LEVEL 3: LOGISTICS DETAILS */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-5">
               {showEquipment && (
                   <div className="space-y-1">
                       <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Equipment</Label>
@@ -375,7 +351,7 @@ export function RouteSelector() {
       </div>
 
       {/* 4. Dates Footer */}
-      <div className="mt-auto px-4 py-3 border-t border-slate-100 bg-slate-50/50 grid grid-cols-2 gap-4 shrink-0">
+      <div className="mt-auto px-5 py-3 border-t border-slate-100 bg-slate-50/50 grid grid-cols-2 gap-5 shrink-0">
         <div className="space-y-1">
             <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Requested Dep.</Label>
             <div className="relative">
@@ -392,13 +368,12 @@ export function RouteSelector() {
         </div>
       </div>
 
-      {/* Datalist for Map Coordination */}
       <datalist id="ports">
           {Object.keys(PORT_GEO).map((p) => (
             <option key={p} value={p} />
           ))}
       </datalist>
 
-    </Card>
+    </div>
   );
 }
