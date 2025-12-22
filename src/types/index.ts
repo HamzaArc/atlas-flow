@@ -22,7 +22,6 @@ export interface ActivityItem {
   timestamp: Date;
 }
 
-// NEW: Granular Risk Trigger
 export interface ApprovalTrigger {
     code: string;
     message: string;
@@ -31,8 +30,8 @@ export interface ApprovalTrigger {
 
 export interface QuoteApproval {
     requiresApproval: boolean;
-    triggers: ApprovalTrigger[]; // New Multi-Factor Array
-    reason: string | null;       // Deprecated (kept for backward compatibility/summary)
+    triggers: ApprovalTrigger[];
+    reason: string | null;
     requestedBy?: string;
     requestedAt?: Date;
     approvedBy?: string;
@@ -54,8 +53,6 @@ export interface QuoteLineItem {
   markupType: 'PERCENT' | 'FIXED_AMOUNT';
   markupValue: number;
   vatRule: 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | 'DISBURSEMENT';
-  
-  // NEW: Provenance Tracking
   source: 'MANUAL' | 'TARIFF';
   tariffId?: string;
 }
@@ -91,11 +88,11 @@ export interface Quote {
   customerReference?: string;
   status: 'DRAFT' | 'PRICING' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'REJECTED';
   
-  // CRM SNAPSHOT DATA
+  // CRM SNAPSHOT
   clientId: string;
   clientName: string;
-  clientTaxId?: string; // Snapshot
-  clientIce?: string;   // Snapshot
+  clientTaxId?: string; 
+  clientIce?: string; 
   paymentTerms: string; 
   
   salespersonId: string;
@@ -103,9 +100,15 @@ export interface Quote {
   validityDate: Date; 
   cargoReadyDate: Date;
   requestedDepartureDate?: Date;
+  
+  // ROUTE & SPECS (Cached / Top Level)
   pol?: string;
   pod?: string;
-  totalTTC?: number;
+  mode?: TransportMode;       // Added
+  incoterm?: Incoterm;        // Added
+  activeOptionId?: string;    // Added for UI persistence
+  
+  // CARGO
   cargoRows: any[];
   goodsDescription: string;
   hsCode?: string;
@@ -116,6 +119,18 @@ export interface Quote {
   temperature?: string;
   cargoValue?: number;
   insuranceRequired: boolean;
+  
+  // CALCULATED CARGO STATS (Added)
+  totalWeight?: number; 
+  totalVolume?: number;
+  chargeableWeight?: number;
+
+  // FINANCIAL SNAPSHOTS (Added)
+  totalTTC?: number;
+  totalSellTarget?: number;
+  totalTaxTarget?: number;
+  totalTTCTarget?: number;
+
   probability: Probability;
   competitorInfo?: string;
   internalNotes: string;
@@ -124,7 +139,7 @@ export interface Quote {
   options: QuoteOption[];
 }
 
-// --- 3. DOSSIER MODELS ---
+// --- 3. DOSSIER MODELS (UNCHANGED) ---
 export type ShipmentStatus = 'BOOKED' | 'PICKUP' | 'AT_POL' | 'ON_WATER' | 'AT_POD' | 'CUSTOMS' | 'DELIVERED' | 'COMPLETED';
 
 export interface ShipmentParty {
@@ -190,7 +205,7 @@ export interface Dossier {
   currency: Currency;
 }
 
-// --- 4. FINANCE ENGINE ---
+// --- 4. FINANCE ENGINE (UNCHANGED) ---
 export type ChargeType = 'INCOME' | 'EXPENSE';
 export type ChargeStatus = 'ESTIMATED' | 'ACCRUED' | 'READY_TO_INVOICE' | 'INVOICED' | 'POSTED' | 'PAID' | 'PARTIAL';
 export type InvoiceStatus = 'DRAFT' | 'ISSUED' | 'SENT' | 'PAID' | 'OVERDUE' | 'CANCELLED';
@@ -239,8 +254,7 @@ export interface Invoice {
     lines: ChargeLine[];
 }
 
-// --- 5. CLIENT INTELLIGENCE MODELS (Moved from Store) ---
-
+// --- 5. CLIENT INTELLIGENCE MODELS (UNCHANGED) ---
 export type ClientStatus = 'ACTIVE' | 'PROSPECT' | 'SUSPENDED' | 'BLACKLISTED';
 export type ClientType = 'SHIPPER' | 'CONSIGNEE' | 'FORWARDER' | 'PARTNER';
 export type SupplierRole = 'SEA_LINE' | 'AIRLINE' | 'HAULIER' | 'FORWARDER';
@@ -308,7 +322,6 @@ export interface OperationalProfile {
   customsRegime: 'STANDARD' | 'TEMPORARY' | 'FREE_ZONE';
 }
 
-// --- MAIN CLIENT INTERFACE ---
 export interface Client {
   id: string;
   created_at: string;
@@ -333,12 +346,8 @@ export interface Client {
   contacts: ClientContact[];
   routes: ClientRoute[];
   documents: ClientDocument[];
-  
-  // Rich Collections (Now Strictly Typed)
   suppliers: ClientSupplier[];
   commodities: ClientCommodity[];
-  
   operational: OperationalProfile;
-  
   activities: ActivityItem[];
 }

@@ -44,6 +44,15 @@ const formatDateCompact = (dateVal?: Date | string) => {
     return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
 };
 
+// FIXED: Strict mapping for VAT to prevent type mismatch
+const mapVatRule = (tariffVat: string): 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | 'DISBURSEMENT' => {
+    if (tariffVat === 'EXPORT_0') return 'EXPORT_0_ART92';
+    if (tariffVat === 'EXEMPT') return 'DISBURSEMENT';
+    if (tariffVat === 'ROAD_14') return 'ROAD_14';
+    if (tariffVat === 'STD_20') return 'STD_20';
+    return 'STD_20'; // Default safe fallback
+};
+
 // --- SUB-COMPONENT: SMART RATE LOOKUP ---
 const SmartRateLookup = ({ 
     onSelect 
@@ -58,7 +67,6 @@ const SmartRateLookup = ({
         if (rates.length === 0) fetchRates();
     }, []);
 
-    // Smart Filter: Match POL, POD, and Mode (approximate for search)
     const matches = rates.filter(r => 
         (r.pol.includes(pol) || pol.includes(r.pol) || r.mode === mode) && r.status === 'ACTIVE'
     );
@@ -130,7 +138,7 @@ const SectionHeader = ({
     hasMatch?: boolean
 }) => (
     <TableRow className="hover:bg-transparent border-b border-slate-200 bg-slate-50/80">
-        <TableCell colSpan={9} className="py-2 pl-3">
+        <TableCell colSpan={10} className="py-2 pl-3">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <div className={cn("p-1 rounded-md", hasMatch ? "bg-emerald-100" : "bg-slate-200")}>
@@ -178,7 +186,7 @@ export function PricingTable() {
   const { 
       items, addLineItem, updateLineItem, removeLineItem, 
       exchangeRates, quoteCurrency, status,
-      equipmentType,
+      equipmentType, chargeableWeight, totalVolume,
       pol, pod, mode, incoterm 
   } = useQuoteStore();
 
@@ -188,12 +196,10 @@ export function PricingTable() {
 
   const isReadOnly = status !== 'DRAFT';
 
-  // Init Data
   useEffect(() => {
       if (rates.length === 0) fetchRates();
   }, []);
 
-  // Watch for Route Changes to find Tariff Match
   useEffect(() => {
     const match = findBestMatch({ 
         pol, 
@@ -205,10 +211,33 @@ export function PricingTable() {
     setMatchingRate(match);
   }, [pol, pod, mode, incoterm, rates]);
 
-  // 1. Bulk Auto-Rate
+  // --- LOGIC: COST CALCULATION ---
+  const calculateChargeCost = (charge: RateCharge) => {
+      let cost = 0;
+      
+      if (charge.basis === 'CONTAINER') {
+          if (equipmentType.includes('20')) cost = charge.price20DV;
+          else if (equipmentType.includes('40') && equipmentType.includes('HC')) cost = charge.price40HC;
+          else if (equipmentType.includes('40')) cost = charge.price40DV;
+          else if (equipmentType.includes('RF')) cost = charge.price40RF;
+          else cost = charge.price40HC; // Fallback
+      } 
+      else if (charge.basis === 'TAXABLE_WEIGHT' || charge.basis === 'WEIGHT') {
+          cost = (charge.unitPrice * chargeableWeight);
+          if (charge.minPrice && cost < charge.minPrice) cost = charge.minPrice;
+      }
+      else if (charge.basis === 'VOLUME') {
+          cost = (charge.unitPrice * totalVolume);
+      }
+      else {
+          cost = charge.unitPrice || 0;
+      }
+      
+      return cost;
+  };
+
   const handleAutoApply = (section: 'FREIGHT' | 'ORIGIN' | 'DESTINATION') => {
       if (!matchingRate) {
-          // DEBUGGING: Help the user understand WHY it failed
           const possibleMatches = rates.filter(r => r.pol === pol && r.pod === pod && r.mode === mode);
           if (possibleMatches.length > 0) {
               const actualScopes = possibleMatches.map(r => r.incoterm).join(', ');
@@ -235,54 +264,52 @@ export function PricingTable() {
           return;
       }
 
-      // Apply charges to the quote
       chargesToApply.forEach(charge => {
-        let buyPrice = 0;
-        // Basic equipment matching logic
-        if (equipmentType.includes('20')) buyPrice = charge.price20DV;
-        else if (equipmentType.includes('40') && equipmentType.includes('HC')) buyPrice = charge.price40HC;
-        else if (equipmentType.includes('40')) buyPrice = charge.price40DV;
-        else buyPrice = charge.price40HC; // Default
-
-        // If Air/Road, use unitPrice or minPrice
-        if (matchingRate.mode === 'AIR' || matchingRate.mode === 'ROAD') {
-            buyPrice = charge.unitPrice || charge.minPrice || 0;
-        }
-
-        // Add line item
-        addLineItem(section);
-        // Note: In a real app we'd need to await the ID or refactor addLineItem to accept data
+        const calculatedCost = calculateChargeCost(charge);
+        
+        addLineItem(section, {
+            description: charge.chargeHead,
+            buyPrice: calculatedCost,
+            buyCurrency: charge.currency as Currency,
+            vendorName: matchingRate.carrierName,
+            source: 'TARIFF',
+            tariffId: matchingRate.id,
+            vatRule: mapVatRule(charge.vatRule), // MAP IT!
+            validityDate: new Date(matchingRate.validTo)
+        });
       });
 
-      toast(`Smart Rate Applied: Found ${chargesToApply.length} charges from ${matchingRate.reference}.`, "success");
+      toast(`Smart Rate Applied: Added ${chargesToApply.length} line(s) from ${matchingRate.reference}.`, "success");
   };
 
-  // 2. Granular Selection
   const handleTariffSelect = (itemId: string, tariff: SupplierRate) => {
-      const baseCharge = tariff.freightCharges[0];
-      if (!baseCharge) {
-          toast("Selected tariff has no freight charges.", "warning");
+      const item = items.find(i => i.id === itemId);
+      if (!item) return;
+
+      let chargePool: RateCharge[] = [];
+      if (item.section === 'ORIGIN') chargePool = tariff.originCharges;
+      else if (item.section === 'FREIGHT') chargePool = tariff.freightCharges;
+      else if (item.section === 'DESTINATION') chargePool = tariff.destCharges;
+
+      if (chargePool.length === 0) {
+          toast(`Selected tariff (${tariff.reference}) has no charges defined for ${item.section}.`, "warning");
           return;
       }
 
-      let selectedPrice = 0;
-      if (equipmentType.includes('20')) selectedPrice = baseCharge.price20DV;
-      else if (equipmentType.includes('40') && equipmentType.includes('HC')) selectedPrice = baseCharge.price40HC;
-      else if (equipmentType.includes('40')) selectedPrice = baseCharge.price40DV;
-      else selectedPrice = baseCharge.price40HC; 
-
-      if (tariff.mode === 'AIR') selectedPrice = baseCharge.unitPrice;
+      const selectedCharge = chargePool[0];
+      const calculatedCost = calculateChargeCost(selectedCharge);
 
       updateLineItem(itemId, {
-          buyPrice: selectedPrice,
-          buyCurrency: tariff.currency as Currency,
+          buyPrice: calculatedCost,
+          buyCurrency: selectedCharge.currency as Currency,
           vendorName: tariff.carrierName,
-          description: `${baseCharge.chargeHead} (${tariff.reference})`,
+          description: `${selectedCharge.chargeHead} (${tariff.reference})`,
           validityDate: new Date(tariff.validTo),
           source: 'TARIFF',
-          tariffId: tariff.id
+          tariffId: tariff.id,
+          vatRule: mapVatRule(selectedCharge.vatRule) // MAP IT!
       });
-      toast(`Linked to tariff: ${tariff.reference}`, "success");
+      toast(`Linked to ${item.section} charge: ${selectedCharge.chargeHead}`, "success");
   };
 
   const calculateSellDetails = (item: QuoteLineItem) => {
@@ -323,7 +350,7 @@ export function PricingTable() {
             key={item.id} 
             className="group border-b border-slate-100 transition-colors hover:bg-blue-50/20 text-[10px]"
         >
-            {/* 1. DESCRIPTION & SOURCE */}
+            {/* 1. DESCRIPTION */}
             <TableCell className="w-[30%] py-0.5 pl-3">
                 <div className="flex items-center gap-2">
                     {isTariff ? (
@@ -363,8 +390,8 @@ export function PricingTable() {
                 />
             </TableCell>
 
-            {/* 3. COST PRICE */}
-            <TableCell className="w-[12%] py-0.5">
+            {/* 3. COST */}
+            <TableCell className="w-[10%] py-0.5">
                 <Input 
                     disabled={isReadOnly}
                     type="number"
@@ -375,7 +402,7 @@ export function PricingTable() {
             </TableCell>
 
             {/* 4. CURRENCY */}
-            <TableCell className="w-[8%] py-0.5">
+            <TableCell className="w-[7%] py-0.5">
                 <Select disabled={isReadOnly} value={item.buyCurrency} onValueChange={(v) => updateLineItem(item.id, { buyCurrency: v as Currency })}>
                     <SelectTrigger className="h-7 border-transparent bg-transparent hover:bg-slate-50 text-[10px] font-bold text-slate-500 shadow-none px-1"><SelectValue /></SelectTrigger>
                     <SelectContent><SelectItem value="MAD">MAD</SelectItem><SelectItem value="USD">USD</SelectItem><SelectItem value="EUR">EUR</SelectItem></SelectContent>
@@ -383,12 +410,12 @@ export function PricingTable() {
             </TableCell>
 
             {/* 5. MARKUP */}
-            <TableCell className="w-[12%] py-0.5">
+            <TableCell className="w-[10%] py-0.5">
                  <div className="flex items-center justify-end gap-1 px-2 group/markup">
                     <Input 
                         disabled={isReadOnly}
                         type="number"
-                        className="h-7 w-16 border-transparent bg-transparent hover:bg-slate-50 focus:bg-white focus:border-emerald-300 text-right text-emerald-700 font-bold font-mono text-xs shadow-none px-0 rounded-sm" 
+                        className="h-7 w-12 border-transparent bg-transparent hover:bg-slate-50 focus:bg-white focus:border-emerald-300 text-right text-emerald-700 font-bold font-mono text-xs shadow-none px-0 rounded-sm" 
                         value={item.markupValue}
                         onChange={(e) => updateLineItem(item.id, { markupValue: parseFloat(e.target.value) || 0 })}
                     />
@@ -401,14 +428,29 @@ export function PricingTable() {
                  </div>
             </TableCell>
 
-            {/* 6. MARGIN HEATMAP */}
+             {/* 6. VAT (RESTORED) */}
+             <TableCell className="w-[10%] py-0.5">
+                <Select disabled={isReadOnly} value={item.vatRule} onValueChange={(v: any) => updateLineItem(item.id, { vatRule: v })}>
+                    <SelectTrigger className="h-7 border-transparent bg-transparent hover:bg-slate-50 text-[10px] text-slate-500 shadow-none px-1">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="STD_20">20%</SelectItem>
+                        <SelectItem value="ROAD_14">14%</SelectItem>
+                        <SelectItem value="EXPORT_0_ART92">0% (Exp)</SelectItem>
+                        <SelectItem value="DISBURSEMENT">Exempt</SelectItem>
+                    </SelectContent>
+                </Select>
+            </TableCell>
+
+            {/* 7. MARGIN */}
             <TableCell className="w-[8%] py-0.5 text-center">
                 <span className={cn("text-[10px] font-mono", marginColor)}>
                     {calc.marginPct.toFixed(1)}%
                 </span>
             </TableCell>
 
-            {/* 7. SELL PRICE */}
+            {/* 8. SELL */}
             <TableCell className="w-[10%] py-0.5 text-right pr-4">
                  <div className="font-mono font-bold text-slate-800 text-sm flex items-center justify-end gap-1 h-7">
                     {calc.finalVal}
@@ -416,7 +458,7 @@ export function PricingTable() {
                  </div>
             </TableCell>
 
-            {/* 8. ACTIONS */}
+            {/* 9. ACTIONS */}
             <TableCell className="w-[5%] py-0.5 pl-0">
                 {!isReadOnly && (
                     <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 hover:bg-red-50" onClick={() => removeLineItem(item.id)}>
@@ -444,6 +486,7 @@ export function PricingTable() {
                     <TableHead className="h-8 text-[9px] font-bold text-slate-400 uppercase tracking-widest text-right">Cost</TableHead>
                     <TableHead className="h-8 text-[9px] font-bold text-slate-400 uppercase tracking-widest">Curr</TableHead>
                     <TableHead className="h-8 text-[9px] font-bold text-slate-400 uppercase tracking-widest text-right">Markup</TableHead>
+                    <TableHead className="h-8 text-[9px] font-bold text-slate-400 uppercase tracking-widest">VAT</TableHead>
                     <TableHead className="h-8 text-[9px] font-bold text-slate-400 uppercase tracking-widest text-center">Margin</TableHead>
                     <TableHead className="h-8 text-[9px] font-bold text-blue-600 uppercase tracking-widest text-right pr-4">Sell</TableHead>
                     <TableHead className="h-8 w-8"></TableHead>
@@ -480,7 +523,7 @@ export function PricingTable() {
                 
                 {items.length === 0 && (
                     <TableRow>
-                        <TableCell colSpan={9} className="h-32 text-center">
+                        <TableCell colSpan={10} className="h-32 text-center">
                             <div className="flex flex-col items-center justify-center text-slate-400 gap-2">
                                 <Zap className="h-6 w-6 opacity-20" />
                                 <span className="text-xs">No line items. Use Auto-Rate to fetch tariff data.</span>

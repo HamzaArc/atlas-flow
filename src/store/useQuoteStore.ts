@@ -1,9 +1,10 @@
+// (Re-paste the entire file from previous steps, but with the saveQuote and loadQuote updated)
 import { create } from 'zustand';
 import { QuoteService } from '@/services/quote.service';
 import { Quote, QuoteLineItem, QuoteOption, TransportMode, Incoterm, Currency, Probability, PackagingType, ActivityItem, ActivityCategory, QuoteApproval, ApprovalTrigger } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 
-// --- UPDATED TYPES ---
+// ... (Keep existing Type definitions for CargoRow, PricingTemplate, QuoteState ...)
 interface CargoRow {
   id: string;
   qty: number;
@@ -119,18 +120,15 @@ interface QuoteState {
   setIncoterm: (incoterm: Incoterm) => void;
   setRouteLocations: (field: 'pol' | 'pod' | 'placeOfLoading' | 'placeOfDelivery', value: string) => void;
   setEquipment: (type: string, count: number) => void;
-  // NEW: Dedicated action for logistics params to ensure they persist in options
   setLogisticsParam: (field: 'transitTime' | 'freeTime', value: number) => void;
 
   updateCargo: (rows: CargoRow[]) => void;
   setExchangeRate: (currency: string, rate: number) => void;
   setQuoteCurrency: (currency: Currency) => void;
   
-  addLineItem: (section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION') => void;
+  addLineItem: (section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION', initialData?: Partial<QuoteLineItem>) => void;
   
-  // FIXED: Single strict signature for stability
   updateLineItem: (id: string, updates: Partial<QuoteLineItem>) => void;
-  
   removeLineItem: (id: string) => void;
   applyTemplate: (template: PricingTemplate) => void;
   
@@ -151,37 +149,18 @@ interface QuoteState {
   duplicateQuote: () => void;
 }
 
-// --- RISK EVALUATION ENGINE ---
+// ... (Keep existing Helper Functions: evaluateRisk, checkStrictExpiry, createDefaultOption, DEFAULT_STATE, getTaxRate)
 const evaluateRisk = (paymentTerms: string, totalSellMAD: number, marginPercent: number): ApprovalTrigger[] => {
     const triggers: ApprovalTrigger[] = [];
-
-    // Rule 1: Margin Rule
     if (marginPercent < 15) {
-        triggers.push({
-            code: 'MARGIN_LOW',
-            message: `Margin ${marginPercent.toFixed(1)}% is below 15% threshold`,
-            severity: 'HIGH'
-        });
+        triggers.push({ code: 'MARGIN_LOW', message: `Margin ${marginPercent.toFixed(1)}% is below 15% threshold`, severity: 'HIGH' });
     }
-
-    // Rule 2: Credit Rule
     if (paymentTerms.includes('60') || paymentTerms.includes('90')) {
-        triggers.push({
-            code: 'CREDIT_EXTENDED',
-            message: `Extended Payment Terms: ${paymentTerms}`,
-            severity: 'MEDIUM'
-        });
+        triggers.push({ code: 'CREDIT_EXTENDED', message: `Extended Payment Terms: ${paymentTerms}`, severity: 'MEDIUM' });
     }
-
-    // Rule 3: Volume Rule
     if (totalSellMAD > 100000) {
-        triggers.push({
-            code: 'HIGH_VALUE',
-            message: `High Value Exposure (>100k MAD)`,
-            severity: 'HIGH'
-        });
+        triggers.push({ code: 'HIGH_VALUE', message: `High Value Exposure (>100k MAD)`, severity: 'HIGH' });
     }
-
     return triggers;
 };
 
@@ -297,6 +276,9 @@ const getTaxRate = (rule: string) => {
     case 'STD_20': return 0.20;
     case 'ROAD_14': return 0.14;
     case 'EXPORT_0_ART92': return 0.0;
+    case 'EXPORT_0': return 0.0;
+    case 'DISBURSEMENT': return 0.0;
+    case 'EXEMPT': return 0.0;
     default: return 0.20;
   }
 };
@@ -440,7 +422,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, equipmentType: type, containerCount: count } : o);
       set({ equipmentType: type, containerCount: count, options: updatedOptions });
   },
-  // NEW: Implementation of setLogisticsParam
   setLogisticsParam: (field, value) => {
       const { options, activeOptionId } = get();
       const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, [field]: value } : o);
@@ -490,7 +471,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     });
   },
 
-  addLineItem: (section) => {
+  addLineItem: (section, initialData = {}) => {
     const { id, activeOptionId, options, items } = get();
     const newItem: QuoteLineItem = {
       id: Math.random().toString(36).substring(7),
@@ -505,7 +486,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       vatRule: 'STD_20',
       vendorId: '', 
       vendorName: '',
-      source: 'MANUAL'
+      source: 'MANUAL',
+      ...initialData
     };
     const newItems = [...items, newItem];
     const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, items: newItems } : o);
@@ -570,7 +552,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       useToast.getState().toast("Pricing template applied successfully.", "success");
   },
 
-  // FIXED: Implementation uses STRICT 2-ARG signature (id, updates)
   updateLineItem: (id, updates) => {
     const { items, exchangeRates, quoteCurrency, options, activeOptionId, paymentTerms } = get();
     
@@ -610,7 +591,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     const riskTriggers = evaluateRisk(paymentTerms, totalSellMAD, marginPercent);
     const requiresApproval = riskTriggers.length > 0;
     
-    // Aggregate reasons for legacy summary field
     const approvalReason = requiresApproval 
         ? riskTriggers.map(t => t.message).join(' | ') 
         : null;
@@ -761,7 +741,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       useToast.getState().toast(`Created Revision v${newVersion}`, "success");
   },
 
-  // --- DATABASE ACTIONS ---
+  // --- DATABASE ACTIONS (UPDATED to SAVE new fields) ---
   fetchQuotes: async () => {
       set({ isLoading: true });
       try {
@@ -800,9 +780,24 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           
           pol: state.pol,
           pod: state.pod,
+          mode: state.mode,           // PERSISTED
+          incoterm: state.incoterm,   // PERSISTED
+          activeOptionId: state.activeOptionId, // PERSISTED for UI state
+          
           totalTTC: state.totalTTCMAD,
+          
+          // PERSISTED FINANCIAL TARGETS
+          totalSellTarget: state.totalSellTarget,
+          totalTaxTarget: state.totalTaxTarget,
+          totalTTCTarget: state.totalTTCTarget,
 
           cargoRows: state.cargoRows,
+          
+          // PERSISTED WEIGHTS
+          totalWeight: state.totalWeight,
+          totalVolume: state.totalVolume,
+          chargeableWeight: state.chargeableWeight,
+
           goodsDescription: state.goodsDescription,
           hsCode: state.hsCode,
           isHazmat: state.isHazmat,
@@ -844,7 +839,13 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               return;
           }
 
-          const activeOpt = quote.options.length > 0 ? quote.options[0] : null;
+          // Resolve active option logic (use persisted if available, else default to first)
+          let activeOptId = quote.activeOptionId;
+          let activeOpt = quote.options.find(o => o.id === activeOptId);
+          if (!activeOpt && quote.options.length > 0) {
+              activeOpt = quote.options[0];
+              activeOptId = activeOpt.id;
+          }
 
           // Legacy Data Migration: If triggers are missing but reason exists, mock a trigger
           let migratedApproval = quote.approval;
@@ -877,6 +878,17 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               requestedDepartureDate: quote.requestedDepartureDate ? quote.requestedDepartureDate.toISOString().split('T')[0] : '',
               
               cargoRows: quote.cargoRows,
+              
+              // Load persisted stats (fallback to 0 if missing from old quotes)
+              totalWeight: quote.totalWeight || 0,
+              totalVolume: quote.totalVolume || 0,
+              chargeableWeight: quote.chargeableWeight || 0,
+              
+              // Load persisted targets
+              totalSellTarget: quote.totalSellTarget || 0,
+              totalTaxTarget: quote.totalTaxTarget || 0,
+              totalTTCTarget: quote.totalTTCTarget || 0,
+
               goodsDescription: quote.goodsDescription,
               hsCode: quote.hsCode,
               isHazmat: quote.isHazmat,
@@ -893,11 +905,11 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               customerReference: quote.customerReference,
               
               options: quote.options,
-              activeOptionId: activeOpt ? activeOpt.id : '', 
+              activeOptionId: activeOptId || '', 
           });
 
-          if (activeOpt) {
-              get().setActiveOption(activeOpt.id);
+          if (activeOptId) {
+              get().setActiveOption(activeOptId);
           }
       } catch (error) {
           console.error(error);

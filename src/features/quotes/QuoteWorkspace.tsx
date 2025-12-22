@@ -15,6 +15,8 @@ import { QuotePDF } from './components/QuotePDF';
 
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { pdf } from '@react-pdf/renderer';
+import { Quote } from "@/types/index";
+import { useToast } from "@/components/ui/use-toast";
 
 // UI Components
 import { Button } from "@/components/ui/button";
@@ -34,10 +36,12 @@ interface QuoteWorkspaceProps {
 export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
   const { 
       // Financials
-      totalSellMAD, totalMarginMAD, totalSellTarget, totalTTCTarget, quoteCurrency,
+      totalSellMAD, totalMarginMAD, totalSellTarget, totalTTCTarget, totalTaxTarget, quoteCurrency,
       // Data
-      items, pol, pod, mode, incoterm, reference, clientName, validityDate,
-      exchangeRates, setExchangeRate, totalWeight, totalVolume, marginBuffer,
+      reference, clientName, validityDate, pol, pod, mode, incoterm,
+      totalWeight, totalVolume, marginBuffer, exchangeRates, setExchangeRate,
+      // Cargo
+      cargoRows, // IMPORTED FROM STORE
       // Workflow
       hasExpiredRates,
       // Options
@@ -46,22 +50,83 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
 
   const [viewMode, setViewMode] = useState<'EDITOR' | 'COMPARE'>('EDITOR');
   const [activeTab, setActiveTab] = useState("logistics");
+  const { toast } = useToast();
 
   const marginPercent = totalSellMAD > 0 ? ((totalMarginMAD / totalSellMAD) * 100).toFixed(1) : "0.0";
-  const activeOption = options.find(o => o.id === activeOptionId);
-  const optionName = activeOption?.name || mode;
-  
-  // Logic for highlighting critical cargo modes
   const isCriticalMode = mode === 'AIR' || mode === 'SEA_LCL';
 
-  // --- PDF GENERATION ---
+  // --- PDF GENERATION (UPDATED) ---
   const handleGeneratePDF = async () => {
-    const blob = await pdf(
-      <QuotePDF 
-        reference={reference} clientName={clientName || "Unknown Client"} pol={pol} pod={pod} mode={mode} incoterm={incoterm} items={items} totalHT={totalSellTarget} totalTax={0} totalTTC={totalTTCTarget} currency={quoteCurrency} validityDate={new Date(validityDate).toLocaleDateString()} weight={totalWeight} volume={totalVolume} exchangeRates={exchangeRates} marginBuffer={marginBuffer} optionName={optionName}
-      />
-    ).toBlob();
-    window.open(URL.createObjectURL(blob), '_blank');
+    const newWindow = window.open('', '_blank');
+    if (!newWindow) {
+        toast("Popup Blocked! Please allow popups.", "error");
+        return;
+    }
+
+    newWindow.document.write(`
+        <html>
+            <head><title>Generating Quote...</title></head>
+            <body style="display:flex;justify-content:center;align-items:center;height:100vh;margin:0;font-family:sans-serif;background:#f1f5f9;">
+                <div style="text-align:center;">
+                    <div style="font-size:20px;font-weight:600;color:#0f172a;margin-bottom:8px;">Generating PDF...</div>
+                </div>
+            </body>
+        </html>
+    `);
+
+    try {
+        // Construct FULL Data Object including CARGO ROWS
+        const pdfData: Quote = {
+            id: 'preview-mode',
+            reference: reference,
+            masterReference: reference,
+            version: 1,
+            status: 'DRAFT',
+            
+            clientId: 'preview',
+            clientName: clientName || 'Unknown Client',
+            paymentTerms: '30 Days',
+            salespersonId: 'user-1',
+            salespersonName: 'Youssef (Sales)',
+
+            validityDate: new Date(validityDate),
+            cargoReadyDate: new Date(),
+
+            pol, pod, mode, incoterm,
+            
+            // INJECT CARGO DATA
+            cargoRows: cargoRows || [], 
+            totalWeight,
+            totalVolume,
+            
+            totalSellTarget,
+            totalTaxTarget,
+            totalTTCTarget,
+
+            activeOptionId,
+            options,
+
+            goodsDescription: '',
+            packagingType: 'PALLETS',
+            isHazmat: false,
+            isReefer: false,
+            isStackable: false,
+            insuranceRequired: false,
+            probability: 'MEDIUM',
+            internalNotes: '',
+            activities: [],
+            approval: { requiresApproval: false, triggers: [], reason: null }
+        };
+
+        const blob = await pdf(<QuotePDF data={pdfData} />).toBlob();
+        const url = URL.createObjectURL(blob);
+        newWindow.location.href = url;
+        
+    } catch (error) {
+        console.error("PDF Fail:", error);
+        newWindow.close();
+        toast("Failed to generate PDF.", "error");
+    }
   };
 
   const getModeIcon = (m: string) => {
@@ -70,14 +135,12 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
       return <Ship className="h-3 w-3" />;
   }
 
-  // Modern Enterprise Card Style
   const modernCardClass = "bg-white border border-slate-200 shadow-[0_2px_15px_rgba(0,0,0,0.04)] rounded-xl overflow-hidden h-full flex flex-col transition-all duration-200";
 
   return (
     <div className="h-screen flex flex-col bg-slate-50/50 overflow-hidden font-sans">
       <QuoteHeader onBack={onBack} />
 
-      {/* --- 1. OPTION TABS (CONTEXT SWITCHER) --- */}
       <div className="bg-white border-b border-slate-200 px-6 py-2 flex items-center justify-between shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.02)] z-10">
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar mask-gradient-r flex-1">
               {options.map((opt, idx) => (
@@ -120,10 +183,8 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
           </div>
       </div>
 
-      {/* --- 2. MAIN TABS & CONTENT --- */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
           
-          {/* Tab Navigation */}
           <div className="px-6 pt-4 shrink-0">
             <TabsList className="inline-flex h-9 items-center justify-center rounded-lg bg-slate-200/50 p-1 text-slate-500">
                 <TabsTrigger value="logistics" className="gap-2 px-4 text-xs font-semibold data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm rounded-md transition-all">
@@ -138,18 +199,13 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
             </TabsList>
           </div>
 
-          {/* --- TAB 1: LOGISTICS & CARGO (Full Width Split) --- */}
           <TabsContent value="logistics" className="flex-1 p-6 min-h-0 data-[state=inactive]:hidden animate-in fade-in duration-300">
               <div className="h-full grid grid-cols-12 gap-6 min-h-0 w-full">
-                  
-                  {/* Left Pane: Route & Schedule */}
                   <div className="col-span-12 lg:col-span-4 h-full flex flex-col min-h-0">
                       <div className={modernCardClass}>
                           <RouteSelector />
                       </div>
                   </div>
-
-                  {/* Right Pane: Cargo Manifest */}
                   <div className="col-span-12 lg:col-span-8 h-full flex flex-col min-h-0">
                       <div className={cn(modernCardClass, isCriticalMode && "ring-2 ring-amber-400/30 bg-amber-50/10")}>
                           <CargoEngine />
@@ -158,10 +214,8 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
               </div>
           </TabsContent>
 
-          {/* --- TAB 2: COMMERCIAL OFFER --- */}
           <TabsContent value="commercial" className="flex-1 flex flex-col min-h-0 data-[state=inactive]:hidden bg-slate-50/30 animate-in fade-in duration-300">
              
-             {/* Toolbar inside Commercial Tab */}
              <div className="px-6 py-3 flex justify-between items-center bg-white border-b border-slate-200 shrink-0 shadow-sm z-10">
                 <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
                     <button onClick={() => setViewMode('EDITOR')} className={cn("px-4 py-1.5 rounded-[6px] text-xs font-bold flex items-center gap-2 transition-all", viewMode === 'EDITOR' ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
@@ -208,20 +262,17 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
                 </div>
              </div>
 
-             {/* Main Content Area */}
              <div className="flex-1 overflow-hidden relative bg-slate-50/50">
                 {viewMode === 'COMPARE' ? (
                     <QuoteComparison onSelect={() => setViewMode('EDITOR')} />
                 ) : (
                     <div className="h-full flex flex-col w-full">
                         <div className="flex-1 overflow-hidden p-6">
-                             {/* Pricing Table with Modern Shell */}
                              <div className={modernCardClass}>
                                 <PricingTable />
                              </div>
                         </div>
                         
-                        {/* FOOTER TOTALS (Sticky Bottom) */}
                         <div className="h-20 border-t border-slate-200 flex bg-white shrink-0 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.05)] z-20 px-8 items-center">
                              <div className="w-64 flex flex-col justify-center border-r border-slate-100 pr-8">
                                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mb-1">Estimated Margin</span>
@@ -255,7 +306,6 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
              </div>
           </TabsContent>
 
-          {/* --- TAB 3: SUMMARY & AUDIT --- */}
           <TabsContent value="summary" className="flex-1 min-h-0 data-[state=inactive]:hidden animate-in fade-in duration-300">
               <div className="w-full h-full">
                   <QuoteSummaryTab />
