@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -8,13 +9,15 @@ import { useQuoteStore } from "@/store/useQuoteStore";
 import { 
     Package, Plus, Trash2, 
     Layers, Scale, Thermometer,
-    ArrowDownToLine, Zap
+    ArrowDownToLine, Zap, Wand2, ShieldAlert, CheckCircle2, Info, Loader2
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch"; 
 import { PackagingType } from "@/types/index";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ComplianceService, ComplianceResult } from "@/services/compliance.service";
+import { useToast } from "@/components/ui/use-toast";
 
 // --- PACKING OPTIONS ---
 const PACKAGE_TYPES: { value: PackagingType; label: string }[] = [
@@ -29,8 +32,14 @@ export function CargoEngine() {
   const { 
       cargoRows, updateCargo, totalVolume, totalWeight, chargeableWeight, totalPackages,
       hsCode, isHazmat, isReefer, temperature, densityRatio,
-      setIdentity, mode
+      setIdentity, mode, goodsDescription
   } = useQuoteStore();
+  
+  // Use the simpler toast hook from your project
+  const { toast } = useToast();
+
+  const [isClassifying, setIsClassifying] = useState(false);
+  const [complianceResult, setComplianceResult] = useState<ComplianceResult | null>(null);
 
   const addRow = () => {
     const newRow = { 
@@ -56,9 +65,54 @@ export function CargoEngine() {
       updateCargo(cargoRows.filter(r => r.id !== id));
   };
 
+  const handleAutoClassify = async () => {
+    if (!goodsDescription || goodsDescription.length < 3) {
+      // FIXED: Adapted to your toast signature (message, type)
+      toast("Description too short. Please enter a valid goods description.", "error");
+      return;
+    }
+
+    setIsClassifying(true);
+    setComplianceResult(null);
+
+    try {
+      const result = await ComplianceService.suggestHSCode(goodsDescription);
+      
+      if (result) {
+        setComplianceResult(result);
+        
+        // Auto-apply logic
+        if (result.confidence === 'HIGH') {
+            setIdentity('hsCode', result.code);
+            
+            if (result.isHazmat && !isHazmat) {
+                setIdentity('isHazmat', true);
+                // FIXED: Adapted to your toast signature
+                toast("Compliance Alert: Dangerous Goods flag auto-enabled.", "warning");
+            }
+            
+            if (result.requiresTemperature && !isReefer) {
+                setIdentity('isReefer', true);
+                setIdentity('temperature', "4"); // Default to typical cool chain
+                // FIXED: Adapted to your toast signature
+                toast("Compliance Alert: Reefer requirement detected.", "info");
+            }
+        }
+      } else {
+        // FIXED: Adapted to your toast signature
+        toast("No Match Found: Could not classify this item.", "warning");
+      }
+    } catch (error) {
+      console.error(error);
+      // FIXED: Adapted to your toast signature
+      toast("Service Error: Classification service unavailable.", "error");
+    } finally {
+      setIsClassifying(false);
+    }
+  };
+
   const isCritical = mode === 'AIR' || mode === 'SEA_LCL';
 
-  // --- UPDATED: Main div instead of Card with borders ---
   return (
     <div className="h-full flex flex-col bg-transparent overflow-hidden">
       
@@ -71,7 +125,7 @@ export function CargoEngine() {
               </div>
               <span className="tracking-widest">Cargo Manifest</span>
             </div>
-            {isHazmat && <Badge variant="destructive" className="h-5 px-1.5 text-[9px]">IMO / ADR</Badge>}
+            {isHazmat && <Badge variant="destructive" className="h-5 px-1.5 text-[9px] animate-pulse">IMO / ADR</Badge>}
           </div>
           
           {/* Quick Stats Grid */}
@@ -104,13 +158,84 @@ export function CargoEngine() {
       <ScrollArea className="flex-1 bg-white">
           <div className="p-5 space-y-5">
               
-              {/* Global Settings */}
-              <div className="space-y-3 p-4 bg-slate-50 border border-slate-100 rounded-lg">
+              {/* Compliance & Identity Section */}
+              <div className="space-y-4 p-4 bg-slate-50 border border-slate-100 rounded-lg">
+                  
+                  {/* GOODS DESCRIPTION + AI WAND */}
+                  <div className="space-y-1.5">
+                      <Label className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">Goods Description</Label>
+                      <div className="flex gap-2">
+                          <Input 
+                              className="h-9 text-xs bg-white border-slate-200 focus:bg-white" 
+                              placeholder="E.g. Leather Shoes, Laptop, Mangoes..."
+                              value={goodsDescription}
+                              onChange={(e) => setIdentity('goodsDescription', e.target.value)}
+                          />
+                          <Button 
+                              size="sm" 
+                              onClick={handleAutoClassify}
+                              disabled={isClassifying}
+                              className="h-9 bg-violet-600 hover:bg-violet-700 text-white shadow-sm border border-violet-700"
+                          >
+                              {isClassifying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5 mr-1.5" />}
+                              Classify
+                          </Button>
+                      </div>
+                  </div>
+
+                  {/* AI COMPLIANCE CARD RESULT */}
+                  {complianceResult && (
+                      <div className={cn(
+                          "rounded-md border p-3 flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300",
+                          complianceResult.confidence === 'HIGH' ? "bg-violet-50/50 border-violet-100" : "bg-amber-50/50 border-amber-100"
+                      )}>
+                          <div className="flex items-start justify-between">
+                              <div>
+                                  <div className="flex items-center gap-2 mb-1">
+                                      <span className="text-sm font-mono font-bold text-slate-800">{complianceResult.code}</span>
+                                      <Badge variant="outline" className={cn(
+                                          "text-[9px] h-4 px-1.5 border-0",
+                                          complianceResult.confidence === 'HIGH' ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                                      )}>
+                                          {complianceResult.confidence === 'HIGH' ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <ShieldAlert className="h-3 w-3 mr-1" />}
+                                          {complianceResult.confidence} CONFIDENCE
+                                      </Badge>
+                                  </div>
+                                  <p className="text-[10px] font-medium text-slate-700 leading-tight">{complianceResult.title}</p>
+                              </div>
+                              <div className="text-right">
+                                  <div className="text-[9px] text-slate-400 font-bold uppercase">Duty Rate</div>
+                                  <div className="text-[10px] font-bold text-slate-700">{complianceResult.dutyRate}</div>
+                              </div>
+                          </div>
+                          
+                          <p className="text-[10px] text-slate-500 italic border-l-2 border-slate-300 pl-2">
+                              {complianceResult.description}
+                          </p>
+
+                          {/* Critical Alerts */}
+                          {(complianceResult.restrictions.length > 0 || complianceResult.isHazmat) && (
+                              <div className="mt-1 pt-2 border-t border-slate-200/50 space-y-1">
+                                  {complianceResult.isHazmat && (
+                                      <div className="flex items-center gap-1.5 text-[10px] text-red-600 font-bold">
+                                          <ShieldAlert className="h-3 w-3" />
+                                          HAZMAT DETECTED - DOCUMENTATION REQUIRED
+                                      </div>
+                                  )}
+                                  {complianceResult.restrictions.map((res, i) => (
+                                      <div key={i} className="flex items-center gap-1.5 text-[10px] text-amber-600 font-medium">
+                                          <Info className="h-3 w-3" />
+                                          {res}
+                                      </div>
+                                  ))}
+                              </div>
+                          )}
+                      </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-5">
-                      
                       {/* HS CODE SECTION */}
                       <div className="space-y-1.5">
-                          {/* Header aligns with Temp Header */}
                           <div className="flex items-center h-5">
                               <Label className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">HS Code</Label>
                           </div>

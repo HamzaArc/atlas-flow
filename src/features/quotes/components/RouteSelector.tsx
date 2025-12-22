@@ -143,7 +143,7 @@ export function RouteSelector() {
       equipmentType, containerCount,
       transitTime, freeTime,
       totalWeight, totalVolume,
-      setMode, setIncoterm, setRouteLocations, setEquipment, setIdentity,
+      setMode, setIncoterm, setRouteLocations, setEquipment, setIdentity, setLogisticsParam, // Added setLogisticsParam
       requestedDepartureDate, estimatedArrivalDate 
   } = useQuoteStore();
 
@@ -320,7 +320,7 @@ export function RouteSelector() {
                       <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Free Time</Label>
                       <div className="relative">
                           <Input type="number" className="h-8 text-xs pl-8 bg-slate-50 border-transparent hover:bg-white hover:border-slate-200 transition-all" placeholder="0" 
-                              value={freeTime} onChange={(e) => setIdentity('freeTime', parseInt(e.target.value))}
+                              value={freeTime} onChange={(e) => setLogisticsParam('freeTime', parseInt(e.target.value) || 0)} // CHANGED
                           />
                           <Anchor className="absolute left-2.5 top-2 h-4 w-4 text-slate-400" />
                           <span className="absolute right-3 top-2 text-[10px] text-slate-400 font-medium">Days</span>
@@ -333,7 +333,7 @@ export function RouteSelector() {
                   <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Est. Transit</Label>
                   <div className="relative">
                       <Input type="number" className="h-8 text-xs pl-8 bg-slate-50 border-transparent hover:bg-white hover:border-slate-200 transition-all" placeholder="0" 
-                          value={transitTime} onChange={(e) => setIdentity('transitTime', parseInt(e.target.value))}
+                          value={transitTime} onChange={(e) => setLogisticsParam('transitTime', parseInt(e.target.value) || 0)} // CHANGED
                       />
                       <Clock className="absolute left-2.5 top-2 h-4 w-4 text-slate-400" />
                       <span className="absolute right-3 top-2 text-[10px] text-slate-400 font-medium">Days</span>

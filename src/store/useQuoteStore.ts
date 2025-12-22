@@ -119,6 +119,8 @@ interface QuoteState {
   setIncoterm: (incoterm: Incoterm) => void;
   setRouteLocations: (field: 'pol' | 'pod' | 'placeOfLoading' | 'placeOfDelivery', value: string) => void;
   setEquipment: (type: string, count: number) => void;
+  // NEW: Dedicated action for logistics params to ensure they persist in options
+  setLogisticsParam: (field: 'transitTime' | 'freeTime', value: number) => void;
 
   updateCargo: (rows: CargoRow[]) => void;
   setExchangeRate: (currency: string, rate: number) => void;
@@ -404,6 +406,13 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, equipmentType: type, containerCount: count } : o);
       set({ equipmentType: type, containerCount: count, options: updatedOptions });
   },
+  // NEW: Implementation of setLogisticsParam
+  setLogisticsParam: (field, value) => {
+      const { options, activeOptionId } = get();
+      const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, [field]: value } : o);
+      set({ [field]: value, options: updatedOptions });
+  },
+
   setExchangeRate: (currency, rate) => {
     const { options, activeOptionId, exchangeRates } = get();
     const newRates = { ...exchangeRates, [currency]: rate };
