@@ -185,7 +185,8 @@ const SmartPortSelector = ({
                 {PORT_DB.map((port) => (
                   <CommandItem
                     key={port.id}
-                    value={`${port.name} ${port.code}`}
+                    // FIXED: Replaced port.name with port.id since name doesn't exist
+                    value={`${port.id} ${port.code}`}
                     onSelect={() => {
                       onChange(port.id);
                       setOpen(false);
@@ -195,7 +196,8 @@ const SmartPortSelector = ({
                     <div className="flex items-center w-full gap-2">
                       <div className={cn("w-1 h-8 rounded-full", port.tier ? "bg-blue-500" : "bg-slate-300")} />
                       <div className="flex flex-col">
-                        <span className="font-bold text-slate-700">{port.name}</span>
+                        {/* FIXED: Replaced port.name with port.id */}
+                        <span className="font-bold text-slate-700">{port.id}</span>
                         <span className="text-[10px] text-slate-400 flex items-center gap-1">
                           {port.country} • <span className="font-mono text-blue-500">{port.code}</span>
                         </span>

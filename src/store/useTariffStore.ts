@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { SupplierRate, RateCharge } from '@/types/tariff';
+import { SupplierRate, RateCharge, RateMode } from '@/types/tariff';
 import { useToast } from "@/components/ui/use-toast";
 import { TariffService } from '@/services/tariff.service';
 
@@ -15,19 +15,19 @@ interface TariffState {
     saveRate: () => Promise<void>;
     deleteRate: (id: string) => Promise<void>;
 
-    // Editor Actions - STRICT TYPING
+    // Editor Actions
     updateRateField: <K extends keyof SupplierRate>(field: K, value: SupplierRate[K]) => void;
-    
     addChargeRow: (section: 'freightCharges' | 'originCharges' | 'destCharges') => void;
-    
     updateChargeRow: <K extends keyof RateCharge>(
         section: 'freightCharges' | 'originCharges' | 'destCharges', 
         id: string, 
         field: K, 
         value: RateCharge[K]
     ) => void;
-    
     removeChargeRow: (section: 'freightCharges' | 'originCharges' | 'destCharges', id: string) => void;
+
+    // Smart Pricing Selector
+    findBestMatch: (params: { pol: string; pod: string; mode: string; date: Date }) => SupplierRate | undefined;
 }
 
 const EMPTY_RATE: SupplierRate = {
@@ -90,7 +90,6 @@ export const useTariffStore = create<TariffState>((set, get) => ({
         useToast.getState().toast("Rate deleted", "info");
     },
 
-    // --- STRICT TYPE SAFETY IMPLEMENTATION ---
     updateRateField: (field, value) => {
         set(state => state.activeRate ? ({ activeRate: { ...state.activeRate, [field]: value } }) : {});
     },
@@ -98,7 +97,20 @@ export const useTariffStore = create<TariffState>((set, get) => ({
     addChargeRow: (section) => {
         set(state => {
             if (!state.activeRate) return {};
-            const newRow = TariffService.createChargeRow(state.activeRate.currency);
+            // Updated to default to CONTAINER basis for FCL, WEIGHT for Air
+            const mode = state.activeRate.mode;
+            const defaultBasis = mode === 'AIR' ? 'TAXABLE_WEIGHT' : 'CONTAINER';
+            
+            const newRow: RateCharge = {
+                id: Math.random().toString(36).substr(2, 9),
+                chargeHead: 'New Charge',
+                isSurcharge: false,
+                basis: defaultBasis,
+                price20DV: 0, price40DV: 0, price40HC: 0, price40RF: 0,
+                unitPrice: 0, percentage: 0,
+                currency: state.activeRate.currency
+            };
+            
             return {
                 activeRate: {
                     ...state.activeRate,
@@ -132,5 +144,32 @@ export const useTariffStore = create<TariffState>((set, get) => ({
                 }
             };
         });
+    },
+
+    // --- INTELLIGENCE LAYER ---
+    findBestMatch: ({ pol, pod, mode, date }) => {
+        const { rates } = get();
+        // 1. Filter by Route & Mode & Status
+        const candidates = rates.filter(r => 
+            r.status === 'ACTIVE' &&
+            r.mode === mode &&
+            r.pol.toLowerCase() === pol.toLowerCase() &&
+            r.pod.toLowerCase() === pod.toLowerCase()
+        );
+
+        if (candidates.length === 0) return undefined;
+
+        // 2. Filter by Validity
+        const validCandidates = candidates.filter(r => {
+            const from = new Date(r.validFrom);
+            const to = new Date(r.validTo);
+            return date >= from && date <= to;
+        });
+
+        // 3. Selection Strategy: Prioritize Contracts over Spot, then newest
+        return validCandidates.sort((a, b) => {
+            if (a.type !== b.type) return a.type === 'CONTRACT' ? -1 : 1;
+            return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+        })[0];
     }
 }));
