@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { QuoteService } from '@/services/quote.service'; // NEW SERVICE IMPORT
+import { QuoteService } from '@/services/quote.service';
 import { Quote, QuoteLineItem, QuoteOption, TransportMode, Incoterm, Currency, Probability, PackagingType, ActivityItem, ActivityCategory, QuoteApproval } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 
@@ -15,16 +15,14 @@ interface CargoRow {
   isStackable: boolean; 
 }
 
-// TEMPLATE TYPES
 type PricingTemplate = 'IMPORT_STD' | 'EXPORT_STD' | 'CROSS_TRADE' | 'CLEARANCE_ONLY';
 
-// Define the shape of the Store
 interface QuoteState {
   // --- DATABASE STATE ---
   quotes: Quote[];
   isLoading: boolean;
 
-  // --- EDITOR STATE (Global RFQ Context) ---
+  // --- EDITOR STATE ---
   id: string;
   reference: string;
   masterReference: string; 
@@ -35,12 +33,14 @@ interface QuoteState {
   // CRM & Identity
   clientId: string;
   clientName: string;
+  clientTaxId?: string; 
+  clientIce?: string;
   paymentTerms: string;
   salespersonId: string;
   salespersonName: string;
   
-  // Dates & KPIs (Global)
-  validityDate: string; // Stored as string for Input Date Picker compatibility, converted on save
+  // Dates
+  validityDate: string;
   cargoReadyDate: string;
   requestedDepartureDate: string;
   estimatedDepartureDate: string;
@@ -49,7 +49,7 @@ interface QuoteState {
   probability: Probability;
   competitorInfo: string;
   
-  // Cargo Specifics
+  // Cargo
   goodsDescription: string; 
   hsCode: string;
   isHazmat: boolean;
@@ -65,7 +65,7 @@ interface QuoteState {
   options: QuoteOption[];
   activeOptionId: string;
 
-  // --- FACADE PROPERTIES (Mapped to Active Option) ---
+  // --- FACADE PROPERTIES ---
   mode: TransportMode;
   incoterm: Incoterm;
   pol: string;
@@ -82,41 +82,39 @@ interface QuoteState {
   marginBuffer: number;
   quoteCurrency: Currency; 
 
-  // Calculated Fields
+  // Calculated
   totalVolume: number;
   totalWeight: number;
   totalPackages: number; 
   chargeableWeight: number;
   densityRatio: number; 
   
-  // Internal Reporting (MAD)
+  // Financials
   totalCostMAD: number;
   totalSellMAD: number;
   totalMarginMAD: number;
   totalTaxMAD: number; 
   totalTTCMAD: number; 
   
-  // Client Facing (Target)
   totalSellTarget: number; 
   totalTaxTarget: number;  
   totalTTCTarget: number;  
 
-  // Workflow Engine
+  // Workflow
   approval: QuoteApproval;
   activities: ActivityItem[];
   hasExpiredRates: boolean;
 
   // --- ACTIONS ---
   setIdentity: (field: string, value: any) => void;
+  setClientSnapshot: (data: { id: string, name: string, terms: string, taxId?: string, ice?: string }) => void;
   setStatus: (status: QuoteState['status']) => void;
   
-  // Option Management
   createOption: (mode: TransportMode) => void;
   setActiveOption: (optionId: string) => void;
   removeOption: (optionId: string) => void;
   duplicateOption: (optionId: string) => void;
 
-  // Active Option Setters
   setMode: (mode: TransportMode) => void; 
   setIncoterm: (incoterm: Incoterm) => void;
   setRouteLocations: (field: 'pol' | 'pod' | 'placeOfLoading' | 'placeOfDelivery', value: string) => void;
@@ -127,7 +125,10 @@ interface QuoteState {
   setQuoteCurrency: (currency: Currency) => void;
   
   addLineItem: (section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION') => void;
-  updateLineItem: (id: string, field: keyof QuoteLineItem, value: any) => void;
+  
+  // FIXED: Single strict signature for stability
+  updateLineItem: (id: string, updates: Partial<QuoteLineItem>) => void;
+  
   removeLineItem: (id: string) => void;
   applyTemplate: (template: PricingTemplate) => void;
   
@@ -148,11 +149,9 @@ interface QuoteState {
   duplicateQuote: () => void;
 }
 
-// Helper: Check for expired items
 const checkStrictExpiry = (items: QuoteLineItem[]): boolean => {
     const today = new Date();
     today.setHours(0, 0, 0, 0); 
-
     return items.some(item => {
         if (!item.validityDate) return false;
         const itemDate = new Date(item.validityDate);
@@ -160,7 +159,6 @@ const checkStrictExpiry = (items: QuoteLineItem[]): boolean => {
     });
 };
 
-// Helper to generate a fresh option
 const createDefaultOption = (quoteId: string, mode: TransportMode = 'SEA_LCL'): QuoteOption => ({
     id: Math.random().toString(36).substring(7),
     quoteId,
@@ -172,7 +170,7 @@ const createDefaultOption = (quoteId: string, mode: TransportMode = 'SEA_LCL'): 
     pod: 'SHANGHAI (CN)',
     placeOfLoading: '',
     placeOfDelivery: '',
-    equipmentType: '',
+    equipmentType: '40HC',
     containerCount: 1,
     transitTime: 0,
     freeTime: 0,
@@ -193,6 +191,8 @@ const DEFAULT_STATE = {
   status: 'DRAFT' as const,
   clientId: '',
   clientName: '',
+  clientTaxId: '',
+  clientIce: '',
   paymentTerms: '30 Days',
   salespersonId: 'user-1', 
   salespersonName: 'Youssef (Sales)',
@@ -226,7 +226,7 @@ const DEFAULT_STATE = {
   pod: '',
   placeOfLoading: '',
   placeOfDelivery: '',
-  equipmentType: '',
+  equipmentType: '40HC',
   containerCount: 1,
   transitTime: 0,
   freeTime: 0,
@@ -244,9 +244,7 @@ const DEFAULT_STATE = {
   approval: { requiresApproval: false, reason: null },
   hasExpiredRates: false,
   
-  activities: [
-      { id: '1', category: 'SYSTEM', text: 'Quote initialized', meta: 'System', tone: 'neutral', timestamp: new Date() },
-  ] as ActivityItem[],
+  activities: [] as ActivityItem[],
 
   totalCostMAD: 0,
   totalSellMAD: 0,
@@ -272,7 +270,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   isLoading: false,
   ...DEFAULT_STATE,
 
-  // --- INIT HELPER ---
   createNewQuote: () => {
     const randomRef = `Q-24-${Math.floor(Math.random() * 10000)}`;
     const newState = { 
@@ -302,8 +299,20 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   setIdentity: (field, value) => {
       set((state) => ({ ...state, [field]: value }));
       if (field === 'paymentTerms') {
-          get().updateLineItem('trigger', 'description', 'trigger');
+          get().updateLineItem('trigger', {});
       }
+  },
+
+  setClientSnapshot: (data) => {
+    set({
+        clientId: data.id,
+        clientName: data.name,
+        paymentTerms: data.terms,
+        clientTaxId: data.taxId,
+        clientIce: data.ice
+    });
+    get().updateLineItem('trigger', {});
+    useToast.getState().toast("Client profile linked & snapshot saved.", "success");
   },
   
   setStatus: async (status) => {
@@ -312,7 +321,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       await get().saveQuote(); 
   },
 
-  // --- OPTION MANAGEMENT ---
   createOption: (mode) => {
       const { id, options } = get();
       const newOpt = createDefaultOption(id, mode);
@@ -350,7 +358,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           quoteCurrency: opt.quoteCurrency,
           hasExpiredRates: checkStrictExpiry(opt.items)
       });
-      get().updateLineItem('trigger', 'description', 'trigger'); 
+      get().updateLineItem('trigger', {}); 
   },
 
   removeOption: (optionId) => {
@@ -375,7 +383,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
      get().setActiveOption(newOpt.id);
   },
 
-  // --- FACADE SETTERS ---
   setMode: (mode) => {
       const { options, activeOptionId } = get();
       const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, mode } : o);
@@ -402,16 +409,15 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     const newRates = { ...exchangeRates, [currency]: rate };
     const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, exchangeRates: newRates } : o);
     set({ exchangeRates: newRates, options: updatedOptions });
-    get().updateLineItem('trigger', 'description', 'trigger');
+    get().updateLineItem('trigger', {});
   },
   setQuoteCurrency: (currency) => {
     const { options, activeOptionId } = get();
     const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, quoteCurrency: currency } : o);
     set({ quoteCurrency: currency, options: updatedOptions });
-    get().updateLineItem('trigger', 'description', 'trigger');
+    get().updateLineItem('trigger', {});
   },
 
-  // --- CALCULATION LOGIC ---
   updateCargo: (rows) => {
     const { mode } = get();
     let vol = 0, weight = 0, pkgs = 0;
@@ -455,7 +461,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       markupValue: 20, 
       vatRule: 'STD_20',
       vendorId: '', 
-      vendorName: '' 
+      vendorName: '',
+      source: 'MANUAL'
     };
     const newItems = [...items, newItem];
     const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, items: newItems } : o);
@@ -464,7 +471,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         options: updatedOptions,
         hasExpiredRates: checkStrictExpiry(newItems) 
     });
-    get().updateLineItem('trigger', 'description', 'trigger');
+    get().updateLineItem('trigger', {});
   },
 
   removeLineItem: (itemId) => {
@@ -476,7 +483,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         options: updatedOptions,
         hasExpiredRates: checkStrictExpiry(newItems)
     });
-    get().updateLineItem('trigger', 'description', 'trigger'); 
+    get().updateLineItem('trigger', {}); 
   },
 
   applyTemplate: (template) => {
@@ -492,7 +499,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           buyCurrency: curr,
           markupType: 'PERCENT',
           markupValue: markup,
-          vatRule: section === 'FREIGHT' ? 'EXPORT_0_ART92' : 'STD_20'
+          vatRule: section === 'FREIGHT' ? 'EXPORT_0_ART92' : 'STD_20',
+          source: 'MANUAL'
       });
 
       if (template === 'IMPORT_STD') {
@@ -515,16 +523,19 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           options: updatedOptions,
           hasExpiredRates: checkStrictExpiry(newItems)
       });
-      get().updateLineItem('trigger', 'description', 'trigger');
+      get().updateLineItem('trigger', {});
       useToast.getState().toast("Pricing template applied successfully.", "success");
   },
 
-  updateLineItem: (id, field, value) => {
+  // FIXED: Implementation uses STRICT 2-ARG signature (id, updates)
+  updateLineItem: (id, updates) => {
     const { items, exchangeRates, quoteCurrency, options, activeOptionId, paymentTerms } = get();
     
     const updatedItems = items.map(item => {
       if (item.id !== id && id !== 'trigger') return item;
-      if (id !== 'trigger') return { ...item, [field]: value };
+      if (id !== 'trigger') {
+          return { ...item, ...updates };
+      }
       return item;
     });
     
@@ -702,8 +713,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       useToast.getState().toast(`Created Revision v${newVersion}`, "success");
   },
 
-  // --- DATABASE ACTIONS (Delegated to QuoteService) ---
-
+  // --- DATABASE ACTIONS ---
   fetchQuotes: async () => {
       set({ isLoading: true });
       try {
@@ -722,7 +732,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       
       set({ isLoading: true });
 
-      // Assemble Domain Model from Store State
       const quotePayload: Partial<Quote> = {
           id: state.id,
           reference: state.reference,
@@ -731,12 +740,14 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           status: state.status,
           clientName: state.clientName,
           clientId: state.clientId,
+          clientTaxId: state.clientTaxId,
+          clientIce: state.clientIce,
           paymentTerms: state.paymentTerms,
           salespersonId: state.salespersonId,
           salespersonName: state.salespersonName,
           
-          validityDate: new Date(state.validityDate), // Conversion
-          cargoReadyDate: new Date(state.cargoReadyDate), // Conversion
+          validityDate: new Date(state.validityDate), 
+          cargoReadyDate: new Date(state.cargoReadyDate), 
           requestedDepartureDate: state.requestedDepartureDate ? new Date(state.requestedDepartureDate) : undefined,
           
           pol: state.pol,
@@ -764,8 +775,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
       try {
           const newId = await QuoteService.save(quotePayload, state.id === 'new');
-          
-          // Post-save actions
           if (state.id === 'new') {
               set({ id: newId });
           }
@@ -787,8 +796,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               return;
           }
 
-          // Hydrate Store State from Domain Model
-          // We have to be careful to set the activeOption correctly
           const activeOpt = quote.options.length > 0 ? quote.options[0] : null;
 
           set({
@@ -799,14 +806,15 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               version: quote.version,
               status: quote.status,
               clientName: quote.clientName,
+              clientId: quote.clientId,
+              clientTaxId: quote.clientTaxId,
+              clientIce: quote.clientIce,
               paymentTerms: quote.paymentTerms,
               
-              // Dates to String for Input handling
               validityDate: quote.validityDate.toISOString().split('T')[0],
               cargoReadyDate: quote.cargoReadyDate.toISOString().split('T')[0],
               requestedDepartureDate: quote.requestedDepartureDate ? quote.requestedDepartureDate.toISOString().split('T')[0] : '',
               
-              // Cargo
               cargoRows: quote.cargoRows,
               goodsDescription: quote.goodsDescription,
               hsCode: quote.hsCode,
@@ -816,7 +824,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               cargoValue: quote.cargoValue,
               insuranceRequired: quote.insuranceRequired,
               
-              // Workflow
               probability: quote.probability,
               competitorInfo: quote.competitorInfo,
               internalNotes: quote.internalNotes,
@@ -824,9 +831,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               approval: quote.approval,
               customerReference: quote.customerReference,
               
-              // Options
               options: quote.options,
-              activeOptionId: activeOpt ? activeOpt.id : '', // setActiveOption will be called next
+              activeOptionId: activeOpt ? activeOpt.id : '', 
           });
 
           if (activeOpt) {

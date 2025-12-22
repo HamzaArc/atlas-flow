@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -9,14 +10,18 @@ import {
     Popover, PopoverContent, PopoverTrigger 
 } from "@/components/ui/popover";
 import { 
+    Command, CommandEmpty, CommandGroup, CommandInput, CommandItem 
+} from "@/components/ui/command";
+import { 
     Save, ArrowLeft, Copy, Coins, Settings2, 
-    User, Calendar, Hash, Clock, Check, GitBranch, MessageSquare
+    User, Calendar, Hash, Clock, Check, GitBranch, MessageSquare, ChevronsUpDown
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
+import { useClientStore } from "@/store/useClientStore"; // RESTORED INTEGRATION
 import { Currency } from "@/types/index";
 import { cn } from "@/lib/utils";
 import { ApprovalAction } from "./ApprovalAction";
-import { useToast } from "@/components/ui/use-toast"; // Your custom toast hook
+import { useToast } from "@/components/ui/use-toast";
 
 interface QuoteHeaderProps {
     onBack: () => void;
@@ -30,8 +35,9 @@ const STEPS = [
 ];
 
 export function QuoteHeader({ onBack }: QuoteHeaderProps) {
+  // Quote Store
   const { 
-    reference, status, clientName, validityDate, version,
+    reference, status, clientName, clientId, validityDate, version,
     salespersonName, cargoReadyDate, customerReference,
     quoteCurrency, exchangeRates, paymentTerms,
     setIdentity, setStatus, saveQuote, duplicateQuote, createRevision,
@@ -40,20 +46,40 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
     mode, incoterm, pol, pod, totalTTCTarget
   } = useQuoteStore();
 
-  // FIX: Destructure toast correctly from your store
+  // Client Store Integration
+  const { clients, fetchClients } = useClientStore();
   const { toast } = useToast();
+  
+  // Local State for Combobox
+  const [openClient, setOpenClient] = useState(false);
+
+  // Initialize Data
+  useEffect(() => {
+    fetchClients();
+  }, [fetchClients]);
 
   const isReadOnly = status === 'ACCEPTED' || status === 'REJECTED' || status === 'SENT';
   const isLocked = status === 'ACCEPTED' || status === 'REJECTED';
 
+  // --- HANDLER: SMART CLIENT SELECTION ---
+  const handleClientSelect = (selectedId: string) => {
+    const client = clients.find(c => c.id === selectedId);
+    if (!client) return;
+
+    // Manually update identity fields since setClientSnapshot might not be in the store yet
+    setIdentity('clientId', client.id);
+    setIdentity('clientName', client.entityName);
+    setIdentity('paymentTerms', client.financials.paymentTerms || '30 Days');
+    
+    setOpenClient(false);
+  };
+
   // --- COMPONENT: WORKFLOW STEPPER ---
   const StatusStepper = () => (
-      <div className="flex items-center mr-6 bg-slate-50 rounded-lg p-1 border border-slate-100">
+      <div className="flex items-center mr-6 bg-slate-50 rounded-lg p-1 border border-slate-200">
           {STEPS.map((step, idx) => {
               const isActive = step.id === status;
               const currentIdx = STEPS.findIndex(s => s.id === status);
-              // Draft is 0, Validation 1, Sent 2. 
-              // If status is SENT(2), then DRAFT(0) and VALIDATION(1) are completed.
               const isCompleted = idx < currentIdx;
 
               return (
@@ -98,16 +124,11 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
 💰 *Total: ${totalDisplay} ${quoteCurrency}* (All In)
 ⏳ Valid until: ${formatDateForInput(validityDate)}`;
 
-        // Encode and Open WhatsApp Web/App
         const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
         window.open(url, '_blank');
-        
-        // FIX: Use simple string arguments supported by your useToast store
         toast("WhatsApp opened in new tab", "success");
-        
     } catch (error) {
         console.error("WhatsApp Error:", error);
-        // FIX: Use simple string arguments supported by your useToast store
         toast("Could not open WhatsApp window", "error");
     }
   };
@@ -119,7 +140,7 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
   };
 
   return (
-    <div className="flex flex-col border-b bg-white shadow-sm z-20 relative sticky top-0">
+    <div className="flex flex-col border-b bg-white shadow-sm z-20 sticky top-0">
       
       {/* 1. TOP BAR */}
       <div className="flex items-center justify-between px-6 h-16 bg-white">
@@ -201,7 +222,6 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
            {/* Action Buttons */}
            <div className="flex gap-2 items-center">
                
-               {/* WHATSAPP BUTTON (Direct Link) */}
                <Button 
                     variant="outline" 
                     size="sm" 
@@ -212,12 +232,10 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                    <MessageSquare className="h-3.5 w-3.5 mr-2" /> WhatsApp
                </Button>
 
-               {/* Always allow copying/templating */}
                <Button variant="outline" size="sm" onClick={duplicateQuote} className="h-8 text-xs border-slate-200 text-slate-600">
                    <Copy className="h-3.5 w-3.5 mr-2" /> Copy
                </Button>
 
-               {/* REVISION BUTTON: Appears when we can no longer edit the current one safely */}
                {isReadOnly && (
                    <Button variant="outline" size="sm" onClick={handleRevision} className="h-8 text-xs border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100">
                        <GitBranch className="h-3.5 w-3.5 mr-2" /> Revise (v{version+1})
@@ -226,16 +244,13 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
 
                {!isLocked && (
                    <>
-                    {/* INJECTED COMPONENT */}
                     <ApprovalAction />
-
                     <Button size="sm" onClick={saveQuote} className="h-8 bg-slate-900 hover:bg-slate-800 text-xs px-4 ml-2">
                         <Save className="h-3.5 w-3.5 mr-2" /> Save
                     </Button>
                    </>
                )}
                
-               {/* Fallback to re-open if needed manually, but Revision is preferred */}
                {isLocked && !isReadOnly && (
                    <Button size="sm" variant="outline" onClick={() => setStatus('DRAFT')} className="h-8 text-xs">
                         Re-open Quote
@@ -249,28 +264,57 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
       <div className="bg-slate-50/50 border-b border-slate-200 px-6 py-3">
           <div className="grid grid-cols-12 gap-4">
               
-              {/* Client Section */}
+              {/* SMART CLIENT SELECTOR (Combobox) */}
               <div className="col-span-3 space-y-1">
                   <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
                       <User className="h-3 w-3" /> Customer Account
                   </Label>
-                  <Select 
-                      disabled={isReadOnly}
-                      value={clientName} 
-                      onValueChange={(v) => setIdentity('clientName', v)}
-                  >
-                      <SelectTrigger className="h-8 bg-white border-slate-200 text-xs focus:ring-blue-500 font-medium shadow-sm">
-                          <SelectValue placeholder="Select Customer..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                          <SelectItem value="TexNord SARL">TexNord SARL</SelectItem>
-                          <SelectItem value="Maroc Telecom">Maroc Telecom</SelectItem>
-                          <SelectItem value="Renault Tanger">Renault Tanger</SelectItem>
-                      </SelectContent>
-                  </Select>
+                  <Popover open={openClient} onOpenChange={setOpenClient}>
+                      <PopoverTrigger asChild>
+                          <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={openClient}
+                              disabled={isReadOnly}
+                              className="h-8 w-full justify-between bg-white border-slate-200 text-xs font-medium shadow-sm focus:ring-blue-500"
+                          >
+                              {clientName || "Select Customer..."}
+                              <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
+                          </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[300px] p-0" align="start">
+                          <Command>
+                              <CommandInput placeholder="Search client directory..." className="h-8 text-xs" />
+                              <CommandEmpty>No client found.</CommandEmpty>
+                              <CommandGroup>
+                                  {clients.map((client) => (
+                                      <CommandItem
+                                          key={client.id}
+                                          value={client.entityName}
+                                          onSelect={() => handleClientSelect(client.id)}
+                                          className="text-xs"
+                                      >
+                                          <Check
+                                              className={cn(
+                                                  "mr-2 h-3 w-3",
+                                                  clientId === client.id ? "opacity-100" : "opacity-0"
+                                              )}
+                                          />
+                                          <div className="flex flex-col">
+                                              <span>{client.entityName}</span>
+                                              <span className="text-[10px] text-slate-400">
+                                                  {client.type} • {client.city}
+                                              </span>
+                                          </div>
+                                      </CommandItem>
+                                  ))}
+                              </CommandGroup>
+                          </Command>
+                      </PopoverContent>
+                  </Popover>
               </div>
 
-               {/* Payment Terms Selector (Safe Guarded) */}
+               {/* Payment Terms Selector */}
                <div className="col-span-2 space-y-1">
                   <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
                       <Coins className="h-3 w-3" /> Payment Terms
@@ -287,6 +331,7 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                           <SelectItem value="Cash">Cash / Immediate</SelectItem>
                           <SelectItem value="30 Days">30 Days</SelectItem>
                           <SelectItem value="60 Days">60 Days Check</SelectItem>
+                          <SelectItem value="NET_60">NET_60</SelectItem>
                           <SelectItem value="90 Days">90 Days</SelectItem>
                       </SelectContent>
                   </Select>
@@ -306,7 +351,7 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                   />
               </div>
 
-              {/* TIMELINE SECTION (Valid To / Cargo Ready) */}
+              {/* TIMELINE SECTION */}
               <div className="col-span-2 space-y-1">
                   <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
                       <Calendar className="h-3 w-3" /> Cargo Ready
@@ -333,16 +378,33 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                   />
               </div>
 
-              {/* Sales Owner */}
+              {/* Sales Owner - KEEPING THE EDITABLE SELECT LOGIC */}
               <div className="col-span-1 space-y-1 ml-auto">
                   <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
                       <User className="h-3 w-3" /> Rep
                   </Label>
-                  <div className="h-8 flex items-center justify-end">
-                    <span className="text-xs font-semibold text-slate-600 truncate">
-                        {salespersonName ? salespersonName.split(' ')[0] : 'Admin'}
-                    </span>
-                  </div>
+                  <Select 
+                      disabled={isReadOnly}
+                      value={salespersonName} 
+                      onValueChange={(v) => {
+                          setIdentity('salespersonName', v);
+                          const ids: Record<string, string> = {
+                              'Youssef (Sales)': 'user-1',
+                              'Fatima (Manager)': 'user-2',
+                              'Ali (Logistics)': 'user-3'
+                          };
+                          setIdentity('salespersonId', ids[v] || 'user-1');
+                      }}
+                  >
+                      <SelectTrigger className="h-8 w-28 bg-white border-slate-200 text-xs shadow-sm focus:ring-blue-500 font-medium p-2">
+                          <SelectValue placeholder="Rep" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          <SelectItem value="Youssef (Sales)">Youssef</SelectItem>
+                          <SelectItem value="Fatima (Manager)">Fatima</SelectItem>
+                          <SelectItem value="Ali (Logistics)">Ali</SelectItem>
+                      </SelectContent>
+                  </Select>
               </div>
           </div>
       </div>

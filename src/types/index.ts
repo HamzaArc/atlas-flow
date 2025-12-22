@@ -46,6 +46,10 @@ export interface QuoteLineItem {
   markupType: 'PERCENT' | 'FIXED_AMOUNT';
   markupValue: number;
   vatRule: 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | 'DISBURSEMENT';
+  
+  // NEW: Provenance Tracking
+  source: 'MANUAL' | 'TARIFF';
+  tariffId?: string;
 }
 
 export interface QuoteOption {
@@ -78,9 +82,14 @@ export interface Quote {
   version: number; 
   customerReference?: string;
   status: 'DRAFT' | 'PRICING' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'REJECTED';
+  
+  // CRM SNAPSHOT DATA
   clientId: string;
   clientName: string;
+  clientTaxId?: string; // Snapshot
+  clientIce?: string;   // Snapshot
   paymentTerms: string; 
+  
   salespersonId: string;
   salespersonName: string;
   validityDate: Date; 

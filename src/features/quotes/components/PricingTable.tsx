@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from "@/components/ui/table";
@@ -9,14 +9,19 @@ import {
 import { 
     Popover, PopoverContent, PopoverTrigger 
 } from "@/components/ui/popover";
+import { 
+    Command, CommandEmpty, CommandGroup, CommandInput, CommandItem 
+} from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
     Trash2, Plus, MapPin, Ship, Anchor, Zap,
-    Calendar, AlertCircle, RefreshCw
+    Calendar, AlertCircle, RefreshCw, Link2, Check
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
+import { useTariffStore } from "@/store/useTariffStore"; 
 import { QuoteLineItem, Currency } from "@/types/index";
+import { RateCharge } from "@/types/tariff"; 
 import { cn } from "@/lib/utils";
 
 // --- CONSTANTS ---
@@ -43,7 +48,75 @@ const createLocalOneDate = (dateString: string) => {
     return new Date(y, m - 1, d);
 };
 
-// DENSITY: Reduced padding and heights for SectionHeader
+// --- SUB-COMPONENT: SMART RATE LOOKUP ---
+const SmartRateLookup = ({ 
+    onSelect 
+}: { 
+    onSelect: (rate: any) => void 
+}) => {
+    const { pol, pod, mode } = useQuoteStore();
+    const { rates, fetchRates } = useTariffStore();
+    const [open, setOpen] = useState(false);
+
+    useEffect(() => {
+        // Ensure rates are loaded
+        if (rates.length === 0) fetchRates();
+    }, []);
+
+    // Smart Filter: Match POL, POD, and Mode (approximate)
+    const matches = rates.filter(r => 
+        (r.pol.includes(pol) || pol.includes(r.pol) || r.mode === mode) && r.status === 'ACTIVE'
+    );
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-6 w-6 p-0 text-blue-400 hover:text-blue-600 hover:bg-blue-50"
+                    title="Smart Rate Lookup"
+                >
+                    <Link2 className="h-3.5 w-3.5" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[400px] p-0" align="start">
+                <Command>
+                    <CommandInput placeholder="Search tariff database..." className="h-8 text-xs" />
+                    <CommandEmpty>
+                        <div className="p-4 text-center text-xs text-slate-500">
+                            No matching rates found for {pol} to {pod}.
+                        </div>
+                    </CommandEmpty>
+                    <CommandGroup heading="Matching Tariffs">
+                        {matches.map(rate => (
+                             <CommandItem 
+                                key={rate.id} 
+                                onSelect={() => {
+                                    onSelect(rate);
+                                    setOpen(false);
+                                }}
+                                className="flex flex-col items-start py-2"
+                             >
+                                <div className="flex w-full justify-between items-center mb-1">
+                                    <span className="font-bold text-xs">{rate.carrierName}</span>
+                                    <Badge variant="outline" className="text-[10px] h-4 border-blue-200 bg-blue-50 text-blue-700">
+                                        {rate.currency} {rate.reference}
+                                    </Badge>
+                                </div>
+                                <div className="text-[10px] text-slate-500 w-full flex justify-between">
+                                    <span>{rate.pol} ➔ {rate.pod}</span>
+                                    <span>Valid: {formatDateCompact(rate.validTo)}</span>
+                                </div>
+                             </CommandItem>
+                        ))}
+                    </CommandGroup>
+                </Command>
+            </PopoverContent>
+        </Popover>
+    );
+};
+
 const SectionHeader = ({ title, icon: Icon, onAdd, isCollect }: { title: string, icon: any, onAdd: () => void, isCollect?: boolean }) => (
     <TableRow className="hover:bg-transparent border-b border-slate-200 bg-slate-50/80">
         <TableCell colSpan={9} className="py-1.5 pl-3">
@@ -74,6 +147,7 @@ export function PricingTable() {
   const { 
       items, addLineItem, updateLineItem, removeLineItem, 
       exchangeRates, quoteCurrency, status,
+      equipmentType, // ACCESS EQUIPMENT TYPE
       validityDate: quoteValidity 
   } = useQuoteStore();
 
@@ -105,6 +179,29 @@ export function PricingTable() {
       return { finalVal: finalSell.toFixed(2), sellInMAD };
   };
 
+  // --- HANDLER: APPLY TARIFF ---
+  const handleTariffSelect = (itemId: string, tariff: any) => {
+      const baseCharge: RateCharge | undefined = tariff.freightCharges[0];
+      if (!baseCharge) return;
+
+      // FIXED: Determine price based on current Quote equipment
+      let selectedPrice = 0;
+      if (equipmentType.includes('20')) selectedPrice = baseCharge.price20DV;
+      else if (equipmentType.includes('40') && equipmentType.includes('HC')) selectedPrice = baseCharge.price40HC;
+      else if (equipmentType.includes('40')) selectedPrice = baseCharge.price40DV;
+      else selectedPrice = baseCharge.price40HC; // Default Fallback
+
+      updateLineItem(itemId, {
+          buyPrice: selectedPrice,
+          buyCurrency: tariff.currency as Currency,
+          vendorName: tariff.carrierName,
+          description: `Ocean Freight ${equipmentType} (${tariff.carrierName})`,
+          validityDate: new Date(tariff.validTo),
+          source: 'TARIFF',
+          tariffId: tariff.id
+      });
+  };
+
   const renderRows = (section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION') => {
       const sectionItems = items.filter(i => i.section === section);
       
@@ -114,6 +211,7 @@ export function PricingTable() {
         const risk = checkValidityRisk(item.validityDate);
         const isExpired = risk?.level === 'expired';
         const calc = calculateSellDetails(item);
+        const isTariff = item.source === 'TARIFF';
 
         return (
         <TableRow 
@@ -123,19 +221,30 @@ export function PricingTable() {
                 isExpired && "bg-red-50/50"
             )}
         >
-            {/* 1. DESCRIPTION */}
+            {/* 1. DESCRIPTION & SMART LOOKUP */}
             <TableCell className="w-[30%] py-0.5 pl-3">
                 <div className="flex items-center gap-2">
+                    {/* Visual Cue for Tariff Link */}
+                    {isTariff ? (
+                        <div title="Linked to Tariff" className="text-emerald-500">
+                             <Link2 className="h-3 w-3" />
+                        </div>
+                    ) : (
+                        !isReadOnly && <SmartRateLookup onSelect={(t) => handleTariffSelect(item.id, t)} />
+                    )}
+
                     {isExpired && <AlertCircle className="h-3 w-3 text-red-500" />}
+                    
                     <Input 
                         disabled={isReadOnly}
                         className={cn(
                             "h-7 border-transparent px-2 bg-transparent focus:bg-white focus:border-blue-300 focus:ring-1 focus:ring-blue-200 font-medium text-xs shadow-none rounded-sm transition-all placeholder:text-slate-300",
-                            isExpired && "text-red-700"
+                            isExpired && "text-red-700",
+                            isTariff && "text-emerald-700 font-semibold"
                         )}
                         value={item.description}
                         placeholder="Description"
-                        onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
+                        onChange={(e) => updateLineItem(item.id, { description: e.target.value })}
                     />
                 </div>
             </TableCell>
@@ -149,7 +258,7 @@ export function PricingTable() {
                         className="h-7 w-full rounded-sm border-transparent bg-transparent px-2 hover:bg-slate-50 focus:bg-white focus:border-blue-300 focus:ring-1 focus:ring-blue-200 text-[10px] text-slate-600 shadow-none placeholder:text-slate-300 focus:outline-none transition-all truncate" 
                         value={item.vendorName || ''}
                         placeholder="Select Vendor"
-                        onChange={(e) => updateLineItem(item.id, 'vendorName', e.target.value)}
+                        onChange={(e) => updateLineItem(item.id, { vendorName: e.target.value })}
                     />
                     
                     <Popover>
@@ -162,7 +271,7 @@ export function PricingTable() {
                             </button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-2" align="end">
-                           <Input type="date" className="h-8 text-xs" value={item.validityDate ? new Date(item.validityDate).toISOString().split('T')[0] : ''} onChange={(e) => updateLineItem(item.id, 'validityDate', createLocalOneDate(e.target.value))} />
+                           <Input type="date" className="h-8 text-xs" value={item.validityDate ? new Date(item.validityDate).toISOString().split('T')[0] : ''} onChange={(e) => updateLineItem(item.id, { validityDate: createLocalOneDate(e.target.value) })} />
                         </PopoverContent>
                     </Popover>
                 </div>
@@ -175,13 +284,13 @@ export function PricingTable() {
                     type="number"
                     className="h-7 border-transparent bg-transparent hover:bg-slate-50 focus:bg-white focus:border-blue-300 text-right text-slate-600 font-mono text-xs shadow-none px-2 rounded-sm" 
                     value={item.buyPrice}
-                    onChange={(e) => updateLineItem(item.id, 'buyPrice', parseFloat(e.target.value) || 0)}
+                    onChange={(e) => updateLineItem(item.id, { buyPrice: parseFloat(e.target.value) || 0 })}
                 />
             </TableCell>
 
             {/* 4. CURRENCY */}
             <TableCell className="w-[8%] py-0.5">
-                <Select disabled={isReadOnly} value={item.buyCurrency} onValueChange={(v) => updateLineItem(item.id, 'buyCurrency', v as Currency)}>
+                <Select disabled={isReadOnly} value={item.buyCurrency} onValueChange={(v) => updateLineItem(item.id, { buyCurrency: v as Currency })}>
                     <SelectTrigger className="h-7 border-transparent bg-transparent hover:bg-slate-50 text-[10px] font-bold text-slate-500 shadow-none px-1"><SelectValue /></SelectTrigger>
                     <SelectContent><SelectItem value="MAD">MAD</SelectItem><SelectItem value="USD">USD</SelectItem><SelectItem value="EUR">EUR</SelectItem></SelectContent>
                 </Select>
@@ -195,11 +304,11 @@ export function PricingTable() {
                         type="number"
                         className="h-7 w-16 border-transparent bg-transparent hover:bg-slate-50 focus:bg-white focus:border-emerald-300 text-right text-emerald-700 font-bold font-mono text-xs shadow-none px-0 rounded-sm" 
                         value={item.markupValue}
-                        onChange={(e) => updateLineItem(item.id, 'markupValue', parseFloat(e.target.value) || 0)}
+                        onChange={(e) => updateLineItem(item.id, { markupValue: parseFloat(e.target.value) || 0 })}
                     />
                     <button 
                         className="text-[9px] text-slate-300 hover:text-blue-600 font-bold w-4 text-center"
-                        onClick={() => !isReadOnly && updateLineItem(item.id, 'markupType', item.markupType === 'PERCENT' ? 'FIXED_AMOUNT' : 'PERCENT')}
+                        onClick={() => !isReadOnly && updateLineItem(item.id, { markupType: item.markupType === 'PERCENT' ? 'FIXED_AMOUNT' : 'PERCENT' })}
                     >
                         {item.markupType === 'PERCENT' ? '%' : '$'}
                     </button>
@@ -208,9 +317,17 @@ export function PricingTable() {
 
             {/* 6. VAT */}
             <TableCell className="w-[8%] py-0.5 text-center">
-                <Select disabled={isReadOnly} value={item.vatRule} onValueChange={(v) => updateLineItem(item.id, 'vatRule', v)}>
+                <Select 
+                    disabled={isReadOnly} 
+                    value={item.vatRule} 
+                    onValueChange={(v) => updateLineItem(item.id, { vatRule: v as QuoteLineItem['vatRule'] })}
+                >
                     <SelectTrigger className="h-7 border-transparent bg-transparent text-[9px] text-slate-400 shadow-none px-0 justify-center"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="STD_20">20%</SelectItem><SelectItem value="ROAD_14">14%</SelectItem><SelectItem value="EXPORT_0_ART92">0%</SelectItem></SelectContent>
+                    <SelectContent>
+                        <SelectItem value="STD_20">20%</SelectItem>
+                        <SelectItem value="ROAD_14">14%</SelectItem>
+                        <SelectItem value="EXPORT_0_ART92">0%</SelectItem>
+                    </SelectContent>
                 </Select>
             </TableCell>
 
