@@ -1,35 +1,55 @@
 import { useState } from 'react';
 import { 
-    Truck, Ship, Plane, Container, ArrowRight, 
-    ShieldCheck, Thermometer, Box, AlertTriangle, 
-    Plus, Trash2, Tag, Anchor, Package, Settings 
+    Truck, Ship, Plane, Box, AlertTriangle, 
+    Trash2, Anchor, UploadCloud, Clock, Plus, 
+    CheckCircle2, MapPin, Factory, Phone, Mail, Globe
 } from "lucide-react";
-import { useClientStore, SupplierRole, SupplierTier, CommoditySector } from "@/store/useClientStore";
+import { useClientStore } from "@/store/useClientStore";
+import { SupplierRole, SupplierTier } from "@/types/index";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { RouteDialog } from "./RouteDialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { RouteDialog } from "./RouteDialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
   const { 
       activeClient, addRoute, removeRoute, 
-      updateOperationalProfile, addSupplier, removeSupplier, addCommodity, removeCommodity
+      updateOperationalProfile, addSupplier, removeSupplier
   } = useClientStore();
   
   const [hsInput, setHsInput] = useState('');
   
-  // Form States for Smart Adds
-  const [newSupplier, setNewSupplier] = useState({ name: '', role: 'SEA_LINE' as SupplierRole, tier: 'APPROVED' as SupplierTier });
-  const [newCommodity, setNewCommodity] = useState({ name: '', sector: 'INDUSTRIAL' as CommoditySector, isHazmat: false });
+  // Sourcing Supplier Form State
+  const [newSupplier, setNewSupplier] = useState({ 
+      name: '', 
+      role: 'EXPORTER' as SupplierRole, 
+      tier: 'APPROVED' as SupplierTier,
+      country: '',
+      city: '',
+      address: '',
+      contactName: '',
+      email: '',
+      phone: '',
+      products: '',
+      notes: ''
+  });
+  const [isSupplierDialogOpen, setIsSupplierDialogOpen] = useState(false);
 
   if (!activeClient) return null;
 
-  const { operational, routes, suppliers, commodities } = activeClient;
+  const { operational, routes, suppliers } = activeClient;
+
+  // Split suppliers into Logistics vs Commercial
+  const commercialSuppliers = suppliers.filter(s => s.role === 'EXPORTER');
+  const logisticsPartners = suppliers.filter(s => s.role !== 'EXPORTER');
 
   // --- HANDLERS ---
   const handleAddHS = () => {
@@ -45,27 +65,22 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
 
   const handleAddSupplier = () => {
       if(!newSupplier.name) return;
-      addSupplier({ 
-          id: Math.random().toString(36).substr(2,9), 
-          ...newSupplier 
+      addSupplier({
+          id: Math.random().toString(36).substr(2, 9),
+          ...newSupplier
       });
-      setNewSupplier({ name: '', role: 'SEA_LINE', tier: 'APPROVED' });
+      // Reset form
+      setNewSupplier({ 
+          name: '', role: 'EXPORTER', tier: 'APPROVED', 
+          country: '', city: '', address: '', contactName: '', email: '', phone: '', products: '', notes: ''
+      });
+      setIsSupplierDialogOpen(false);
   };
 
-  const handleAddCommodity = () => {
-      if(!newCommodity.name) return;
-      addCommodity({
-          id: Math.random().toString(36).substr(2,9),
-          ...newCommodity
-      });
-      setNewCommodity({ name: '', sector: 'INDUSTRIAL', isHazmat: false });
-  };
-
-  // --- STATS ---
+  // --- METRICS ---
   const totalTEU = routes.filter(r => r.volumeUnit === 'TEU').reduce((acc, curr) => acc + curr.volume, 0);
   const totalAir = routes.filter(r => r.volumeUnit === 'KG').reduce((acc, curr) => acc + curr.volume, 0);
 
-  // --- HELPERS ---
   const getTierColor = (tier: SupplierTier) => {
       switch(tier) {
           case 'STRATEGIC': return 'bg-purple-100 text-purple-700 border-purple-200';
@@ -79,7 +94,7 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
   return (
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-10">
           
-          {/* 1. CAPACITY FORECAST HEADER */}
+          {/* 1. CAPACITY HEADER (UNCHANGED) */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <Card className="bg-blue-50 border-blue-100 shadow-sm flex items-center p-4 gap-3">
                   <div className="p-2 bg-white rounded-lg shadow-sm text-blue-600"><Ship className="h-5 w-5" /></div>
@@ -96,14 +111,22 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
                   </div>
               </Card>
               <Card className="bg-white border-slate-200 shadow-sm flex items-center p-4 gap-3 md:col-span-2">
-                  <div className="p-2 bg-slate-100 rounded-lg shadow-sm text-slate-600"><ShieldCheck className="h-5 w-5" /></div>
-                  <div>
-                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Compliance Status</span>
-                      <div className="flex items-center gap-2 mt-0.5">
-                          {operational.requiresHazmat && <Badge variant="destructive" className="text-[10px] h-5">HAZMAT</Badge>}
-                          {operational.requiresReefer && <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50 text-[10px] h-5">REEFER</Badge>}
-                          {operational.customsRegime !== 'STANDARD' && <Badge variant="outline" className="text-purple-600 border-purple-200 bg-purple-50 text-[10px] h-5">{operational.customsRegime}</Badge>}
-                          {!operational.requiresHazmat && !operational.requiresReefer && <span className="text-sm font-medium text-slate-600">Standard General Cargo</span>}
+                  <div className="p-2 bg-slate-100 rounded-lg shadow-sm text-slate-600"><Clock className="h-5 w-5" /></div>
+                  <div className="flex-1">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Negotiated Free Time (Detention at POD)</span>
+                      <div className="flex items-center gap-2 mt-1">
+                          {isEditing ? (
+                              <Input 
+                                type="number" 
+                                className="h-7 w-20 text-sm" 
+                                value={operational.negotiatedFreeTime || 7} 
+                                onChange={(e) => updateOperationalProfile('negotiatedFreeTime', parseInt(e.target.value))} 
+                              />
+                          ) : (
+                              <span className="text-xl font-bold text-slate-800">{operational.negotiatedFreeTime || 7}</span>
+                          )}
+                          <span className="text-xs font-medium text-slate-500">Days</span>
+                          <span className="text-[10px] text-slate-400 ml-2">(Standard is 7)</span>
                       </div>
                   </div>
               </Card>
@@ -111,7 +134,159 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
 
           <div className="grid grid-cols-12 gap-6">
               
-              {/* 2. TRADE LANES (Left Column) */}
+              {/* 2. SOURCING NETWORK (NEW SECTION) */}
+              <div className="col-span-12 space-y-4">
+                  <div className="flex justify-between items-center">
+                      <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
+                          <Factory className="h-4 w-4 text-slate-500" /> Sourcing Network & Suppliers
+                      </h3>
+                      
+                      {isEditing && (
+                        <Dialog open={isSupplierDialogOpen} onOpenChange={setIsSupplierDialogOpen}>
+                          <DialogTrigger asChild>
+                              <Button size="sm" className="h-8 bg-slate-900 text-white shadow-sm">
+                                  <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Supplier
+                              </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-2xl">
+                              <DialogHeader>
+                                  <DialogTitle>Add Commercial Supplier</DialogTitle>
+                              </DialogHeader>
+                              <div className="grid grid-cols-2 gap-4 py-4">
+                                  <div className="space-y-2 col-span-2">
+                                      <Label>Company Name</Label>
+                                      <Input value={newSupplier.name} onChange={(e) => setNewSupplier({...newSupplier, name: e.target.value})} placeholder="e.g. Shanghai Textile Co." />
+                                  </div>
+                                  <div className="space-y-2">
+                                      <Label>Role</Label>
+                                      <Select value={newSupplier.role} onValueChange={(v: any) => setNewSupplier({...newSupplier, role: v})}>
+                                          <SelectTrigger><SelectValue /></SelectTrigger>
+                                          <SelectContent>
+                                              <SelectItem value="EXPORTER">Exporter / Factory</SelectItem>
+                                              <SelectItem value="SEA_LINE">Shipping Line (Carrier)</SelectItem>
+                                              <SelectItem value="AIRLINE">Airline</SelectItem>
+                                              <SelectItem value="HAULIER">Haulier</SelectItem>
+                                          </SelectContent>
+                                      </Select>
+                                  </div>
+                                  <div className="space-y-2">
+                                      <Label>Relationship Tier</Label>
+                                      <Select value={newSupplier.tier} onValueChange={(v: any) => setNewSupplier({...newSupplier, tier: v})}>
+                                          <SelectTrigger><SelectValue /></SelectTrigger>
+                                          <SelectContent>
+                                              <SelectItem value="STRATEGIC">Strategic</SelectItem>
+                                              <SelectItem value="APPROVED">Approved</SelectItem>
+                                              <SelectItem value="BACKUP">Backup</SelectItem>
+                                              <SelectItem value="BLOCKED">Blocked</SelectItem>
+                                          </SelectContent>
+                                      </Select>
+                                  </div>
+                                  
+                                  <div className="col-span-2 border-t border-slate-100 my-2"></div>
+
+                                  <div className="space-y-2">
+                                      <Label>Country</Label>
+                                      <Input value={newSupplier.country} onChange={(e) => setNewSupplier({...newSupplier, country: e.target.value})} placeholder="e.g. China" />
+                                  </div>
+                                  <div className="space-y-2">
+                                      <Label>City</Label>
+                                      <Input value={newSupplier.city} onChange={(e) => setNewSupplier({...newSupplier, city: e.target.value})} placeholder="e.g. Shanghai" />
+                                  </div>
+                                  <div className="space-y-2 col-span-2">
+                                      <Label>Address</Label>
+                                      <Input value={newSupplier.address} onChange={(e) => setNewSupplier({...newSupplier, address: e.target.value})} placeholder="Full pickup address..." />
+                                  </div>
+
+                                  <div className="col-span-2 border-t border-slate-100 my-2"></div>
+
+                                  <div className="space-y-2">
+                                      <Label>Contact Person</Label>
+                                      <Input value={newSupplier.contactName} onChange={(e) => setNewSupplier({...newSupplier, contactName: e.target.value})} placeholder="e.g. Mr. Chen" />
+                                  </div>
+                                  <div className="space-y-2">
+                                      <Label>Email</Label>
+                                      <Input value={newSupplier.email} onChange={(e) => setNewSupplier({...newSupplier, email: e.target.value})} placeholder="sales@factory.com" />
+                                  </div>
+                                  <div className="space-y-2 col-span-2">
+                                      <Label>Primary Goods / Products</Label>
+                                      <Input value={newSupplier.products} onChange={(e) => setNewSupplier({...newSupplier, products: e.target.value})} placeholder="e.g. Cotton Fabrics, Polyester, Machinery Parts" />
+                                  </div>
+                              </div>
+                              <Button onClick={handleAddSupplier} className="w-full">Save Supplier</Button>
+                          </DialogContent>
+                        </Dialog>
+                      )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {commercialSuppliers.map((sup) => (
+                          <Card key={sup.id} className="relative overflow-hidden border-slate-200 shadow-sm hover:shadow-md transition-all hover:border-blue-200 group">
+                              <div className="absolute top-0 left-0 bottom-0 w-1 bg-indigo-500"></div>
+                              <CardContent className="p-4">
+                                  <div className="flex justify-between items-start mb-3">
+                                      <div>
+                                          <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                              {sup.name}
+                                              <Badge variant="outline" className={`text-[8px] h-4 px-1 ${getTierColor(sup.tier)}`}>
+                                                  {sup.tier}
+                                              </Badge>
+                                          </h4>
+                                          <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
+                                              <MapPin className="h-3 w-3" />
+                                              {sup.city}, {sup.country}
+                                          </div>
+                                      </div>
+                                      {isEditing && (
+                                          <Button variant="ghost" size="icon" onClick={() => removeSupplier(sup.id)} className="h-6 w-6 text-slate-300 hover:text-red-500 -mr-2 -mt-2">
+                                              <Trash2 className="h-3.5 w-3.5" />
+                                          </Button>
+                                      )}
+                                  </div>
+                                  
+                                  <div className="bg-slate-50 rounded-md p-2.5 space-y-2 border border-slate-100">
+                                      <div className="flex items-start gap-2">
+                                          <Box className="h-3.5 w-3.5 text-slate-400 mt-0.5" />
+                                          <span className="text-xs font-medium text-slate-700 leading-tight">
+                                              {sup.products || 'General Cargo'}
+                                          </span>
+                                      </div>
+                                      <div className="flex flex-wrap gap-3 pt-1">
+                                          {sup.contactName && (
+                                              <div className="flex items-center gap-1.5 text-[10px] text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                                                  <span className="font-bold">{sup.contactName}</span>
+                                              </div>
+                                          )}
+                                          {sup.email && (
+                                              <div className="flex items-center gap-1.5 text-[10px] text-blue-600 cursor-pointer hover:underline">
+                                                  <Mail className="h-3 w-3" /> {sup.email}
+                                              </div>
+                                          )}
+                                          {sup.phone && (
+                                              <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                                                  <Phone className="h-3 w-3" /> {sup.phone}
+                                              </div>
+                                          )}
+                                      </div>
+                                  </div>
+                                  
+                                  {sup.address && (
+                                      <div className="mt-3 text-[10px] text-slate-400 font-mono pl-1 border-l-2 border-slate-200 truncate">
+                                          {sup.address}
+                                      </div>
+                                  )}
+                              </CardContent>
+                          </Card>
+                      ))}
+                      {commercialSuppliers.length === 0 && (
+                          <div className="col-span-2 h-24 border-2 border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400">
+                              <Factory className="h-6 w-6 opacity-20 mb-2" />
+                              <span className="text-xs">No sourcing suppliers added.</span>
+                          </div>
+                      )}
+                  </div>
+              </div>
+
+              {/* 3. TRADE LANES (Left Column) */}
               <div className="col-span-12 lg:col-span-8 space-y-4">
                   <div className="flex justify-between items-center">
                       <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
@@ -121,64 +296,50 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
                   </div>
 
                   <div className="space-y-3">
-                      {routes.length === 0 && (
-                          <div className="h-32 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center text-slate-400">
-                              <Container className="h-8 w-8 opacity-20 mb-2" />
-                              <span className="text-sm">No trade lanes configured.</span>
-                          </div>
-                      )}
-                      
-                      {routes.map((route) => (
-                          <Card key={route.id} className="group relative overflow-hidden border-slate-200 shadow-sm hover:shadow-md transition-all hover:border-blue-200">
-                              <div className="absolute top-0 left-0 bottom-0 w-1 bg-blue-500"></div>
-                              <CardContent className="p-4 flex items-center justify-between">
-                                  {/* Route Visual */}
-                                  <div className="flex items-center gap-4 flex-1">
-                                      <div className="flex flex-col items-center w-12">
-                                          {route.mode === 'SEA' ? <Ship className="h-5 w-5 text-blue-600" /> : 
-                                           route.mode === 'AIR' ? <Plane className="h-5 w-5 text-orange-500" /> : 
-                                           <Truck className="h-5 w-5 text-emerald-600" />}
-                                          <span className="text-[9px] font-bold text-slate-400 mt-1">{route.mode}</span>
-                                      </div>
-                                      <div className="flex items-center gap-3">
-                                          <div className="text-center">
-                                              <div className="text-lg font-bold text-slate-800">{route.origin}</div>
-                                              <Badge variant="secondary" className="text-[9px] h-4 px-1">POL</Badge>
-                                          </div>
-                                          <div className="flex flex-col items-center px-2">
-                                              <span className="text-[9px] text-slate-400 font-mono mb-0.5">{route.incoterm}</span>
-                                              <ArrowRight className="h-4 w-4 text-slate-300" />
-                                              <span className="text-[9px] text-slate-400 font-mono mt-0.5">{route.frequency}</span>
-                                          </div>
-                                          <div className="text-center">
-                                              <div className="text-lg font-bold text-slate-800">{route.destination}</div>
-                                              <Badge variant="secondary" className="text-[9px] h-4 px-1">POD</Badge>
-                                          </div>
-                                      </div>
-                                  </div>
-                                  {/* Metrics & Actions */}
-                                  <div className="flex items-center gap-6 pl-6 border-l border-slate-100">
-                                      <div className="text-right">
-                                          <div className="text-xs text-slate-400 uppercase font-bold">Equipment</div>
-                                          <div className="font-mono text-sm font-semibold text-slate-700">{route.equipment}</div>
-                                      </div>
-                                      <div className="text-right">
-                                          <div className="text-xs text-slate-400 uppercase font-bold">Volume</div>
-                                          <div className="font-mono text-sm font-semibold text-blue-700">{route.volume} {route.volumeUnit}</div>
-                                      </div>
-                                      {isEditing && (
-                                          <Button variant="ghost" size="icon" onClick={() => removeRoute(route.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50">
-                                              <Trash2 className="h-4 w-4" />
-                                          </Button>
-                                      )}
-                                  </div>
-                              </CardContent>
-                          </Card>
-                      ))}
+                      {routes.map((route) => {
+                          const isImport = ['EXW', 'FCA', 'FOB'].includes(route.incoterm);
+                          return (
+                            <Card key={route.id} className="group relative overflow-hidden border-slate-200 shadow-sm hover:shadow-md transition-all hover:border-blue-200">
+                                <div className={`absolute top-0 left-0 bottom-0 w-1 ${route.mode === 'SEA' ? 'bg-blue-500' : 'bg-orange-500'}`}></div>
+                                <CardContent className="p-4 flex items-center justify-between">
+                                    <div className="flex items-center gap-4 flex-1">
+                                        <div className="flex flex-col items-center w-12">
+                                            {route.mode === 'SEA' ? <Ship className="h-5 w-5 text-blue-600" /> : <Plane className="h-5 w-5 text-orange-500" />}
+                                            <span className="text-[9px] font-bold text-slate-400 mt-1">{route.mode}</span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="text-center">
+                                                <div className="text-lg font-bold text-slate-800">{route.origin}</div>
+                                                {isImport && <Badge variant="outline" className="text-[8px] bg-amber-50 text-amber-700 border-amber-200">Import</Badge>}
+                                            </div>
+                                            <div className="flex flex-col items-center px-2">
+                                                <span className="text-[9px] text-slate-400 font-mono mb-0.5">{route.incoterm}</span>
+                                                <div className="h-px w-8 bg-slate-300"></div>
+                                            </div>
+                                            <div className="text-center">
+                                                <div className="text-lg font-bold text-slate-800">{route.destination}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-6 pl-6 border-l border-slate-100">
+                                        <div className="text-right">
+                                            <div className="text-xs text-slate-400 uppercase font-bold">Vol</div>
+                                            <div className="font-mono text-sm font-semibold text-blue-700">{route.volume} {route.volumeUnit}</div>
+                                        </div>
+                                        {isEditing && (
+                                            <Button variant="ghost" size="icon" onClick={() => removeRoute(route.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50">
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                          );
+                      })}
                   </div>
               </div>
 
-              {/* 3. INTELLIGENCE COLUMN (Right Column) */}
+              {/* 4. INTELLIGENCE & LOGISTICS VENDORS (Right Column) */}
               <div className="col-span-12 lg:col-span-4 space-y-6">
                   
                   {/* CARD A: HANDLING SPECS */}
@@ -200,24 +361,22 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
                                   onCheckedChange={(c) => updateOperationalProfile('requiresHazmat', c)}
                               />
                           </div>
-                          <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                  <Thermometer className={`h-4 w-4 ${operational.requiresReefer ? 'text-blue-500' : 'text-slate-400'}`} />
-                                  <span className="text-sm font-medium text-slate-700">Temperature Control</span>
-                              </div>
-                              <Switch 
-                                  checked={operational.requiresReefer} 
-                                  disabled={!isEditing}
-                                  onCheckedChange={(c) => updateOperationalProfile('requiresReefer', c)}
-                              />
-                          </div>
-                          {/* HS CODES */}
                           <div className="pt-2 border-t border-dashed">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">HS Codes</span>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">HS Codes & Rulings</span>
                               <div className="flex flex-wrap gap-2 mb-2">
                                   {operational.hsCodes.map((code, idx) => (
-                                      <Badge key={idx} variant="outline" className="bg-slate-50 border-slate-200 font-mono text-xs">
+                                      <Badge key={idx} variant="outline" className="bg-slate-50 border-slate-200 font-mono text-xs pr-1">
                                           {code}
+                                          <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger>
+                                                     <div className="ml-1 h-4 w-4 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center cursor-pointer hover:bg-blue-100">
+                                                        <UploadCloud className="h-2.5 w-2.5" />
+                                                     </div>
+                                                </TooltipTrigger>
+                                                <TooltipContent>Upload Technical Sheet</TooltipContent>
+                                            </Tooltip>
+                                          </TooltipProvider>
                                           {isEditing && (
                                               <Trash2 className="h-3 w-3 ml-1 cursor-pointer text-slate-400 hover:text-red-500" onClick={() => handleRemoveHS(code)} />
                                           )}
@@ -234,115 +393,30 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
                       </CardContent>
                   </Card>
 
-                  {/* CARD B: COMMERCIAL PREFERENCES (Restored & Upgraded) */}
-                  <Card className="shadow-sm border-slate-200">
+                   {/* LOGISTICS VENDORS (Reduced View) */}
+                   <Card className="shadow-sm border-slate-200">
                       <CardHeader className="py-3 px-4 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
                           <CardTitle className="text-xs font-bold uppercase text-slate-500 flex items-center gap-2">
-                              <Anchor className="h-3.5 w-3.5" /> Commercial Prefs
+                              <Anchor className="h-3.5 w-3.5" /> Approved Carriers
                           </CardTitle>
                       </CardHeader>
-                      <CardContent className="p-4 space-y-6">
-                          
-                          {/* SUPPLIERS SECTION */}
-                          <div>
-                              <div className="flex justify-between items-center mb-2">
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase">Preferred Vendors</span>
-                                  {isEditing && (
-                                      <Popover>
-                                          <PopoverTrigger asChild>
-                                              <Button size="icon" variant="ghost" className="h-5 w-5 text-slate-400"><Plus className="h-3 w-3" /></Button>
-                                          </PopoverTrigger>
-                                          <PopoverContent className="w-64 p-3" align="end">
-                                              <div className="space-y-2">
-                                                  <h4 className="font-medium text-xs">Add Vendor</h4>
-                                                  <Input placeholder="Name (e.g. Maersk)" className="h-7 text-xs" value={newSupplier.name} onChange={e => setNewSupplier({...newSupplier, name: e.target.value})} />
-                                                  <Select value={newSupplier.role} onValueChange={(v: any) => setNewSupplier({...newSupplier, role: v})}>
-                                                      <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                                                      <SelectContent>
-                                                          <SelectItem value="SEA_LINE">Shipping Line</SelectItem>
-                                                          <SelectItem value="AIRLINE">Airline</SelectItem>
-                                                          <SelectItem value="HAULIER">Haulier</SelectItem>
-                                                      </SelectContent>
-                                                  </Select>
-                                                  <Select value={newSupplier.tier} onValueChange={(v: any) => setNewSupplier({...newSupplier, tier: v})}>
-                                                      <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                                                      <SelectContent>
-                                                          <SelectItem value="STRATEGIC">Strategic</SelectItem>
-                                                          <SelectItem value="APPROVED">Approved</SelectItem>
-                                                          <SelectItem value="BACKUP">Backup</SelectItem>
-                                                          <SelectItem value="BLOCKED">Blocked</SelectItem>
-                                                      </SelectContent>
-                                                  </Select>
-                                                  <Button size="sm" className="w-full h-7 text-xs" onClick={handleAddSupplier}>Add Vendor</Button>
-                                              </div>
-                                          </PopoverContent>
-                                      </Popover>
-                                  )}
-                              </div>
-                              <div className="space-y-2">
-                                  {suppliers.map((sup) => (
-                                      <div key={sup.id} className="flex justify-between items-center text-xs p-2 bg-slate-50 rounded border border-slate-100 group">
-                                          <div className="flex items-center gap-2">
-                                              <Badge variant="outline" className={`text-[9px] h-4 px-1 ${getTierColor(sup.tier)}`}>{sup.tier[0]}</Badge>
-                                              <span className="font-semibold text-slate-700">{sup.name}</span>
-                                          </div>
-                                          <div className="flex items-center gap-2">
-                                              <span className="text-[9px] text-slate-400">{sup.role.replace('_', ' ')}</span>
-                                              {isEditing && <Trash2 className="h-3 w-3 cursor-pointer text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => removeSupplier(sup.id)} />}
-                                          </div>
-                                      </div>
-                                  ))}
-                                  {suppliers.length === 0 && <span className="text-xs text-slate-400 italic">No vendors configured.</span>}
-                              </div>
+                      <CardContent className="p-4">
+                          <div className="space-y-2">
+                                {logisticsPartners.map((sup) => (
+                                    <div key={sup.id} className="flex justify-between items-center text-xs p-2.5 bg-slate-50 rounded-md border border-slate-100">
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant="outline" className={`text-[9px] h-4 px-1 py-0 ${getTierColor(sup.tier)}`}>
+                                                {sup.tier}
+                                            </Badge>
+                                            <span className="font-semibold text-slate-700">{sup.name}</span>
+                                        </div>
+                                        <span className="text-[9px] text-slate-400">{sup.role.replace('_', ' ')}</span>
+                                    </div>
+                                ))}
+                                {logisticsPartners.length === 0 && <span className="text-xs text-slate-400 italic">No carriers assigned.</span>}
                           </div>
-
-                          {/* COMMODITIES SECTION */}
-                          <div className="pt-4 border-t border-dashed">
-                              <div className="flex justify-between items-center mb-2">
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase">Commodities</span>
-                                  {isEditing && (
-                                      <Popover>
-                                          <PopoverTrigger asChild>
-                                              <Button size="icon" variant="ghost" className="h-5 w-5 text-slate-400"><Plus className="h-3 w-3" /></Button>
-                                          </PopoverTrigger>
-                                          <PopoverContent className="w-64 p-3" align="end">
-                                              <div className="space-y-2">
-                                                  <h4 className="font-medium text-xs">Add Commodity</h4>
-                                                  <Input placeholder="Name (e.g. Cotton)" className="h-7 text-xs" value={newCommodity.name} onChange={e => setNewCommodity({...newCommodity, name: e.target.value})} />
-                                                  <Select value={newCommodity.sector} onValueChange={(v: any) => setNewCommodity({...newCommodity, sector: v})}>
-                                                      <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                                                      <SelectContent>
-                                                          <SelectItem value="TEXTILE">Textile</SelectItem>
-                                                          <SelectItem value="AUTOMOTIVE">Automotive</SelectItem>
-                                                          <SelectItem value="PERISHABLE">Perishable</SelectItem>
-                                                          <SelectItem value="INDUSTRIAL">Industrial</SelectItem>
-                                                      </SelectContent>
-                                                  </Select>
-                                                  <div className="flex items-center gap-2">
-                                                      <Switch checked={newCommodity.isHazmat} onCheckedChange={(c) => setNewCommodity({...newCommodity, isHazmat: c})} className="scale-75" />
-                                                      <span className="text-xs">Hazmat?</span>
-                                                  </div>
-                                                  <Button size="sm" className="w-full h-7 text-xs" onClick={handleAddCommodity}>Add Commodity</Button>
-                                              </div>
-                                          </PopoverContent>
-                                      </Popover>
-                                  )}
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                  {commodities.map((com) => (
-                                      <Badge key={com.id} variant="outline" className={`gap-1 pr-1 ${com.isHazmat ? 'border-orange-200 bg-orange-50 text-orange-700' : 'bg-white border-slate-200 text-slate-600'}`}>
-                                          <Package className="h-3 w-3" /> 
-                                          {com.name}
-                                          {isEditing && <Trash2 className="h-3 w-3 ml-1 cursor-pointer text-slate-400 hover:text-red-500" onClick={() => removeCommodity(com.id)} />}
-                                      </Badge>
-                                  ))}
-                                  {commodities.length === 0 && <span className="text-xs text-slate-400 italic">No commodities listed.</span>}
-                              </div>
-                          </div>
-
                       </CardContent>
-                  </Card>
-
+                   </Card>
               </div>
           </div>
       </div>

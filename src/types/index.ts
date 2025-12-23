@@ -39,7 +39,6 @@ export interface QuoteApproval {
     rejectionReason?: string;
 }
 
-// NEW: Type for Smart Logic behavior
 export type DynamicLineType = 'MAIN_FRET' | 'RET_FOND' | 'PEAGE_LCL' | 'STATIC';
 
 export interface QuoteLineItem {
@@ -56,15 +55,11 @@ export interface QuoteLineItem {
   markupType: 'PERCENT' | 'FIXED_AMOUNT';
   markupValue: number;
   vatRule: 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | 'DISBURSEMENT';
-  
-  // UPDATED: Added SMART_INIT
   source: 'MANUAL' | 'TARIFF' | 'SMART_INIT';
   tariffId?: string;
-
-  // NEW: Smart Logic Fields
-  isRequired?: boolean;           // Highlights red if empty
-  dynamicType?: DynamicLineType;  // For linking (e.g. Main Fret updates Rebate)
-  calculationFactor?: number;     // Stores % for Rebate or other factors
+  isRequired?: boolean;           
+  dynamicType?: DynamicLineType;  
+  calculationFactor?: number;     
 }
 
 export interface QuoteOption {
@@ -80,14 +75,9 @@ export interface QuoteOption {
     placeOfDelivery?: string;
     transitTime?: number;
     freeTime?: number;
-    
-    // Legacy support
     equipmentType?: string;
     containerCount: number;
-    
-    // Multi-Equipment Support
     equipmentList: { id: string; type: string; count: number }[];
-
     items: QuoteLineItem[];
     totalTTC: number;
     baseCurrency: Currency;
@@ -103,28 +93,21 @@ export interface Quote {
   version: number; 
   customerReference?: string;
   status: 'DRAFT' | 'PRICING' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'REJECTED';
-  
-  // CRM SNAPSHOT
   clientId: string;
   clientName: string;
   clientTaxId?: string; 
   clientIce?: string; 
   paymentTerms: string; 
-  
   salespersonId: string;
   salespersonName: string;
   validityDate: Date; 
   cargoReadyDate: Date;
   requestedDepartureDate?: Date;
-  
-  // ROUTE & SPECS (Cached / Top Level)
   pol?: string;
   pod?: string;
   mode?: TransportMode;       
   incoterm?: Incoterm;        
   activeOptionId?: string;    
-  
-  // CARGO
   cargoRows: any[];
   goodsDescription: string;
   hsCode?: string;
@@ -135,18 +118,13 @@ export interface Quote {
   temperature?: string;
   cargoValue?: number;
   insuranceRequired: boolean;
-  
-  // CALCULATED CARGO STATS
   totalWeight?: number; 
   totalVolume?: number;
   chargeableWeight?: number;
-
-  // FINANCIAL SNAPSHOTS
   totalTTC?: number;
   totalSellTarget?: number;
   totalTaxTarget?: number;
   totalTTCTarget?: number;
-
   probability: Probability;
   competitorInfo?: string;
   internalNotes: string;
@@ -155,7 +133,7 @@ export interface Quote {
   options: QuoteOption[];
 }
 
-// --- 3. DOSSIER MODELS (UNCHANGED) ---
+// --- 3. DOSSIER MODELS ---
 export type ShipmentStatus = 'BOOKED' | 'PICKUP' | 'AT_POL' | 'ON_WATER' | 'AT_POD' | 'CUSTOMS' | 'DELIVERED' | 'COMPLETED';
 
 export interface ShipmentParty {
@@ -221,7 +199,7 @@ export interface Dossier {
   currency: Currency;
 }
 
-// --- 4. FINANCE ENGINE (UNCHANGED) ---
+// --- 4. FINANCE ENGINE ---
 export type ChargeType = 'INCOME' | 'EXPENSE';
 export type ChargeStatus = 'ESTIMATED' | 'ACCRUED' | 'READY_TO_INVOICE' | 'INVOICED' | 'POSTED' | 'PAID' | 'PARTIAL';
 export type InvoiceStatus = 'DRAFT' | 'ISSUED' | 'SENT' | 'PAID' | 'OVERDUE' | 'CANCELLED';
@@ -270,17 +248,19 @@ export interface Invoice {
     lines: ChargeLine[];
 }
 
-// --- 5. CLIENT INTELLIGENCE MODELS (UPDATED) ---
+// --- 5. CLIENT INTELLIGENCE MODELS ---
 export type ClientStatus = 'ACTIVE' | 'PROSPECT' | 'SUSPENDED' | 'BLACKLISTED';
 export type ClientType = 'SHIPPER' | 'CONSIGNEE' | 'FORWARDER' | 'PARTNER';
-export type SupplierRole = 'SEA_LINE' | 'AIRLINE' | 'HAULIER' | 'FORWARDER';
+// UPDATED ROLE: Added 'EXPORTER' for commercial suppliers
+export type SupplierRole = 'SEA_LINE' | 'AIRLINE' | 'HAULIER' | 'FORWARDER' | 'EXPORTER';
 export type SupplierTier = 'STRATEGIC' | 'APPROVED' | 'BACKUP' | 'BLOCKED';
 export type CommoditySector = 'AUTOMOTIVE' | 'TEXTILE' | 'PERISHABLE' | 'RETAIL' | 'INDUSTRIAL' | 'TECH';
+export type ClientRole = 'MANAGER' | 'SALES' | 'ACCOUNTING' | 'LOGISTICS' | 'CUSTOMS_BROKER' | 'WAREHOUSE';
 
 export interface ClientContact {
   id: string;
   name: string;
-  role: string;
+  role: ClientRole | string;
   email: string;
   phone: string;
   isPrimary: boolean;
@@ -301,8 +281,9 @@ export interface ClientRoute {
 export interface ClientDocument {
   id: string;
   name: string;
-  type: 'CONTRACT' | 'KYC' | 'NDA' | 'OTHER';
+  type: 'CONTRACT' | 'KYC' | 'NDA' | 'POWER_OF_ATTORNEY' | 'OTHER';
   uploadDate: Date;
+  expiryDate?: Date;
   size: string;
   url: string;
 }
@@ -311,21 +292,36 @@ export interface ClientFinancials {
   paymentTerms: string;
   vatNumber: string;
   currency: string;
-  ice?: string;
+  ice: string;      
+  patente?: string; 
+  cnss?: string;    
   rc?: string;
   taxId?: string;
-  
-  // NEW BILLING CONFIGURATION (FIXED)
-  customsRebatePercent?: number; // Retour de fond (%)
-  adminFee?: number;             // Frais de dossier (Fixed)
-  tollFee?: number;              // Péage (Default Fixed)
+  customsRebatePercent?: number; 
+  adminFee?: number;             
+  adminFeeCurrency?: Currency;   
+  tollFee?: number;              // CONFIRMED PRESENT
+  averageDaysToPay?: number;     
+  specialInstructions?: string;  
 }
 
+// UPDATED CLIENT SUPPLIER
 export interface ClientSupplier {
   id: string;
   name: string;
   role: SupplierRole;
   tier: SupplierTier;
+  
+  // New Rich Data Fields
+  country?: string;
+  city?: string;
+  address?: string;
+  contactName?: string;
+  email?: string;
+  phone?: string;
+  products?: string; // Comma separated list of goods
+  website?: string;
+  notes?: string;
 }
 
 export interface ClientCommodity {
@@ -341,6 +337,7 @@ export interface OperationalProfile {
   requiresReefer: boolean;
   requiresOOG: boolean;
   customsRegime: 'STANDARD' | 'TEMPORARY' | 'FREE_ZONE';
+  negotiatedFreeTime?: number; 
 }
 
 export interface Client {
@@ -349,21 +346,23 @@ export interface Client {
   updated_at?: string;
   entityName: string;
   status: ClientStatus;
+  blacklistReason?: string;
   type: ClientType;
+  parentCompanyId?: string;
   email: string;
   phone: string;
   website?: string;
+  billingAddress: string; 
+  deliveryAddress?: string; 
   city: string;
   country: string;
-  address?: string;
-  
   creditLimit: number;
-  creditUsed: number;
+  unbilledWork: number; 
+  unpaidInvoices: number; 
   financials: ClientFinancials;
-  
   salesRepId: string;
+  opsManagerId?: string; 
   tags: string[];
-  
   contacts: ClientContact[];
   routes: ClientRoute[];
   documents: ClientDocument[];

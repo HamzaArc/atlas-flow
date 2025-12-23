@@ -13,8 +13,12 @@ const MOCK_DB_CLIENTS: Client[] = [
     {
         id: 'cli_1', created_at: '2023-01-15T10:00:00Z', entityName: 'TexNord SARL', status: 'ACTIVE', type: 'SHIPPER',
         email: 'logistics@texnord.ma', phone: '+212 522 00 00 00', website: 'www.texnord.ma',
-        city: 'Casablanca', country: 'Morocco', address: '123 Ind. Zone Sidi Maarouf',
-        creditLimit: 500000, creditUsed: 125000,
+        city: 'Casablanca', country: 'Morocco', 
+        billingAddress: '123 Ind. Zone Sidi Maarouf, Casablanca',
+        deliveryAddress: 'Unit 4, Parc Industriel Sapino, Nouaceur',
+        creditLimit: 500000, 
+        unbilledWork: 45000,
+        unpaidInvoices: 80000,
         salesRepId: 'Youssef (Sales)', tags: ['VIP', 'Textile', 'Export'],
         contacts: [
             { id: 'ct_1', name: 'Ahmed Bennani', role: 'Logistics Manager', email: 'ahmed@texnord.ma', phone: '+212 600 11 22 33', isPrimary: true }
@@ -29,7 +33,21 @@ const MOCK_DB_CLIENTS: Client[] = [
         suppliers: [
             { id: 'sup_1', name: 'Maersk', role: 'SEA_LINE', tier: 'STRATEGIC' },
             { id: 'sup_2', name: 'CMA CGM', role: 'SEA_LINE', tier: 'APPROVED' },
-            { id: 'sup_3', name: 'DHL Aviation', role: 'AIRLINE', tier: 'BACKUP' }
+            { id: 'sup_3', name: 'DHL Aviation', role: 'AIRLINE', tier: 'BACKUP' },
+            // NEW SOURCE SUPPLIER
+            { 
+                id: 'sup_source_1', 
+                name: 'Zhejiang Textile Co.', 
+                role: 'EXPORTER', 
+                tier: 'STRATEGIC',
+                country: 'China',
+                city: 'Ningbo',
+                address: 'No. 888 Industry Road, Yinzhou District',
+                contactName: 'Ms. Li Mei',
+                email: 'export@zhejiangtex.cn',
+                phone: '+86 574 0000 1111',
+                products: 'Polyester Fabric, Yarn'
+            }
         ],
         commodities: [
             { id: 'com_1', name: 'Raw Cotton Fabric', sector: 'TEXTILE', isHazmat: false },
@@ -41,11 +59,24 @@ const MOCK_DB_CLIENTS: Client[] = [
             requiresReefer: false,
             requiresOOG: false,
             customsRegime: 'STANDARD',
+            negotiatedFreeTime: 14
         },
         activities: [
             { id: 'a1', category: 'NOTE', text: 'Meeting with CEO next Tuesday regarding Q3 targets.', meta: 'Youssef', timestamp: new Date('2024-01-20'), tone: 'neutral' }
         ], 
-        financials: { paymentTerms: 'NET_60', vatNumber: '12345', currency: 'MAD', ice: '001528829000054', rc: '34992' }
+        financials: { 
+            paymentTerms: 'NET_60', 
+            vatNumber: '12345678', 
+            currency: 'MAD', 
+            ice: '001528829000054', 
+            rc: '34992',
+            patente: '112233',
+            cnss: '9876543',
+            averageDaysToPay: 65,
+            adminFee: 350,
+            adminFeeCurrency: 'MAD',
+            tollFee: 150
+        }
     }
 ];
 
@@ -72,8 +103,10 @@ export const ClientService = {
         phone: '',
         city: '',
         country: 'Morocco',
+        billingAddress: '',
         creditLimit: 0,
-        creditUsed: 0,
+        unbilledWork: 0,
+        unpaidInvoices: 0,
         salesRepId: 'Youssef (Sales)',
         tags: [],
         contacts: [],
@@ -87,6 +120,7 @@ export const ClientService = {
             requiresReefer: false,
             requiresOOG: false,
             customsRegime: 'STANDARD',
+            negotiatedFreeTime: 7
         },
         activities: [
           { 

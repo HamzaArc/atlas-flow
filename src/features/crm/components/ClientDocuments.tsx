@@ -2,22 +2,23 @@ import { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, Trash2, UploadCloud, File, Calendar } from "lucide-react";
+import { FileText, Download, Trash2, UploadCloud, File, Calendar, AlertTriangle } from "lucide-react";
 import { useClientStore } from "@/store/useClientStore";
-import { ClientDocument } from "@/types/index"; // FIXED IMPORT
+import { ClientDocument } from "@/types/index";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 
 export function ClientDocuments({ isEditing }: { isEditing: boolean }) {
     const { activeClient, addDocument, removeDocument } = useClientStore();
     
-    // Mock Upload Function
+    // Mock Upload
     const handleUpload = () => {
         const newDoc: ClientDocument = {
             id: Math.random().toString(),
-            name: `Uploaded_Document_${new Date().getTime()}.pdf`,
-            type: 'OTHER',
-            size: '1.2 MB',
+            name: `Contract_2024_${new Date().getTime()}.pdf`,
+            type: 'CONTRACT',
+            size: '2.4 MB',
             uploadDate: new Date(),
+            expiryDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)), // 1 year expiry
             url: '#'
         };
         addDocument(newDoc);
@@ -25,13 +26,20 @@ export function ClientDocuments({ isEditing }: { isEditing: boolean }) {
 
     if (!activeClient) return null;
 
+    const isExpiringSoon = (date?: Date) => {
+        if(!date) return false;
+        const diffTime = new Date(date).getTime() - new Date().getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays < 30 && diffDays > 0;
+    };
+
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
             <Card className="shadow-md border-slate-200 bg-white">
                 <CardHeader className="py-4 border-b flex flex-row justify-between items-center bg-slate-50/30">
                     <div className="flex items-center gap-2">
                         <FileText className="h-4 w-4 text-slate-400" />
-                        <CardTitle className="text-sm font-bold text-slate-700">Digital Archive</CardTitle>
+                        <CardTitle className="text-sm font-bold text-slate-700">Legal Archive</CardTitle>
                     </div>
                     {isEditing && (
                         <Button size="sm" onClick={handleUpload} className="bg-slate-900 text-white hover:bg-slate-800 shadow-sm">
@@ -46,7 +54,7 @@ export function ClientDocuments({ isEditing }: { isEditing: boolean }) {
                                 <TableHead className="w-[300px]">Filename</TableHead>
                                 <TableHead>Type</TableHead>
                                 <TableHead>Size</TableHead>
-                                <TableHead>Upload Date</TableHead>
+                                <TableHead>Expiry Date</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -71,10 +79,14 @@ export function ClientDocuments({ isEditing }: { isEditing: boolean }) {
                                         </TableCell>
                                         <TableCell className="text-slate-500 text-xs">{doc.size}</TableCell>
                                         <TableCell className="text-slate-500 text-xs">
-                                            <div className="flex items-center gap-1">
-                                                <Calendar className="h-3 w-3" />
-                                                {new Date(doc.uploadDate).toLocaleDateString()}
-                                            </div>
+                                            {doc.expiryDate ? (
+                                                <div className={`flex items-center gap-1 ${isExpiringSoon(doc.expiryDate) ? 'text-amber-600 font-bold' : ''}`}>
+                                                    {isExpiringSoon(doc.expiryDate) && <AlertTriangle className="h-3 w-3" />}
+                                                    {new Date(doc.expiryDate).toLocaleDateString()}
+                                                </div>
+                                            ) : (
+                                                <span className="text-slate-300">-</span>
+                                            )}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-1">

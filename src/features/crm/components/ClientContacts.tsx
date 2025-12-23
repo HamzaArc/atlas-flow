@@ -11,6 +11,12 @@ export function ClientContacts({ isEditing }: { isEditing: boolean }) {
 
     if (!activeClient) return null;
 
+    const getRoleBadge = (role: string) => {
+        if(role === 'CUSTOMS_BROKER') return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">Broker</Badge>;
+        if(role === 'ACCOUNTING') return <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Billing</Badge>;
+        return <span className="text-slate-500">{role}</span>;
+    }
+
     return (
         <Card className="animate-in fade-in slide-in-from-bottom-2 duration-500 shadow-md border-slate-200 bg-white">
             <CardHeader className="py-4 border-b flex flex-row justify-between items-center bg-slate-50/30">
@@ -25,10 +31,9 @@ export function ClientContacts({ isEditing }: { isEditing: boolean }) {
                         <TableRow className="bg-slate-50 hover:bg-slate-50">
                             <TableHead className="w-[50px]"></TableHead>
                             <TableHead>Name</TableHead>
-                            <TableHead>Role</TableHead>
+                            <TableHead>Function</TableHead>
                             <TableHead>Email</TableHead>
                             <TableHead>Phone</TableHead>
-                            <TableHead>Status</TableHead>
                             <TableHead className="w-[50px]"></TableHead>
                         </TableRow>
                     </TableHeader>
@@ -41,12 +46,9 @@ export function ClientContacts({ isEditing }: { isEditing: boolean }) {
                                     </div>
                                 </TableCell>
                                 <TableCell className="font-bold text-slate-700 text-sm">{c.name}</TableCell>
-                                <TableCell className="text-xs text-slate-500">{c.role}</TableCell>
+                                <TableCell className="text-xs">{getRoleBadge(c.role)}</TableCell>
                                 <TableCell className="text-xs text-blue-600 hover:underline cursor-pointer">{c.email}</TableCell>
                                 <TableCell className="text-xs text-slate-500 font-mono">{c.phone}</TableCell>
-                                <TableCell>
-                                    {c.isPrimary && <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-100 text-[10px] shadow-sm">Primary</Badge>}
-                                </TableCell>
                                 <TableCell>
                                     {isEditing && (
                                         <Button variant="ghost" size="sm" onClick={() => removeContact(c.id)} className="text-slate-400 hover:text-red-500">

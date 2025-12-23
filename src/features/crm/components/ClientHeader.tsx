@@ -1,10 +1,12 @@
-import { ArrowLeft, CheckCircle2, History, MapPin, Calendar, User } from "lucide-react";
+import { ArrowLeft, CheckCircle2, MapPin, Calendar, User, LayoutDashboard, FilePlus, Ship, AlertCircle, Ban, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useClientStore } from "@/store/useClientStore";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ClientHeaderProps {
     isEditing: boolean;
@@ -28,6 +30,16 @@ export function ClientHeader({ isEditing, setIsEditing, onSave, onBack }: Client
         }
     };
 
+    // Financial Health Calculation
+    const totalExposure = (activeClient.unpaidInvoices || 0) + (activeClient.unbilledWork || 0);
+    const utilization = activeClient.creditLimit > 0 ? (totalExposure / activeClient.creditLimit) : 0;
+    
+    let healthColor = "bg-emerald-500"; // Healthy
+    let healthText = "Healthy";
+    if (activeClient.status === 'BLACKLISTED') { healthColor = "bg-slate-900"; healthText = "Blacklisted"; }
+    else if (utilization > 1) { healthColor = "bg-red-500"; healthText = "Credit Exceeded"; }
+    else if (utilization > 0.8) { healthColor = "bg-amber-500"; healthText = "Near Limit"; }
+
     return (
         <div className="bg-white border-b border-slate-200 px-8 py-5 shadow-sm sticky top-0 z-20">
             <div className="flex justify-between items-start">
@@ -35,8 +47,21 @@ export function ClientHeader({ isEditing, setIsEditing, onSave, onBack }: Client
                     <Button variant="ghost" size="icon" onClick={onBack} className="mr-2 text-slate-400 hover:text-slate-700">
                         <ArrowLeft className="h-5 w-5" />
                     </Button>
-                    <div className="h-14 w-14 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg text-white font-bold text-xl ring-4 ring-blue-50">
-                        {activeClient.entityName ? activeClient.entityName.substring(0, 2).toUpperCase() : '??'}
+                    <div className="relative">
+                        <div className="h-14 w-14 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg text-white font-bold text-xl ring-4 ring-blue-50">
+                            {activeClient.entityName ? activeClient.entityName.substring(0, 2).toUpperCase() : '??'}
+                        </div>
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div className={cn("absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-white", healthColor)} />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p className="font-bold">{healthText}</p>
+                                    <p className="text-xs">Exposure: {Math.round(utilization * 100)}%</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                     </div>
                     <div>
                         <div className="flex items-center gap-3 mb-1">
@@ -58,22 +83,37 @@ export function ClientHeader({ isEditing, setIsEditing, onSave, onBack }: Client
                         <div className="flex items-center gap-4 text-sm text-slate-500">
                             <span className="flex items-center gap-1.5 text-xs"><MapPin className="h-3.5 w-3.5" /> {activeClient.city || 'No City'}, {activeClient.country || 'No Country'}</span>
                             <span className="h-3 w-px bg-slate-300"></span>
-                            <span className="flex items-center gap-1.5 text-xs"><Calendar className="h-3.5 w-3.5" /> Since: {new Date(activeClient.created_at).toLocaleDateString()}</span>
-                            <span className="h-3 w-px bg-slate-300"></span>
-                            <div className="flex items-center gap-1.5 text-xs">
-                                <User className="h-3.5 w-3.5" />
-                                {isEditing ? (
-                                    <Select value={activeClient.salesRepId} onValueChange={(v) => updateActiveField('salesRepId', v)}>
-                                        <SelectTrigger className="h-7 w-36 text-xs border-slate-200 bg-slate-50"><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="Youssef (Sales)">Youssef (Sales)</SelectItem>
-                                            <SelectItem value="Fatima (Ops)">Fatima (Ops)</SelectItem>
-                                            <SelectItem value="Admin">Admin</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                ) : (
-                                    <span>{activeClient.salesRepId || 'Unassigned'}</span>
-                                )}
+                            
+                            {/* Ownership Split */}
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-1.5 text-xs" title="Sales Owner">
+                                    <User className="h-3.5 w-3.5 text-blue-500" />
+                                    {isEditing ? (
+                                        <Select value={activeClient.salesRepId} onValueChange={(v) => updateActiveField('salesRepId', v)}>
+                                            <SelectTrigger className="h-6 w-32 text-xs border-slate-200 bg-slate-50"><SelectValue placeholder="Sales" /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Youssef (Sales)">Youssef (Sales)</SelectItem>
+                                                <SelectItem value="Admin">Admin</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    ) : (
+                                        <span>{activeClient.salesRepId || 'No Sales Rep'}</span>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-1.5 text-xs" title="Operational KAM">
+                                    <Ship className="h-3.5 w-3.5 text-slate-400" />
+                                    {isEditing ? (
+                                        <Select value={activeClient.opsManagerId || ''} onValueChange={(v) => updateActiveField('opsManagerId', v)}>
+                                            <SelectTrigger className="h-6 w-32 text-xs border-slate-200 bg-slate-50"><SelectValue placeholder="Ops KAM" /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Fatima (Ops)">Fatima (Ops)</SelectItem>
+                                                <SelectItem value="Ahmed (Ops)">Ahmed (Ops)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    ) : (
+                                        <span>{activeClient.opsManagerId || 'No KAM'}</span>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -89,9 +129,32 @@ export function ClientHeader({ isEditing, setIsEditing, onSave, onBack }: Client
                         </>
                     ) : (
                         <>
-                            <Button variant="outline" className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm">
-                                <History className="h-4 w-4 mr-2" /> Logs
-                            </Button>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm">
+                                        Actions
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-56">
+                                    <DropdownMenuLabel>Operational</DropdownMenuLabel>
+                                    <DropdownMenuItem className="cursor-pointer">
+                                        <FilePlus className="mr-2 h-4 w-4" /> New Quote
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem className="cursor-pointer">
+                                        <Ship className="mr-2 h-4 w-4" /> New Booking
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuLabel>Financial</DropdownMenuLabel>
+                                    <DropdownMenuItem className="cursor-pointer">
+                                        <LayoutDashboard className="mr-2 h-4 w-4" /> Account Statement
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem className="text-red-600 cursor-pointer focus:bg-red-50">
+                                        <Ban className="mr-2 h-4 w-4" /> Block Client
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+
                             <Button onClick={() => setIsEditing(true)} className="bg-slate-900 text-white hover:bg-slate-800 shadow-md">
                                 Edit Profile
                             </Button>
@@ -99,6 +162,19 @@ export function ClientHeader({ isEditing, setIsEditing, onSave, onBack }: Client
                     )}
                 </div>
             </div>
+            
+            {/* Alert Banner for Blacklisted/Suspended */}
+            {(activeClient.status === 'BLACKLISTED' || activeClient.status === 'SUSPENDED') && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3 animate-in slide-in-from-top-2">
+                    <AlertTriangle className="h-5 w-5 text-red-600 shrink-0" />
+                    <div>
+                        <h4 className="text-sm font-bold text-red-800">Operational Hold Active</h4>
+                        <p className="text-xs text-red-700 mt-0.5">
+                            Reason: {activeClient.blacklistReason || 'Administrative Block'}. Do not accept new bookings without CFO approval.
+                        </p>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
