@@ -14,10 +14,10 @@ import {
 } from "@/components/ui/command";
 import { 
     Save, ArrowLeft, Copy, Coins, Settings2, 
-    User, Calendar, Hash, Clock, Check, GitBranch, MessageSquare, ChevronsUpDown
+    User, Clock, Check, GitBranch, MessageSquare, ChevronsUpDown
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
-import { useClientStore } from "@/store/useClientStore"; // RESTORED INTEGRATION
+import { useClientStore } from "@/store/useClientStore"; 
 import { Currency } from "@/types/index";
 import { cn } from "@/lib/utils";
 import { ApprovalAction } from "./ApprovalAction";
@@ -38,11 +38,10 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
   // Quote Store
   const { 
     reference, status, clientName, clientId, validityDate, version,
-    salespersonName, cargoReadyDate, customerReference,
+    salespersonName,
     quoteCurrency, exchangeRates, paymentTerms,
     setIdentity, setStatus, saveQuote, duplicateQuote, createRevision,
     setQuoteCurrency, setExchangeRate,
-    // Access active option for WhatsApp summary
     mode, incoterm, pol, pod, totalTTCTarget
   } = useQuoteStore();
 
@@ -66,7 +65,7 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
     const client = clients.find(c => c.id === selectedId);
     if (!client) return;
 
-    // Manually update identity fields since setClientSnapshot might not be in the store yet
+    // Manually update identity fields
     setIdentity('clientId', client.id);
     setIdentity('clientName', client.entityName);
     setIdentity('paymentTerms', client.financials.paymentTerms || '30 Days');
@@ -260,12 +259,12 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
         </div>
       </div>
 
-      {/* 2. BUSINESS CONTEXT GRID */}
+      {/* 2. BUSINESS CONTEXT GRID - ADJUSTED */}
       <div className="bg-slate-50/50 border-b border-slate-200 px-6 py-3">
           <div className="grid grid-cols-12 gap-4">
               
-              {/* SMART CLIENT SELECTOR (Combobox) */}
-              <div className="col-span-3 space-y-1">
+              {/* SMART CLIENT SELECTOR (Expanded to col-span-4) */}
+              <div className="col-span-4 space-y-1">
                   <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
                       <User className="h-3 w-3" /> Customer Account
                   </Label>
@@ -314,8 +313,8 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                   </Popover>
               </div>
 
-               {/* Payment Terms Selector */}
-               <div className="col-span-2 space-y-1">
+               {/* Payment Terms Selector (col-span-3) */}
+               <div className="col-span-3 space-y-1">
                   <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
                       <Coins className="h-3 w-3" /> Payment Terms
                   </Label>
@@ -337,34 +336,7 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                   </Select>
               </div>
 
-              {/* Customer Reference */}
-              <div className="col-span-2 space-y-1">
-                  <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
-                      <Hash className="h-3 w-3" /> Client Ref / RFQ
-                  </Label>
-                  <Input 
-                      className="h-8 bg-white border-slate-200 placeholder:text-slate-300 font-mono text-xs shadow-sm"
-                      placeholder="e.g. RFQ-2024-001"
-                      value={customerReference}
-                      onChange={(e) => setIdentity('customerReference', e.target.value)}
-                      disabled={isReadOnly}
-                  />
-              </div>
-
-              {/* TIMELINE SECTION */}
-              <div className="col-span-2 space-y-1">
-                  <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
-                      <Calendar className="h-3 w-3" /> Cargo Ready
-                  </Label>
-                  <Input 
-                      type="date"
-                      className="h-8 bg-white border-slate-200 text-xs shadow-sm"
-                      value={formatDateForInput(cargoReadyDate)}
-                      onChange={(e) => setIdentity('cargoReadyDate', e.target.value)}
-                      disabled={isReadOnly}
-                  />
-              </div>
-
+              {/* Valid Until (col-span-2) */}
               <div className="col-span-2 space-y-1">
                   <Label className="text-[9px] uppercase font-bold text-red-400 tracking-wider flex items-center gap-1">
                       <Clock className="h-3 w-3" /> Valid Until
@@ -378,10 +350,10 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                   />
               </div>
 
-              {/* Sales Owner - KEEPING THE EDITABLE SELECT LOGIC */}
-              <div className="col-span-1 space-y-1 ml-auto">
+              {/* Sales Owner (col-span-3) */}
+              <div className="col-span-3 space-y-1">
                   <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
-                      <User className="h-3 w-3" /> Rep
+                      <User className="h-3 w-3" /> Sales Rep
                   </Label>
                   <Select 
                       disabled={isReadOnly}
@@ -396,7 +368,7 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                           setIdentity('salespersonId', ids[v] || 'user-1');
                       }}
                   >
-                      <SelectTrigger className="h-8 w-28 bg-white border-slate-200 text-xs shadow-sm focus:ring-blue-500 font-medium p-2">
+                      <SelectTrigger className="h-8 w-full bg-white border-slate-200 text-xs shadow-sm focus:ring-blue-500 font-medium">
                           <SelectValue placeholder="Rep" />
                       </SelectTrigger>
                       <SelectContent>

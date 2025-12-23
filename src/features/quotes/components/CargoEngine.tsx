@@ -9,7 +9,7 @@ import { useQuoteStore } from "@/store/useQuoteStore";
 import { 
     Package, Plus, Trash2, 
     Layers, Scale, Thermometer,
-    ArrowDownToLine, Zap, Wand2, ShieldAlert, CheckCircle2, Info, Loader2
+    ArrowDownToLine, Zap, Wand2, ShieldAlert, CheckCircle2, Info, Loader2, Container
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch"; 
 import { PackagingType } from "@/types/index";
@@ -32,14 +32,17 @@ export function CargoEngine() {
   const { 
       cargoRows, updateCargo, totalVolume, totalWeight, chargeableWeight, totalPackages,
       hsCode, isHazmat, isReefer, temperature, densityRatio,
-      setIdentity, mode, goodsDescription
+      setIdentity, mode, goodsDescription, equipmentType, containerCount
   } = useQuoteStore();
   
-  // Use the simpler toast hook from your project
   const { toast } = useToast();
 
   const [isClassifying, setIsClassifying] = useState(false);
   const [complianceResult, setComplianceResult] = useState<ComplianceResult | null>(null);
+
+  // --- LOGIC: SHOW/HIDE PACKAGE LIST ---
+  // Only needed in SEA_LCL, AIR, or ROAD LTL (contains "LTL" in name)
+  const isLCL = mode === 'SEA_LCL' || mode === 'AIR' || (mode === 'ROAD' && equipmentType?.includes('LTL'));
 
   const addRow = () => {
     const newRow = { 
@@ -67,7 +70,6 @@ export function CargoEngine() {
 
   const handleAutoClassify = async () => {
     if (!goodsDescription || goodsDescription.length < 3) {
-      // FIXED: Adapted to your toast signature (message, type)
       toast("Description too short. Please enter a valid goods description.", "error");
       return;
     }
@@ -80,31 +82,25 @@ export function CargoEngine() {
       
       if (result) {
         setComplianceResult(result);
-        
-        // Auto-apply logic
         if (result.confidence === 'HIGH') {
             setIdentity('hsCode', result.code);
             
             if (result.isHazmat && !isHazmat) {
                 setIdentity('isHazmat', true);
-                // FIXED: Adapted to your toast signature
                 toast("Compliance Alert: Dangerous Goods flag auto-enabled.", "warning");
             }
             
             if (result.requiresTemperature && !isReefer) {
                 setIdentity('isReefer', true);
-                setIdentity('temperature', "4"); // Default to typical cool chain
-                // FIXED: Adapted to your toast signature
+                setIdentity('temperature', "4");
                 toast("Compliance Alert: Reefer requirement detected.", "info");
             }
         }
       } else {
-        // FIXED: Adapted to your toast signature
         toast("No Match Found: Could not classify this item.", "warning");
       }
     } catch (error) {
       console.error(error);
-      // FIXED: Adapted to your toast signature
       toast("Service Error: Classification service unavailable.", "error");
     } finally {
       setIsClassifying(false);
@@ -132,7 +128,7 @@ export function CargoEngine() {
           <div className="grid grid-cols-4 gap-2">
               <div className="bg-slate-50 rounded border border-slate-100 p-2 flex flex-col items-center">
                   <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Pkgs</span>
-                  <span className="text-xs font-bold text-slate-700">{totalPackages}</span>
+                  <span className="text-xs font-bold text-slate-700">{isLCL ? totalPackages : containerCount}</span>
               </div>
               <div className="bg-slate-50 rounded border border-slate-100 p-2 flex flex-col items-center">
                   <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Weight</span>
@@ -148,7 +144,7 @@ export function CargoEngine() {
               )}>
                   <span className={cn("text-[9px] uppercase font-bold tracking-wider", densityRatio < 167 && mode === 'AIR' ? "text-red-400" : "text-emerald-500")}>Ratio</span>
                   <span className={cn("text-xs font-bold", densityRatio < 167 && mode === 'AIR' ? "text-red-700" : "text-emerald-700")}>
-                      1:{densityRatio}
+                      1:{isLCL ? densityRatio : '-'}
                   </span>
               </div>
           </div>
@@ -289,88 +285,102 @@ export function CargoEngine() {
                   </div>
               </div>
 
-              {/* Rows List */}
-              <div className="space-y-3">
-                  <div className="flex justify-between items-end px-1">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Package List</span>
-                      <Button variant="ghost" size="sm" onClick={addRow} className="h-6 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 -mr-1">
-                          <Plus className="h-3 w-3 mr-1" /> Add Row
-                      </Button>
-                  </div>
-
-                  {cargoRows.map((row, idx) => (
-                      <div key={row.id} className="group relative bg-white border border-slate-200 rounded-lg p-3 hover:border-blue-300 hover:shadow-md transition-all">
-                          
-                          {/* Row Header: Type & Stackability */}
-                          <div className="flex justify-between items-center mb-3">
-                              <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-[9px] h-5 bg-slate-50 border-slate-200 text-slate-500 font-mono">#{idx + 1}</Badge>
-                                  <Select value={row.pkgType} onValueChange={(v) => updateRow(row.id, 'pkgType', v)}>
-                                      <SelectTrigger className="h-6 w-28 text-[10px] border-none bg-slate-50 font-medium focus:ring-0">
-                                          <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                          {PACKAGE_TYPES.map(t => <SelectItem key={t.value} value={t.value} className="text-xs">{t.label}</SelectItem>)}
-                                      </SelectContent>
-                                  </Select>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                  <button 
-                                      onClick={() => updateRow(row.id, 'isStackable', !row.isStackable)}
-                                      title={row.isStackable ? "Stackable" : "Non-Stackable"}
-                                      className={cn("p-1 rounded transition-colors", row.isStackable ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-400")}
-                                  >
-                                      <Layers className="h-3.5 w-3.5" />
-                                  </button>
-                                  <button onClick={() => removeRow(row.id)} className="text-slate-300 hover:text-red-500 transition-colors">
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                              </div>
-                          </div>
-
-                          {/* Dimensions Grid */}
-                          <div className="grid grid-cols-5 gap-3 items-end">
-                              <div className="col-span-1">
-                                  <Label className="text-[9px] text-slate-400 block mb-1">Qty</Label>
-                                  <Input className="h-8 text-xs text-center px-0 font-bold text-slate-700 bg-slate-50 border-slate-100 focus:bg-white focus:border-blue-200" 
-                                      type="number" min={1} value={row.qty} 
-                                      onChange={(e) => updateRow(row.id, 'qty', parseInt(e.target.value) || 0)} 
-                                  />
-                              </div>
-                              <div className="col-span-3 grid grid-cols-3 gap-1.5">
-                                  <div>
-                                      <Label className="text-[9px] text-slate-400 pl-1 block mb-1">L</Label>
-                                      <Input className="h-8 text-xs text-center px-0 bg-slate-50 border-slate-100 focus:bg-white" placeholder="cm"
-                                          type="number" value={row.length} 
-                                          onChange={(e) => updateRow(row.id, 'length', parseInt(e.target.value) || 0)} 
-                                      />
-                                  </div>
-                                  <div>
-                                      <Label className="text-[9px] text-slate-400 pl-1 block mb-1">W</Label>
-                                      <Input className="h-8 text-xs text-center px-0 bg-slate-50 border-slate-100 focus:bg-white" placeholder="cm"
-                                          type="number" value={row.width} 
-                                          onChange={(e) => updateRow(row.id, 'width', parseInt(e.target.value) || 0)} 
-                                      />
-                                  </div>
-                                  <div>
-                                      <Label className="text-[9px] text-slate-400 pl-1 block mb-1">H</Label>
-                                      <Input className="h-8 text-xs text-center px-0 bg-slate-50 border-slate-100 focus:bg-white" placeholder="cm"
-                                          type="number" value={row.height} 
-                                          onChange={(e) => updateRow(row.id, 'height', parseInt(e.target.value) || 0)} 
-                                      />
-                                  </div>
-                              </div>
-                              <div className="col-span-1">
-                                  <Label className="text-[9px] text-slate-400 block mb-1">Kg/Unit</Label>
-                                  <Input className="h-8 text-xs text-center px-0 font-medium bg-slate-50 border-slate-100 focus:bg-white" 
-                                      type="number" value={row.weight} 
-                                      onChange={(e) => updateRow(row.id, 'weight', parseInt(e.target.value) || 0)} 
-                                  />
-                              </div>
-                          </div>
+              {/* ROWS LIST (CONDITIONALLY RENDERED) */}
+              {isLCL ? (
+                  <div className="space-y-3 animate-in fade-in duration-300">
+                      <div className="flex justify-between items-end px-1">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Package List</span>
+                          <Button variant="ghost" size="sm" onClick={addRow} className="h-6 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 -mr-1">
+                              <Plus className="h-3 w-3 mr-1" /> Add Row
+                          </Button>
                       </div>
-                  ))}
-              </div>
+
+                      {cargoRows.map((row, idx) => (
+                          <div key={row.id} className="group relative bg-white border border-slate-200 rounded-lg p-3 hover:border-blue-300 hover:shadow-md transition-all">
+                              
+                              {/* Row Header: Type & Stackability */}
+                              <div className="flex justify-between items-center mb-3">
+                                  <div className="flex items-center gap-2">
+                                      <Badge variant="outline" className="text-[9px] h-5 bg-slate-50 border-slate-200 text-slate-500 font-mono">#{idx + 1}</Badge>
+                                      <Select value={row.pkgType} onValueChange={(v) => updateRow(row.id, 'pkgType', v)}>
+                                          <SelectTrigger className="h-6 w-28 text-[10px] border-none bg-slate-50 font-medium focus:ring-0">
+                                              <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                              {PACKAGE_TYPES.map(t => <SelectItem key={t.value} value={t.value} className="text-xs">{t.label}</SelectItem>)}
+                                          </SelectContent>
+                                      </Select>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                      <button 
+                                          onClick={() => updateRow(row.id, 'isStackable', !row.isStackable)}
+                                          title={row.isStackable ? "Stackable" : "Non-Stackable"}
+                                          className={cn("p-1 rounded transition-colors", row.isStackable ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-400")}
+                                      >
+                                          <Layers className="h-3.5 w-3.5" />
+                                      </button>
+                                      <button onClick={() => removeRow(row.id)} className="text-slate-300 hover:text-red-500 transition-colors">
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                  </div>
+                              </div>
+
+                              {/* Dimensions Grid */}
+                              <div className="grid grid-cols-5 gap-3 items-end">
+                                  <div className="col-span-1">
+                                      <Label className="text-[9px] text-slate-400 block mb-1">Qty</Label>
+                                      <Input className="h-8 text-xs text-center px-0 font-bold text-slate-700 bg-slate-50 border-slate-100 focus:bg-white focus:border-blue-200" 
+                                          type="number" min={1} value={row.qty} 
+                                          onChange={(e) => updateRow(row.id, 'qty', parseInt(e.target.value) || 0)} 
+                                      />
+                                  </div>
+                                  <div className="col-span-3 grid grid-cols-3 gap-1.5">
+                                      <div>
+                                          <Label className="text-[9px] text-slate-400 pl-1 block mb-1">L</Label>
+                                          <Input className="h-8 text-xs text-center px-0 bg-slate-50 border-slate-100 focus:bg-white" placeholder="cm"
+                                              type="number" value={row.length} 
+                                              onChange={(e) => updateRow(row.id, 'length', parseInt(e.target.value) || 0)} 
+                                          />
+                                      </div>
+                                      <div>
+                                          <Label className="text-[9px] text-slate-400 pl-1 block mb-1">W</Label>
+                                          <Input className="h-8 text-xs text-center px-0 bg-slate-50 border-slate-100 focus:bg-white" placeholder="cm"
+                                              type="number" value={row.width} 
+                                              onChange={(e) => updateRow(row.id, 'width', parseInt(e.target.value) || 0)} 
+                                          />
+                                      </div>
+                                      <div>
+                                          <Label className="text-[9px] text-slate-400 pl-1 block mb-1">H</Label>
+                                          <Input className="h-8 text-xs text-center px-0 bg-slate-50 border-slate-100 focus:bg-white" placeholder="cm"
+                                              type="number" value={row.height} 
+                                              onChange={(e) => updateRow(row.id, 'height', parseInt(e.target.value) || 0)} 
+                                          />
+                                      </div>
+                                  </div>
+                                  <div className="col-span-1">
+                                      <Label className="text-[9px] text-slate-400 block mb-1">Kg/Unit</Label>
+                                      <Input className="h-8 text-xs text-center px-0 font-medium bg-slate-50 border-slate-100 focus:bg-white" 
+                                          type="number" value={row.weight} 
+                                          onChange={(e) => updateRow(row.id, 'weight', parseInt(e.target.value) || 0)} 
+                                      />
+                                  </div>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+              ) : (
+                /* ALTERNATIVE VIEW FOR FCL/FTL */
+                <div className="rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 p-6 flex flex-col items-center text-center animate-in fade-in zoom-in-95">
+                    <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center mb-3">
+                        <Container className="h-5 w-5 text-slate-400" />
+                    </div>
+                    <h3 className="text-sm font-bold text-slate-700">Full Unit Mode Active</h3>
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-[200px]">
+                        Package list is disabled for {mode} ({equipmentType}). 
+                        Total weight and volume are estimated per unit.
+                    </p>
+                </div>
+              )}
           </div>
       </ScrollArea>
 

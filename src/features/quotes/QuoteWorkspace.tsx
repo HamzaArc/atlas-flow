@@ -12,6 +12,7 @@ import { PricingTable } from "./components/PricingTable";
 import { QuoteComparison } from "./components/QuoteComparison";
 import { QuoteSummaryTab } from "./components/QuoteSummaryTab";
 import { QuotePDF } from './components/QuotePDF';
+import { AgentEmailDialog } from "./components/AgentEmailDialog";
 
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { pdf } from '@react-pdf/renderer';
@@ -200,7 +201,12 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
           </div>
 
           <TabsContent value="logistics" className="flex-1 p-6 min-h-0 data-[state=inactive]:hidden animate-in fade-in duration-300">
-              <div className="h-full grid grid-cols-12 gap-6 min-h-0 w-full">
+              {/* Added Header for Logistics Tab with Agent Action */}
+              <div className="flex justify-end mb-4">
+                  <AgentEmailDialog />
+              </div>
+
+              <div className="h-[calc(100%-40px)] grid grid-cols-12 gap-6 min-h-0 w-full">
                   <div className="col-span-12 lg:col-span-4 h-full flex flex-col min-h-0">
                       <div className={modernCardClass}>
                           <RouteSelector />
