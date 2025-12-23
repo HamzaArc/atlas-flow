@@ -16,9 +16,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
     Trash2, Plus, MapPin, Ship, Anchor, Zap,
-    Calendar, AlertCircle, RefreshCw, Link2, Check, Sparkles
+    Calendar, AlertCircle, RefreshCw, Link2, Check, Sparkles, Wand2
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
+import { useClientStore } from "@/store/useClientStore"; 
 import { useTariffStore } from "@/store/useTariffStore"; 
 import { QuoteLineItem, Currency } from "@/types/index";
 import { RateCharge, SupplierRate } from "@/types/tariff"; 
@@ -44,13 +45,12 @@ const formatDateCompact = (dateVal?: Date | string) => {
     return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
 };
 
-// FIXED: Strict mapping for VAT to prevent type mismatch
 const mapVatRule = (tariffVat: string): 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | 'DISBURSEMENT' => {
     if (tariffVat === 'EXPORT_0') return 'EXPORT_0_ART92';
     if (tariffVat === 'EXEMPT') return 'DISBURSEMENT';
     if (tariffVat === 'ROAD_14') return 'ROAD_14';
     if (tariffVat === 'STD_20') return 'STD_20';
-    return 'STD_20'; // Default safe fallback
+    return 'STD_20'; 
 };
 
 // --- SUB-COMPONENT: SMART RATE LOOKUP ---
@@ -184,17 +184,28 @@ const SectionHeader = ({
 
 export function PricingTable() {
   const { 
-      items, addLineItem, updateLineItem, removeLineItem, 
+      items, addLineItem, updateLineItem, removeLineItem, initializeSmartLines,
       exchangeRates, quoteCurrency, status,
       equipmentType, chargeableWeight, totalVolume,
       pol, pod, mode, incoterm 
   } = useQuoteStore();
 
+  const { activeClient } = useClientStore();
   const { findBestMatch, fetchRates, rates } = useTariffStore();
   const { toast } = useToast();
   const [matchingRate, setMatchingRate] = useState<SupplierRate | undefined>(undefined);
 
   const isReadOnly = status !== 'DRAFT';
+
+  // --- AUTOMATIC SMART INITIALIZATION ---
+  useEffect(() => {
+    // If the items list is empty, automatically populate it based on the current mode and client defaults.
+    if (items.length === 0) {
+        // Pass client financials if available, otherwise pass empty object to use standard defaults
+        const financials = activeClient?.financials || {};
+        initializeSmartLines(financials);
+    }
+  }, [items.length, activeClient, mode, initializeSmartLines]);
 
   useEffect(() => {
       if (rates.length === 0) fetchRates();
@@ -274,7 +285,7 @@ export function PricingTable() {
             vendorName: matchingRate.carrierName,
             source: 'TARIFF',
             tariffId: matchingRate.id,
-            vatRule: mapVatRule(charge.vatRule), // MAP IT!
+            vatRule: mapVatRule(charge.vatRule), 
             validityDate: new Date(matchingRate.validTo)
         });
       });
@@ -307,7 +318,7 @@ export function PricingTable() {
           validityDate: new Date(tariff.validTo),
           source: 'TARIFF',
           tariffId: tariff.id,
-          vatRule: mapVatRule(selectedCharge.vatRule) // MAP IT!
+          vatRule: mapVatRule(selectedCharge.vatRule)
       });
       toast(`Linked to ${item.section} charge: ${selectedCharge.chargeHead}`, "success");
   };
@@ -331,6 +342,13 @@ export function PricingTable() {
       return { finalVal: finalSell.toFixed(2), marginPct };
   };
 
+  const handleRunSmartInit = () => {
+      if(items.length > 0) {
+         if(!confirm("This will replace existing lines with smart defaults based on the transport mode. Continue?")) return;
+      }
+      initializeSmartLines(activeClient?.financials || {});
+  };
+
   const renderRows = (section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION') => {
       const sectionItems = items.filter(i => i.section === section);
       
@@ -339,7 +357,11 @@ export function PricingTable() {
       return sectionItems.map((item) => {
         const calc = calculateSellDetails(item);
         const isTariff = item.source === 'TARIFF';
+        const isSmart = item.source === 'SMART_INIT';
         
+        // Highlight logic for required empty fields
+        const isMissingRequired = item.isRequired && (item.buyPrice === 0 || item.buyPrice === undefined);
+
         let marginColor = "text-slate-600";
         if (calc.marginPct < 10) marginColor = "text-red-600 font-bold";
         else if (calc.marginPct < 20) marginColor = "text-amber-600 font-medium";
@@ -348,28 +370,36 @@ export function PricingTable() {
         return (
         <TableRow 
             key={item.id} 
-            className="group border-b border-slate-100 transition-colors hover:bg-blue-50/20 text-[10px]"
+            className={cn(
+                "group border-b border-slate-100 transition-colors hover:bg-blue-50/20 text-[10px]",
+                isMissingRequired ? "bg-red-50/50 hover:bg-red-50" : ""
+            )}
         >
             {/* 1. DESCRIPTION */}
             <TableCell className="w-[30%] py-0.5 pl-3">
                 <div className="flex items-center gap-2">
-                    {isTariff ? (
+                    {/* Source Badge */}
+                    {isTariff && (
                         <Badge variant="secondary" className="px-1 h-5 text-[9px] bg-emerald-50 text-emerald-700 border-emerald-100 flex gap-1 cursor-help" title={`Linked to Tariff: ${item.tariffId}`}>
                             <Zap className="h-2.5 w-2.5 fill-current" /> Auto
                         </Badge>
-                    ) : (
-                        !isReadOnly ? (
-                            <SmartRateLookup onSelect={(t) => handleTariffSelect(item.id, t)} />
-                        ) : (
-                            <div className="w-6 flex justify-center"><div className="h-1.5 w-1.5 rounded-full bg-slate-200" title="Manual Entry" /></div>
-                        )
+                    )}
+                    {isSmart && (
+                         <Badge variant="secondary" className="px-1 h-5 text-[9px] bg-purple-50 text-purple-700 border-purple-100 flex gap-1 cursor-help" title="Initialized by Smart Logic">
+                            <Wand2 className="h-2.5 w-2.5" /> Init
+                         </Badge>
+                    )}
+                    
+                    {!isTariff && !isSmart && !isReadOnly && (
+                         <SmartRateLookup onSelect={(t) => handleTariffSelect(item.id, t)} />
                     )}
                     
                     <Input 
                         disabled={isReadOnly}
                         className={cn(
                             "h-7 border-transparent px-2 bg-transparent focus:bg-white focus:border-blue-300 focus:ring-1 focus:ring-blue-200 font-medium text-xs shadow-none rounded-sm transition-all placeholder:text-slate-300",
-                            isTariff && "text-emerald-900"
+                            isTariff && "text-emerald-900",
+                            isMissingRequired && "border-red-300 focus:border-red-500 bg-red-50/50"
                         )}
                         value={item.description}
                         placeholder="Description"
@@ -392,13 +422,19 @@ export function PricingTable() {
 
             {/* 3. COST */}
             <TableCell className="w-[10%] py-0.5">
-                <Input 
-                    disabled={isReadOnly}
-                    type="number"
-                    className="h-7 border-transparent bg-transparent hover:bg-slate-50 focus:bg-white focus:border-blue-300 text-right text-slate-600 font-mono text-xs shadow-none px-2 rounded-sm" 
-                    value={item.buyPrice}
-                    onChange={(e) => updateLineItem(item.id, { buyPrice: parseFloat(e.target.value) || 0 })}
-                />
+                <div className="relative">
+                    <Input 
+                        disabled={isReadOnly || item.dynamicType === 'RET_FOND' || item.dynamicType === 'PEAGE_LCL'}
+                        type="number"
+                        className={cn(
+                            "h-7 border-transparent bg-transparent hover:bg-slate-50 focus:bg-white focus:border-blue-300 text-right text-slate-600 font-mono text-xs shadow-none px-2 rounded-sm",
+                            isMissingRequired && "border-red-300 bg-white"
+                        )}
+                        value={item.buyPrice}
+                        onChange={(e) => updateLineItem(item.id, { buyPrice: parseFloat(e.target.value) || 0 })}
+                    />
+                    {isMissingRequired && <AlertCircle className="absolute right-1 top-1.5 h-4 w-4 text-red-400 opacity-50 pointer-events-none"/>}
+                </div>
             </TableCell>
 
             {/* 4. CURRENCY */}
@@ -428,7 +464,7 @@ export function PricingTable() {
                  </div>
             </TableCell>
 
-             {/* 6. VAT (RESTORED) */}
+             {/* 6. VAT */}
              <TableCell className="w-[10%] py-0.5">
                 <Select disabled={isReadOnly} value={item.vatRule} onValueChange={(v: any) => updateLineItem(item.id, { vatRule: v })}>
                     <SelectTrigger className="h-7 border-transparent bg-transparent hover:bg-slate-50 text-[10px] text-slate-500 shadow-none px-1">
@@ -493,6 +529,23 @@ export function PricingTable() {
                 </TableRow>
             </TableHeader>
             <TableBody>
+                {/* GLOBAL ACTION TO INIT SMART LINES (Manual trigger kept for user flexibility) */}
+                {items.length === 0 && !isReadOnly && (
+                    <TableRow>
+                        <TableCell colSpan={10} className="p-2 bg-blue-50/50 border-b border-blue-100">
+                             <div className="flex items-center justify-between">
+                                <span className="text-xs text-blue-700 flex items-center gap-2">
+                                    <Wand2 className="h-4 w-4" /> 
+                                    Smart Lines are auto-initializing...
+                                </span>
+                                <Button size="sm" onClick={handleRunSmartInit} className="h-7 text-xs bg-blue-600 hover:bg-blue-700">
+                                    Re-Apply Defaults
+                                </Button>
+                             </div>
+                        </TableCell>
+                    </TableRow>
+                )}
+
                 <SectionHeader 
                     title="Origin Charges" 
                     icon={MapPin} 
@@ -526,7 +579,7 @@ export function PricingTable() {
                         <TableCell colSpan={10} className="h-32 text-center">
                             <div className="flex flex-col items-center justify-center text-slate-400 gap-2">
                                 <Zap className="h-6 w-6 opacity-20" />
-                                <span className="text-xs">No line items. Use Auto-Rate to fetch tariff data.</span>
+                                <span className="text-xs">No line items. Use Smart Init or Auto-Rate to start.</span>
                             </div>
                         </TableCell>
                     </TableRow>

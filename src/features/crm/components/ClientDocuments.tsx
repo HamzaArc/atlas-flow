@@ -3,7 +3,8 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FileText, Download, Trash2, UploadCloud, File, Calendar } from "lucide-react";
-import { useClientStore, ClientDocument } from "@/store/useClientStore";
+import { useClientStore } from "@/store/useClientStore";
+import { ClientDocument } from "@/types/index"; // FIXED IMPORT
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 
 export function ClientDocuments({ isEditing }: { isEditing: boolean }) {

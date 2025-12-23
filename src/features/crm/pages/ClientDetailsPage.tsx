@@ -2,15 +2,15 @@ import { useState, useEffect } from 'react';
 import { useClientStore } from "@/store/useClientStore";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
+import { Coins } from "lucide-react";
 
 // Modular Components
 import { ClientHeader } from "../components/ClientHeader";
 import { ClientOverview } from "../components/ClientOverview";
 import { ClientContacts } from "../components/ClientContacts";
 import { ClientDocuments } from "../components/ClientDocuments";
-// Reuse existing Logistics Tab Logic (can also be extracted if needed, but included inline for now to save file count if it's small, 
-// OR we reuse the Logic from previous iteration as a component. I will extract it for consistency).
 import { ClientLogistics } from "../components/ClientLogistics"; 
+import { ClientBillingConfig } from "../components/ClientBillingConfig"; // Import the new component
 
 export default function ClientDetailsPage() {
   const { activeClient, saveClient } = useClientStore();
@@ -53,6 +53,9 @@ export default function ClientDetailsPage() {
             <TabsList className="bg-white border border-slate-200 p-1 rounded-lg h-11 shadow-sm">
               <TabsTrigger value="overview" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 text-slate-500 font-medium text-xs px-4 h-9">Overview</TabsTrigger>
               <TabsTrigger value="logistics" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 text-slate-500 font-medium text-xs px-4 h-9">Logistics</TabsTrigger>
+              <TabsTrigger value="billing" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 text-slate-500 font-medium text-xs px-4 h-9 flex items-center gap-2">
+                 <Coins className="h-3 w-3" /> Billing Config
+              </TabsTrigger>
               <TabsTrigger value="contacts" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 text-slate-500 font-medium text-xs px-4 h-9">Contacts ({activeClient.contacts.length})</TabsTrigger>
               <TabsTrigger value="docs" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 text-slate-500 font-medium text-xs px-4 h-9">Documents ({activeClient.documents.length})</TabsTrigger>
             </TabsList>
@@ -65,6 +68,10 @@ export default function ClientDetailsPage() {
             
             <TabsContent value="logistics" className="h-full m-0 focus-visible:ring-0 outline-none">
               <ClientLogistics isEditing={isEditing} />
+            </TabsContent>
+
+            <TabsContent value="billing" className="h-full m-0 focus-visible:ring-0 outline-none">
+              <ClientBillingConfig isEditing={isEditing} />
             </TabsContent>
 
             <TabsContent value="contacts" className="h-full m-0 focus-visible:ring-0 outline-none">

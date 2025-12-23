@@ -152,6 +152,12 @@ export const QuotePDF: React.FC<QuotePDFProps> = ({ data }) => {
     const activeOption = data.options.find(o => o.id === data.activeOptionId) || data.options[0];
     const quoteCurrency = activeOption?.quoteCurrency || 'MAD';
     
+    // RESOLVE EQUIPMENT STRING
+    // If equipmentList exists, join them (e.g., "1x 40HC, 2x 20DV")
+    const equipmentStr = activeOption?.equipmentList && activeOption.equipmentList.length > 0
+        ? activeOption.equipmentList.map(e => `${e.count}x ${e.type}`).join(', ')
+        : '-';
+
     // FINANCIALS
     const subTotal = data.totalSellTarget || 0;
     const vatTotal = data.totalTaxTarget || 0;
@@ -202,7 +208,7 @@ export const QuotePDF: React.FC<QuotePDFProps> = ({ data }) => {
                     </View>
                 </View>
 
-                {/* 3. LOGISTICS CONTEXT */}
+                {/* 3. LOGISTICS CONTEXT (UPDATED FOR EQUIPMENT LIST) */}
                 <View style={styles.contextBar}>
                     <View style={styles.contextItem}>
                         <Text style={styles.contextLabel}>Origin (POL)</Text>
@@ -213,8 +219,8 @@ export const QuotePDF: React.FC<QuotePDFProps> = ({ data }) => {
                         <Text style={styles.contextValue}>{data.pod || activeOption?.pod || '-'}</Text>
                     </View>
                     <View style={styles.contextItem}>
-                        <Text style={styles.contextLabel}>Mode / Service</Text>
-                        <Text style={styles.contextValue}>{data.mode || activeOption?.mode} | {data.incoterm || activeOption?.incoterm}</Text>
+                        <Text style={styles.contextLabel}>Mode / Equipment</Text>
+                        <Text style={styles.contextValue}>{data.mode || activeOption?.mode} | {equipmentStr}</Text>
                     </View>
                     <View style={styles.contextItemLast}>
                         <Text style={styles.contextLabel}>Total Weight / Vol</Text>
@@ -224,7 +230,7 @@ export const QuotePDF: React.FC<QuotePDFProps> = ({ data }) => {
                     </View>
                 </View>
 
-                {/* 4. CARGO MANIFEST (UPDATED) */}
+                {/* 4. CARGO MANIFEST */}
                 <Text style={styles.sectionTitle}>Cargo Manifest</Text>
                 <View style={styles.cargoTable}>
                     <View style={styles.cargoHeader}>
@@ -307,33 +313,25 @@ export const QuotePDF: React.FC<QuotePDFProps> = ({ data }) => {
                     </View>
                 </View>
 
-                {/* 7. TERMS AND CONDITIONS (UPDATED & ROBUST) */}
+                {/* 7. TERMS & CONDITIONS */}
                 <View style={styles.termsContainer}>
                     <Text style={styles.termsTitle}>Standard Terms & Conditions</Text>
                     
                     <Text style={styles.termsText}>
-                        1. <Text style={{ fontFamily: 'Helvetica-Bold' }}>VALIDITY:</Text> This quotation is valid until {validUntil}. Rates are subject to space and equipment availability at the time of booking. Carriers reserve the right to adjust rates for General Rate Increases (GRI), Bunker Adjustment Factors (BAF), or Peak Season Surcharges (PSS) with or without prior notice unless specifically locked.
+                        1. <Text style={{ fontFamily: 'Helvetica-Bold' }}>VALIDITY:</Text> This quotation is valid until {validUntil}. Rates are subject to space and equipment availability.
                     </Text>
                     
                     <Text style={styles.termsText}>
-                        2. <Text style={{ fontFamily: 'Helvetica-Bold' }}>LIABILITY:</Text> All business is undertaken subject to the Standard Trading Conditions of Atlas Flow SARL. Liability is limited in accordance with international conventions (Hague-Visby Rules for Sea, Montreal Convention for Air, CMR for Road). We strongly recommend arranging Cargo Insurance for full protection.
+                        2. <Text style={{ fontFamily: 'Helvetica-Bold' }}>LIABILITY:</Text> All business is undertaken subject to the Standard Trading Conditions of Atlas Flow SARL.
                     </Text>
                     
                     <Text style={styles.termsText}>
-                        3. <Text style={{ fontFamily: 'Helvetica-Bold' }}>EXCLUSIONS:</Text> Unless otherwise stated, this quote excludes: Duties & Taxes, Customs Inspections, Storage, Demurrage & Detention, Waiting Time, and any extraordinary handling fees.
-                    </Text>
-                    
-                    <Text style={styles.termsText}>
-                        4. <Text style={{ fontFamily: 'Helvetica-Bold' }}>PAYMENT:</Text> Payment is due according to the agreed credit terms ({data.paymentTerms}). Late payments will incur an interest charge of 1.5% per month. Exchange rates applied at invoicing may vary from this quotation if the currency fluctuates by more than 2%.
-                    </Text>
-
-                    <Text style={styles.termsText}>
-                         5. <Text style={{ fontFamily: 'Helvetica-Bold' }}>DANGEROUS GOODS:</Text> Shipper is responsible for declaring all hazardous materials. Misdeclaration will result in fines and liability for all damages.
+                        3. <Text style={{ fontFamily: 'Helvetica-Bold' }}>PAYMENT:</Text> Payment is due according to the agreed credit terms ({data.paymentTerms}).
                     </Text>
                 </View>
 
                 <View style={styles.footer}>
-                    <Text style={styles.footerText}>Atlas Flow SARL | 123 Logistics Blvd, Casablanca | RC: 12345 | ICE: 00152637283 | www.atlasflow.com</Text>
+                    <Text style={styles.footerText}>Atlas Flow SARL | 123 Logistics Blvd, Casablanca | RC: 12345 | ICE: 00152637283</Text>
                 </View>
 
             </Page>

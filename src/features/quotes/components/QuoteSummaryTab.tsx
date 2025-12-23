@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { 
   Building2, CreditCard, User, 
   Wallet, History, Send, MessageSquareText,
-  FileBadge
+  FileBadge, Container
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,7 @@ export function QuoteSummaryTab() {
     // Identity
     clientName, paymentTerms, salespersonName, 
     // Logistics
-    mode, incoterm, pol, pod, 
+    mode, incoterm, pol, pod, equipmentList,
     // Financials
     totalCostMAD, totalSellMAD, totalMarginMAD, totalTTCMAD,
     // Narrative
@@ -159,6 +159,22 @@ export function QuoteSummaryTab() {
                       <div className="text-sm font-bold text-slate-800">{pod}</div>
                    </div>
                 </div>
+
+                {/* NEW: Equipment List Display */}
+                {equipmentList && equipmentList.length > 0 && (
+                    <div className="mt-6 pt-6 border-t border-dashed border-slate-200">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Equipment</span>
+                        <div className="flex flex-wrap gap-2">
+                            {equipmentList.map(eq => (
+                                <div key={eq.id} className="flex items-center gap-1.5 bg-slate-100 px-2 py-1 rounded border border-slate-200 text-xs">
+                                    <Container className="h-3 w-3 text-slate-500" />
+                                    <span className="font-bold text-slate-700">{eq.count}x</span>
+                                    <span className="text-slate-600">{eq.type}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
              </CardContent>
         </Card>
       </div>

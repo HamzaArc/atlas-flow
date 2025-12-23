@@ -32,7 +32,7 @@ export function CargoEngine() {
   const { 
       cargoRows, updateCargo, totalVolume, totalWeight, chargeableWeight, totalPackages,
       hsCode, isHazmat, isReefer, temperature, densityRatio,
-      setIdentity, mode, goodsDescription, equipmentType, containerCount
+      setIdentity, mode, goodsDescription, equipmentType, containerCount, equipmentList
   } = useQuoteStore();
   
   const { toast } = useToast();
@@ -43,6 +43,12 @@ export function CargoEngine() {
   // --- LOGIC: SHOW/HIDE PACKAGE LIST ---
   // Only needed in SEA_LCL, AIR, or ROAD LTL (contains "LTL" in name)
   const isLCL = mode === 'SEA_LCL' || mode === 'AIR' || (mode === 'ROAD' && equipmentType?.includes('LTL'));
+
+  // --- LOGIC: TOTAL EQUIPMENT COUNT ---
+  // If we have a multi-equipment list, sum it up. Otherwise use the legacy containerCount.
+  const displayCount = equipmentList && equipmentList.length > 0
+      ? equipmentList.reduce((acc, item) => acc + item.count, 0)
+      : containerCount;
 
   const addRow = () => {
     const newRow = { 
@@ -127,8 +133,12 @@ export function CargoEngine() {
           {/* Quick Stats Grid */}
           <div className="grid grid-cols-4 gap-2">
               <div className="bg-slate-50 rounded border border-slate-100 p-2 flex flex-col items-center">
-                  <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Pkgs</span>
-                  <span className="text-xs font-bold text-slate-700">{isLCL ? totalPackages : containerCount}</span>
+                  <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">
+                      {isLCL ? "Pkgs" : "Units"}
+                  </span>
+                  <span className="text-xs font-bold text-slate-700">
+                      {isLCL ? totalPackages : displayCount}
+                  </span>
               </div>
               <div className="bg-slate-50 rounded border border-slate-100 p-2 flex flex-col items-center">
                   <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Weight</span>

@@ -39,6 +39,9 @@ export interface QuoteApproval {
     rejectionReason?: string;
 }
 
+// NEW: Type for Smart Logic behavior
+export type DynamicLineType = 'MAIN_FRET' | 'RET_FOND' | 'PEAGE_LCL' | 'STATIC';
+
 export interface QuoteLineItem {
   id: string;
   quoteId: string;
@@ -53,8 +56,15 @@ export interface QuoteLineItem {
   markupType: 'PERCENT' | 'FIXED_AMOUNT';
   markupValue: number;
   vatRule: 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | 'DISBURSEMENT';
-  source: 'MANUAL' | 'TARIFF';
+  
+  // UPDATED: Added SMART_INIT
+  source: 'MANUAL' | 'TARIFF' | 'SMART_INIT';
   tariffId?: string;
+
+  // NEW: Smart Logic Fields
+  isRequired?: boolean;           // Highlights red if empty
+  dynamicType?: DynamicLineType;  // For linking (e.g. Main Fret updates Rebate)
+  calculationFactor?: number;     // Stores % for Rebate or other factors
 }
 
 export interface QuoteOption {
@@ -70,8 +80,14 @@ export interface QuoteOption {
     placeOfDelivery?: string;
     transitTime?: number;
     freeTime?: number;
+    
+    // Legacy support
     equipmentType?: string;
     containerCount: number;
+    
+    // Multi-Equipment Support
+    equipmentList: { id: string; type: string; count: number }[];
+
     items: QuoteLineItem[];
     totalTTC: number;
     baseCurrency: Currency;
@@ -104,9 +120,9 @@ export interface Quote {
   // ROUTE & SPECS (Cached / Top Level)
   pol?: string;
   pod?: string;
-  mode?: TransportMode;       // Added
-  incoterm?: Incoterm;        // Added
-  activeOptionId?: string;    // Added for UI persistence
+  mode?: TransportMode;       
+  incoterm?: Incoterm;        
+  activeOptionId?: string;    
   
   // CARGO
   cargoRows: any[];
@@ -120,12 +136,12 @@ export interface Quote {
   cargoValue?: number;
   insuranceRequired: boolean;
   
-  // CALCULATED CARGO STATS (Added)
+  // CALCULATED CARGO STATS
   totalWeight?: number; 
   totalVolume?: number;
   chargeableWeight?: number;
 
-  // FINANCIAL SNAPSHOTS (Added)
+  // FINANCIAL SNAPSHOTS
   totalTTC?: number;
   totalSellTarget?: number;
   totalTaxTarget?: number;
@@ -254,7 +270,7 @@ export interface Invoice {
     lines: ChargeLine[];
 }
 
-// --- 5. CLIENT INTELLIGENCE MODELS (UNCHANGED) ---
+// --- 5. CLIENT INTELLIGENCE MODELS (UPDATED) ---
 export type ClientStatus = 'ACTIVE' | 'PROSPECT' | 'SUSPENDED' | 'BLACKLISTED';
 export type ClientType = 'SHIPPER' | 'CONSIGNEE' | 'FORWARDER' | 'PARTNER';
 export type SupplierRole = 'SEA_LINE' | 'AIRLINE' | 'HAULIER' | 'FORWARDER';
@@ -298,6 +314,11 @@ export interface ClientFinancials {
   ice?: string;
   rc?: string;
   taxId?: string;
+  
+  // NEW BILLING CONFIGURATION (FIXED)
+  customsRebatePercent?: number; // Retour de fond (%)
+  adminFee?: number;             // Frais de dossier (Fixed)
+  tollFee?: number;              // Péage (Default Fixed)
 }
 
 export interface ClientSupplier {
