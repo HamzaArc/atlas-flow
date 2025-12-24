@@ -77,6 +77,7 @@ export interface QuoteOption {
     freeTime?: number;
     equipmentType?: string;
     containerCount: number;
+    // FIXED: Added missing equipmentList
     equipmentList: { id: string; type: string; count: number }[];
     items: QuoteLineItem[];
     totalTTC: number;
@@ -251,7 +252,6 @@ export interface Invoice {
 // --- 5. CLIENT INTELLIGENCE MODELS ---
 export type ClientStatus = 'ACTIVE' | 'PROSPECT' | 'SUSPENDED' | 'BLACKLISTED';
 export type ClientType = 'SHIPPER' | 'CONSIGNEE' | 'FORWARDER' | 'PARTNER';
-// UPDATED ROLE: Added 'EXPORTER' for commercial suppliers
 export type SupplierRole = 'SEA_LINE' | 'AIRLINE' | 'HAULIER' | 'FORWARDER' | 'EXPORTER';
 export type SupplierTier = 'STRATEGIC' | 'APPROVED' | 'BACKUP' | 'BLOCKED';
 export type CommoditySector = 'AUTOMOTIVE' | 'TEXTILE' | 'PERISHABLE' | 'RETAIL' | 'INDUSTRIAL' | 'TECH';
@@ -306,21 +306,18 @@ export interface ClientFinancials {
   specialInstructions?: string;  
 }
 
-// UPDATED CLIENT SUPPLIER
 export interface ClientSupplier {
   id: string;
   name: string;
   role: SupplierRole;
   tier: SupplierTier;
-  
-  // New Rich Data Fields
   country?: string;
   city?: string;
   address?: string;
   contactName?: string;
   email?: string;
   phone?: string;
-  products?: string; // Comma separated list of goods
+  products?: string; 
   website?: string;
   notes?: string;
 }
@@ -358,6 +355,8 @@ export interface Client {
   city: string;
   country: string;
   creditLimit: number;
+  // FIXED: Added creditUsed
+  creditUsed: number;
   unbilledWork: number; 
   unpaidInvoices: number; 
   financials: ClientFinancials;
@@ -373,7 +372,6 @@ export interface Client {
   activities: ActivityItem[];
 }
 
-// --- 6. USER MANAGEMENT (NEW) ---
 export type CompanyRole = 'DIRECTOR' | 'MANAGER' | 'SALES' | 'OPERATIONS' | 'FINANCE' | 'ADMIN';
 export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'INVITED';
 export type UserDepartment = 'COMMERCIAL' | 'OPERATIONS' | 'FINANCE' | 'MANAGEMENT' | 'IT';

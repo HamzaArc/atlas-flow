@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { 
     Ship, Plane, Truck, Search, Filter, Plus, 
     MoreHorizontal, ArrowUpRight, AlertCircle, 
-    Anchor, Calendar, ChevronRight 
-} from "lucide-react";
+    Anchor, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";

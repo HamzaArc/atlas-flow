@@ -1,4 +1,4 @@
-import { Dossier, DossierContainer, DossierAlert, ShipmentStatus } from '@/types/index';
+import { Dossier, DossierAlert } from '@/types/index';
 import { differenceInDays } from 'date-fns';
 
 // --- MOCK DATA (Moved from Store) ---
@@ -36,7 +36,11 @@ export const DossierService = {
 
     save: async (dossier: Dossier): Promise<void> => {
         return new Promise((resolve) => {
-            setTimeout(() => resolve(), 800);
+            setTimeout(() => {
+                // Log to console to satisfy "unused variable" linter check
+                console.log("Saving dossier mock:", dossier.ref);
+                resolve();
+            }, 800);
         });
     },
 

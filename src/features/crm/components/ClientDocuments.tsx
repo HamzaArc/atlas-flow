@@ -1,8 +1,7 @@
-import { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, Trash2, UploadCloud, File, Calendar, AlertTriangle } from "lucide-react";
+import { FileText, Download, Trash2, UploadCloud, File, AlertTriangle } from "lucide-react";
 import { useClientStore } from "@/store/useClientStore";
 import { ClientDocument } from "@/types/index";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";

@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Building2, Mail, Phone, Globe, FileText, CreditCard, Briefcase, Trash2, Plus, AlertCircle } from "lucide-react";
+import { Building2, Mail, Phone, Globe, FileText, CreditCard, Briefcase, Trash2, Plus } from "lucide-react";
 import { useClientStore } from "@/store/useClientStore";
-import { ClientType, ClientStatus, Currency } from "@/types/index"; 
+import { ClientType, ClientStatus } from "@/types/index"; 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -10,7 +10,6 @@ import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 
 const FieldGroup = ({ label, children, required = false }: { label: string, children: React.ReactNode, required?: boolean }) => (

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
@@ -11,13 +11,12 @@ import {
 import { useQuoteStore } from "@/store/useQuoteStore";
 import {
   Plane, Ship, Truck, Map as MapIcon, MapPin, Container, Clock, Calendar, Anchor,
-  Leaf, ShieldCheck, Check, ChevronsUpDown, Search, Info
+  Leaf, ShieldCheck, Check, ChevronsUpDown, Info
 } from "lucide-react";
 import { TransportMode, Incoterm } from "@/types/index";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import {
   Command,
   CommandEmpty,

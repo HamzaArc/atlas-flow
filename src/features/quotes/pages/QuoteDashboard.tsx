@@ -11,11 +11,9 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
     Plus, Search, FileText, Filter, Trash2, Loader2, X, 
-    ArrowUpDown, TrendingUp, CheckCircle2, Clock, History
+    ArrowUpDown, TrendingUp, CheckCircle2, Clock
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
-import { Quote } from "@/types/index";
-
 type PageType = 'dashboard' | 'create';
 type SortField = 'reference' | 'clientName' | 'validityDate';
 type SortOrder = 'asc' | 'desc';

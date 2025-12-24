@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2, Calculator } from "lucide-react";
-import { ChargeLine, VatRule, Currency } from "@/types/index";
+import { ChargeLine, Currency } from "@/types/index";
 
 interface ManualInvoiceDialogProps {
     open: boolean;

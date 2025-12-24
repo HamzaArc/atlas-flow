@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { Quote, QuoteOption, PackagingType, Probability, ActivityItem } from '@/types/index';
+import { Quote, QuoteOption, PackagingType } from '@/types/index';
 
 // Helper to map DB Row -> Domain Model
 const mapRowToQuote = (row: any): Quote => {
@@ -24,7 +24,8 @@ const mapRowToQuote = (row: any): Quote => {
         quoteCurrency: row.data?.quoteCurrency || 'MAD',
         exchangeRates: row.data?.exchangeRates || { MAD: 1, USD: 9.80, EUR: 10.75 },
         marginBuffer: row.data?.marginBuffer || 1.02,
-        totalTTC: row.total_ttc || 0
+        totalTTC: row.total_ttc || 0,
+        equipmentList: [] // FIXED: Added to legacy option
     };
 
     const options = (row.data?.options && row.data.options.length > 0) 
@@ -38,7 +39,7 @@ const mapRowToQuote = (row: any): Quote => {
         version: row.data?.version || 1,
         status: row.status,
         clientName: row.client_name,
-        clientId: '', // Not strictly in DB row top-level yet based on previous code
+        clientId: '', 
         paymentTerms: row.data?.paymentTerms || '30 Days',
         salespersonId: row.data?.salespersonId || '',
         salespersonName: row.data?.salespersonName || 'Admin',
@@ -106,10 +107,9 @@ export const QuoteService = {
      * Persists a quote (Create or Update)
      */
     save: async (quote: Partial<Quote>, isNew: boolean): Promise<string> => {
-        // Construct the JSON blob for the 'data' column
         const jsonPayload = {
             options: quote.options,
-            activeOptionId: quote.options?.[0]?.id, // Default to first if not explicitly handled here, but Store handles active ID
+            activeOptionId: quote.options?.[0]?.id, 
             cargoRows: quote.cargoRows,
             goodsDescription: quote.goodsDescription,
             internalNotes: quote.internalNotes,
@@ -133,8 +133,6 @@ export const QuoteService = {
             paymentTerms: quote.paymentTerms
         };
 
-        // Construct the Root DB Row
-        // Note: We use any here because DB columns (snake_case) don't match Domain Model (camelCase)
         const dbRow: any = {
             reference: quote.reference,
             status: quote.status,
@@ -142,7 +140,7 @@ export const QuoteService = {
             pol: quote.pol,
             pod: quote.pod,
             validity_date: quote.validityDate,
-            total_ttc: quote.totalTTC, // Expected to be passed from store calculation
+            total_ttc: quote.totalTTC, 
             data: jsonPayload
         };
 

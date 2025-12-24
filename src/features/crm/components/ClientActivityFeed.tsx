@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Card } from "@/components/ui/card";
-import { MessageSquare, Bell, FileText, Send, Clock, User, AlertTriangle, Info } from "lucide-react";
+import { MessageSquare, Send, Clock, User, AlertTriangle, Info } from "lucide-react"; // REMOVED UNUSED ICONS
 import { useClientStore } from "@/store/useClientStore";
 import { useToast } from "@/components/ui/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";

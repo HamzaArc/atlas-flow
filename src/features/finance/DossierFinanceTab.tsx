@@ -1,11 +1,10 @@
 import { useEffect } from "react";
 import { useFinanceStore } from "@/store/useFinanceStore";
 import { WIPWorkbench } from "./components/WIPWorkbench";
-import { Card } from "@/components/ui/card";
 import { FileText, MoreHorizontal, CheckCircle2, XCircle, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 
 export default function DossierFinanceTab({ dossierId }: { dossierId: string }) {

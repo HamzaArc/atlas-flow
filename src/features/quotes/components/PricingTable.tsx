@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from "@/components/ui/table";
@@ -15,8 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-    Trash2, Plus, MapPin, Ship, Anchor, Zap,
-    Calendar, AlertCircle, RefreshCw, Link2, Check, Sparkles, Wand2
+    Trash2, Plus, MapPin, Ship, Anchor, Zap, AlertCircle, RefreshCw, Link2, Sparkles, Wand2
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { useClientStore } from "@/store/useClientStore"; 

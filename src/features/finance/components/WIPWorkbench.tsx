@@ -3,7 +3,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox"; 
-import { FilePlus, Lock, Edit3, Trash2, Wallet, Plus, AlertCircle } from "lucide-react";
+import { Lock, Edit3, Trash2, Wallet, Plus } from "lucide-react";
 import { useFinanceStore } from "@/store/useFinanceStore";
 import { ChargeLineDialog } from "./ChargeLineDialog";
 import { ChargeLine } from "@/types/index";

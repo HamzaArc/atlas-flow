@@ -1,5 +1,3 @@
-import { Client } from "./index";
-
 export type RateMode = 'SEA_FCL' | 'SEA_LCL' | 'AIR' | 'ROAD';
 export type RateType = 'CONTRACT' | 'SPOT' | 'NAC';
 export type ContainerType = '20DV' | '40DV' | '40HC' | '40RF';

@@ -1,8 +1,6 @@
-import React from 'react';
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Plane, Ship, Truck, CheckCircle2, ArrowRight, MousePointerClick, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 

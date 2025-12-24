@@ -1,4 +1,4 @@
-import { ChargeLine, Invoice, ChargeType, Currency, VatRule, InvoiceStatus } from '@/types/index';
+import { ChargeLine, Invoice, VatRule } from '@/types/index';
 
 const MOCK_LEDGER: ChargeLine[] = [
     {

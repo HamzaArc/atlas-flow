@@ -40,7 +40,7 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
       totalSellMAD, totalMarginMAD, totalSellTarget, totalTTCTarget, totalTaxTarget, quoteCurrency,
       // Data
       reference, clientName, validityDate, pol, pod, mode, incoterm,
-      totalWeight, totalVolume, marginBuffer, exchangeRates, setExchangeRate,
+      totalWeight, totalVolume, exchangeRates, setExchangeRate,
       // Cargo
       cargoRows, // IMPORTED FROM STORE
       // Workflow

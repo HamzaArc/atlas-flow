@@ -1,4 +1,4 @@
-import { Check, Truck, Ship, Package, FileCheck, Anchor, Home, Play } from "lucide-react";
+import { Check, Truck, Ship, Package, FileCheck, Anchor, Home } from "lucide-react";
 import { ShipmentStatus } from "@/types/index";
 import { useDossierStore } from "@/store/useDossierStore";
 import { cn } from "@/lib/utils";

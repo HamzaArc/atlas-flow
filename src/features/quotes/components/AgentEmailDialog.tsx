@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Mail, Copy, Check, CalendarClock, Plane, Ship, Truck } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { useToast } from "@/components/ui/use-toast";
-import { cn } from "@/lib/utils";
 
 export function AgentEmailDialog() {
   const [open, setOpen] = useState(false);

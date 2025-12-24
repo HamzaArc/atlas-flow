@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MapPin } from "lucide-react";
-import { ClientRoute } from "@/store/useClientStore";
+import { ClientRoute } from "@/types/index"; // FIXED IMPORT
 
 interface RouteDialogProps {
     onSave: (route: ClientRoute) => void;

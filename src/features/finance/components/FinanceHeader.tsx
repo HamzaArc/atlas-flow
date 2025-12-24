@@ -3,11 +3,16 @@ import { TrendingUp, TrendingDown, AlertTriangle, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function FinanceHeader() {
-    const { totalRevenue, totalCost, totalMargin, marginPercent } = useFinanceStore();
+    // CORRECTED: Mapped correctly to store definition
+    const { dossierStats } = useFinanceStore();
+    
+    // Using dossierStats for display
+    const revenue = dossierStats.revenue;
+    const cost = dossierStats.cost;
+    const margin = dossierStats.margin;
+    const marginPercent = dossierStats.marginPercent;
 
-    // EXPLICIT TYPE CASTING TO PREVENT TS ERRORS
-    const safeMarginPercent = Number(marginPercent || 0);
-    const isHealthy: boolean = safeMarginPercent >= 15;
+    const isHealthy: boolean = marginPercent >= 15;
 
     return (
         <div className="grid grid-cols-4 gap-4 p-4 bg-white border-b border-slate-200 shadow-sm sticky top-0 z-20">
@@ -18,7 +23,7 @@ export function FinanceHeader() {
                     <TrendingUp className="h-3 w-3 text-emerald-500" /> Revenue (Accrued)
                 </span>
                 <span className="text-xl font-bold text-slate-800 font-mono mt-1">
-                    {totalRevenue.toLocaleString()} <span className="text-xs text-slate-400">MAD</span>
+                    {revenue.toLocaleString()} <span className="text-xs text-slate-400">MAD</span>
                 </span>
             </div>
 
@@ -28,7 +33,7 @@ export function FinanceHeader() {
                     <TrendingDown className="h-3 w-3 text-red-500" /> Costs (Actuals)
                 </span>
                 <span className="text-xl font-bold text-slate-800 font-mono mt-1">
-                    {totalCost.toLocaleString()} <span className="text-xs text-slate-400">MAD</span>
+                    {cost.toLocaleString()} <span className="text-xs text-slate-400">MAD</span>
                 </span>
             </div>
 
@@ -38,11 +43,11 @@ export function FinanceHeader() {
                     <Wallet className="h-3 w-3 text-blue-500" /> Net Margin
                 </span>
                 <div className="flex items-end gap-2 mt-1">
-                    <span className={cn("text-xl font-bold font-mono", totalMargin < 0 ? "text-red-600" : "text-blue-700")}>
-                        {totalMargin.toLocaleString()} <span className="text-xs text-slate-400 font-sans">MAD</span>
+                    <span className={cn("text-xl font-bold font-mono", margin < 0 ? "text-red-600" : "text-blue-700")}>
+                        {margin.toLocaleString()} <span className="text-xs text-slate-400 font-sans">MAD</span>
                     </span>
                     <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded", isHealthy ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700")}>
-                        {safeMarginPercent}%
+                        {marginPercent}%
                     </span>
                 </div>
             </div>

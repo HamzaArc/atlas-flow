@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { SupplierRate, RateCharge, RateMode } from '@/types/tariff';
+import { SupplierRate, RateCharge } from '@/types/tariff';
 import { useToast } from "@/components/ui/use-toast";
 import { TariffService } from '@/services/tariff.service';
 

@@ -5,7 +5,8 @@ import {
   FileText, Wallet, LayoutGrid, List
 } from "lucide-react";
 
-import { useClientStore, Client } from "@/store/useClientStore";
+import { useClientStore } from "@/store/useClientStore";
+import { Client } from "@/types/index"; // FIXED IMPORT
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

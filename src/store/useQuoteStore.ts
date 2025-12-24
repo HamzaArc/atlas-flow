@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { QuoteService } from '@/services/quote.service';
-import { Quote, QuoteLineItem, QuoteOption, TransportMode, Incoterm, Currency, Probability, PackagingType, ActivityItem, ActivityCategory, QuoteApproval, ApprovalTrigger, ClientFinancials, DynamicLineType } from '@/types/index';
+import { Quote, QuoteLineItem, QuoteOption, TransportMode, Incoterm, Currency, Probability, PackagingType, ActivityItem, ActivityCategory, QuoteApproval, ApprovalTrigger, ClientFinancials } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 
 interface CargoRow {
@@ -653,7 +653,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     get().updateLineItem('trigger', {}); 
   },
 
-  applyTemplate: (template) => {
+  applyTemplate: () => {
       // (Keep existing logic - omitted for brevity if not used, but kept to prevent break)
       const { activeOptionId } = get();
       const newItems: QuoteLineItem[] = [];

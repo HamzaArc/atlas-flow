@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { UserPlus } from "lucide-react";
-import { ClientContact } from "@/store/useClientStore";
+import { ClientContact } from "@/types/index"; // FIXED IMPORT
 
 interface ContactDialogProps {
     onSave: (contact: ClientContact) => void;

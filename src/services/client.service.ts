@@ -3,13 +3,8 @@ import {
     Client, 
     ClientContact, 
     ClientRoute, 
-    ClientDocument, 
     ClientSupplier, 
-    ClientCommodity, 
-    OperationalProfile,
-    ClientFinancials,
-    ActivityItem
-} from '@/types/index';
+    ClientCommodity } from '@/types/index';
 
 // --- TRANSFORMERS (DB <-> APP) ---
 
@@ -17,7 +12,7 @@ import {
 const mapRowToClient = (row: any): Client => {
     return {
         id: row.id,
-        created_at: row.created_at, // Keep as string or new Date(row.created_at) depending on UI preference, usually ISO string is fine for display
+        created_at: row.created_at, 
         updated_at: row.updated_at,
         entityName: row.entity_name,
         status: row.status as any,
@@ -30,32 +25,32 @@ const mapRowToClient = (row: any): Client => {
         billingAddress: row.billing_address || '',
         deliveryAddress: row.delivery_address || '',
         creditLimit: row.credit_limit || 0,
+        creditUsed: row.credit_used || 0, // FIXED: Mapped correctly
         unbilledWork: row.unbilled_work || 0,
         unpaidInvoices: row.unpaid_invoices || 0,
         salesRepId: row.sales_rep_id || '',
         tags: row.tags || [],
         
-        // JSONB Fields - Direct Mapping but ensuring defaults
+        // JSONB Fields
         financials: row.financials || {},
         operational: row.operational || {},
         
-        // Arrays need careful Date parsing for nested objects if they exist
+        // Arrays 
         contacts: (row.contacts || []) as ClientContact[],
         routes: (row.routes || []) as ClientRoute[],
         suppliers: (row.suppliers || []) as ClientSupplier[],
         commodities: (row.commodities || []) as ClientCommodity[],
         
-        // Date Parsing for specific nested arrays
         documents: (row.documents || []).map((d: any) => ({
             ...d,
             uploadDate: d.uploadDate ? new Date(d.uploadDate) : new Date(),
             expiryDate: d.expiryDate ? new Date(d.expiryDate) : undefined
-        })) as ClientDocument[],
+        })),
 
         activities: (row.activities || []).map((a: any) => ({
             ...a,
             timestamp: a.timestamp ? new Date(a.timestamp) : new Date()
-        })) as ActivityItem[]
+        }))
     };
 };
 
@@ -73,6 +68,7 @@ const mapClientToRow = (client: Client) => {
         billing_address: client.billingAddress,
         delivery_address: client.deliveryAddress,
         credit_limit: client.creditLimit,
+        credit_used: client.creditUsed, // FIXED: Mapped correctly
         sales_rep_id: client.salesRepId,
         tags: client.tags,
         
@@ -86,8 +82,7 @@ const mapClientToRow = (client: Client) => {
         documents: client.documents,
         activities: client.activities,
         
-        // Calculated/Read-only fields usually handled by DB triggers, 
-        // but we pass them if we are manually updating stats
+        // Read-only/Stats fields
         unbilled_work: client.unbilledWork,
         unpaid_invoices: client.unpaidInvoices
     };
@@ -117,15 +112,13 @@ export const ClientService = {
     save: async (client: Client): Promise<Client> => {
         const payload = mapClientToRow(client);
         
-        // Check if ID is a valid UUID (Real DB Record) vs Temporary ID (New Record)
-        // A temporary ID usually starts with "new-" based on your store logic
+        // Check if ID is a valid UUID vs Temporary ID
         const isNewRecord = !client.id || client.id.startsWith('new-');
 
         let data, error;
 
         if (isNewRecord) {
             // INSERT
-            // Note: We do NOT pass the ID. We let Postgres generate the UUID v4.
             const response = await supabase
                 .from('clients')
                 .insert([payload])
@@ -173,7 +166,7 @@ export const ClientService = {
      * Create an empty client template (Client-side only)
      */
     createEmpty: (): Client => ({
-        id: `new-${Date.now()}`, // Temporary ID, will be replaced by UUID on save
+        id: `new-${Date.now()}`,
         created_at: new Date().toISOString(),
         entityName: '',
         status: 'PROSPECT',
@@ -184,9 +177,10 @@ export const ClientService = {
         country: 'Morocco',
         billingAddress: '',
         creditLimit: 0,
+        creditUsed: 0, // FIXED: Added initialization
         unbilledWork: 0,
         unpaidInvoices: 0,
-        salesRepId: 'Youssef (Sales)', // Default, normally from Auth Context
+        salesRepId: 'Youssef (Sales)',
         tags: [],
         contacts: [],
         routes: [],

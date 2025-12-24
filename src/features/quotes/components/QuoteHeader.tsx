@@ -39,7 +39,7 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
   // Quote Store
   const { 
     reference, status, clientName, clientId, validityDate, version,
-    salespersonId, salespersonName, // Ensure we have ID and Name from store
+    salespersonId, // Ensure we have ID and Name from store
     quoteCurrency, exchangeRates, paymentTerms,
     setIdentity, setStatus, saveQuote, duplicateQuote, createRevision,
     setQuoteCurrency, setExchangeRate,

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { 
     Truck, Ship, Plane, Box, AlertTriangle, 
     Trash2, Anchor, UploadCloud, Clock, Plus, 
-    CheckCircle2, MapPin, Factory, Phone, Mail, Globe
+    MapPin, Factory
 } from "lucide-react";
 import { useClientStore } from "@/store/useClientStore";
 import { SupplierRole, SupplierTier } from "@/types/index";
@@ -13,11 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { RouteDialog } from "./RouteDialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
   const { 
@@ -117,7 +115,7 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
                           <Select 
                             value={newSupplier.role} 
                             onValueChange={(v: any) => setNewSupplier({...newSupplier, role: v})}
-                            disabled={dialogMode === 'SUPPLIER'} // Lock to exporter if adding supplier
+                            disabled={dialogMode === 'SUPPLIER'} 
                           >
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>

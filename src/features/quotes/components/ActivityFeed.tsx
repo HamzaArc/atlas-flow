@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Card } from "@/components/ui/card";
 import { MessageSquare, Bell, FileText, Filter, Send, Clock, User, AlertTriangle, Info } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
@@ -201,7 +201,7 @@ export function ActivityFeed({ onPreviewQuote }: ActivityFeedProps) {
                     disabled={!noteContent.trim()}
                 >
                     Post Note <Send className="h-3 w-3 ml-2" />
-                </Button>
+                </Button>QuoteDashboard
             </div>
         </div>
 

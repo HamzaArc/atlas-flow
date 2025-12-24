@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, UploadCloud, CheckCircle, AlertCircle, Eye } from "lucide-react";
+import { FileText, UploadCloud, CheckCircle, Eye } from "lucide-react";
 
 // Types based on the Spec 
 type DocType = 'MBL' | 'HBL' | 'COMMERCIAL_INV' | 'PACKING_LIST' | 'DUM' | 'EUR1';

@@ -1,11 +1,11 @@
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useDossierStore } from "@/store/useDossierStore";
-import { MapPin, Calendar, Anchor, Box, User, AlertCircle, Plane, Truck, Ship } from "lucide-react";
+import { MapPin, Anchor, Box, User, AlertCircle, Plane, Truck, Ship } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { Incoterm } from "@/types/index"; // Added Import
 
 export function ShipmentDetails() {
   const { dossier, isEditing, updateDossier, updateParty } = useDossierStore();
@@ -48,7 +48,7 @@ export function ShipmentDetails() {
                 </div>
                 <div className="space-y-1">
                     <Label className="text-[10px] text-slate-400 uppercase font-bold">Incoterm</Label>
-                    <Select disabled={!isEditing} value={dossier.incoterm} onValueChange={(v) => updateDossier('incoterm', v)}>
+                    <Select disabled={!isEditing} value={dossier.incoterm} onValueChange={(v) => updateDossier('incoterm', v as Incoterm)}>
                         <SelectTrigger className="h-8 text-xs font-medium bg-slate-50 border-slate-200"><SelectValue /></SelectTrigger>
                         <SelectContent>
                             {['EXW','FOB','CIF','DAP','DDP'].map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}

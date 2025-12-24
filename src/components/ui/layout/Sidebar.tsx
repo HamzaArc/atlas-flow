@@ -18,13 +18,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
     currentView: string;
     onNavigate: (view: 'dashboard' | 'dossier' | 'crm' | 'finance' | 'tariffs' | 'users') => void;
-    onLogout: () => void;
+    onLogout?: () => void;
 }
 
 export function Sidebar({ className, currentView, onNavigate, onLogout }: SidebarProps) {
   
   const NavItem = ({ 
-      id, icon: Icon, label, active = false, onClick 
+      icon: Icon, label, active = false, onClick 
   }: { id: string, icon: any, label: string, active?: boolean, onClick: () => void }) => (
       <Button 
         variant="ghost" 
@@ -46,8 +46,6 @@ export function Sidebar({ className, currentView, onNavigate, onLogout }: Sideba
 
   return (
     <div className={cn("flex flex-col h-screen bg-white border-r border-slate-200", className)}>
-      
-      {/* 1. BRAND HEADER */}
       <div className="p-6 pb-4">
           <div className="flex items-center gap-3">
               <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center shadow-md">
@@ -64,10 +62,7 @@ export function Sidebar({ className, currentView, onNavigate, onLogout }: Sideba
           <div className="h-px bg-slate-100 w-full"></div>
       </div>
 
-      {/* 2. NAVIGATION MODULES */}
       <div className="flex-1 py-4 px-3 space-y-6 overflow-y-auto">
-        
-        {/* Operations */}
         <div>
             <h4 className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Operations</h4>
             <div className="space-y-0.5">
@@ -95,7 +90,6 @@ export function Sidebar({ className, currentView, onNavigate, onLogout }: Sideba
             </div>
         </div>
 
-        {/* Business */}
         <div>
             <h4 className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Business</h4>
             <div className="space-y-0.5">
@@ -104,7 +98,6 @@ export function Sidebar({ className, currentView, onNavigate, onLogout }: Sideba
             </div>
         </div>
 
-        {/* Admin */}
         <div>
             <h4 className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">System</h4>
             <div className="space-y-0.5">
@@ -113,10 +106,8 @@ export function Sidebar({ className, currentView, onNavigate, onLogout }: Sideba
                 <NavItem id="settings" icon={Settings} label="Settings" onClick={() => {}} />
             </div>
         </div>
-
       </div>
 
-      {/* 3. USER FOOTER */}
       <div className="p-4 border-t border-slate-100 bg-slate-50/50">
           <div 
             onClick={onLogout}
