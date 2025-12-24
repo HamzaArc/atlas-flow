@@ -9,7 +9,7 @@ import {
   ChevronRight,
   Box,
   Banknote,
-  UserCog // Added for Users
+  UserCog 
 } from "lucide-react";
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button";
@@ -18,9 +18,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
     currentView: string;
     onNavigate: (view: 'dashboard' | 'dossier' | 'crm' | 'finance' | 'tariffs' | 'users') => void;
+    onLogout: () => void;
 }
 
-export function Sidebar({ className, currentView, onNavigate }: SidebarProps) {
+export function Sidebar({ className, currentView, onNavigate, onLogout }: SidebarProps) {
   
   const NavItem = ({ 
       id, icon: Icon, label, active = false, onClick 
@@ -117,7 +118,10 @@ export function Sidebar({ className, currentView, onNavigate }: SidebarProps) {
 
       {/* 3. USER FOOTER */}
       <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-          <div className="flex items-center justify-between group cursor-pointer p-2 rounded-lg hover:bg-white hover:shadow-sm transition-all border border-transparent hover:border-slate-200">
+          <div 
+            onClick={onLogout}
+            className="flex items-center justify-between group cursor-pointer p-2 rounded-lg hover:bg-white hover:shadow-sm transition-all border border-transparent hover:border-slate-200"
+          >
               <div className="flex items-center gap-3">
                   <Avatar className="h-8 w-8 border border-slate-200">
                       <AvatarImage src="https://github.com/shadcn.png" />

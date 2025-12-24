@@ -10,10 +10,12 @@ import FinanceDashboard from "@/features/finance/pages/FinanceDashboard";
 import RateDashboard from "@/features/tariffs/pages/RateDashboard";
 import RateWorkspace from "@/features/tariffs/pages/RateWorkspace";
 import UserDirectoryPage from "@/features/users/pages/UserDirectoryPage"; 
+import LandingPage from "@/features/landing/LandingPage";
 
 import { Toaster } from "@/components/ui/use-toast";
 
 function App() {
+  const [showLanding, setShowLanding] = useState(true);
   const [currentPage, setCurrentPage] = useState<'dashboard' | 'create' | 'dossier' | 'crm' | 'finance' | 'tariffs' | 'users'>('dashboard');
   const [crmView, setCrmView] = useState<'list' | 'details'>('list');
   const [dossierView, setDossierView] = useState<'dashboard' | 'dossier'>('dashboard'); 
@@ -26,10 +28,18 @@ function App() {
       if (page === 'tariffs') setTariffView('dashboard');
   };
 
+  if (showLanding) {
+    return <LandingPage onEnterApp={() => setShowLanding(false)} />;
+  }
+
   return (
     <div className="flex min-h-screen w-full bg-slate-50 text-slate-900 font-sans">
       <aside className="w-64 flex-none hidden md:block z-30 shadow-sm">
-          <Sidebar currentView={currentPage} onNavigate={handleSidebarNav} /> 
+          <Sidebar 
+            currentView={currentPage} 
+            onNavigate={handleSidebarNav} 
+            onLogout={() => setShowLanding(true)}
+          /> 
       </aside>
 
       <main className="flex-1 h-screen overflow-hidden flex flex-col relative">
@@ -58,7 +68,6 @@ function App() {
                             <button onClick={() => setCrmView('list')} className="text-xs text-blue-600 hover:underline">← Back to List</button>
                         </div>
                         <div className="flex-1 overflow-hidden">
-                            {/* FIXED: Passed onNavigate prop */}
                             <ClientDetailsPage onNavigate={setCrmView} />
                         </div>
                     </div>
