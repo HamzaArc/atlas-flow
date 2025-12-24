@@ -104,7 +104,7 @@ export default function LandingPage({ onEnterApp }: LandingPageProps) {
             <Button 
               variant="outline" 
               size="lg" 
-              className="h-14 px-8 rounded-full border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white transition-all"
+              className="h-14 px-8 rounded-full border-slate-700 text-slate-900 hover:bg-slate-800 hover:text-white transition-all"
               onClick={() => document.getElementById('workflow')?.scrollIntoView({ behavior: 'smooth' })}
             >
               System Walkthrough

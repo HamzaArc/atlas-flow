@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 import { Sidebar } from "@/components/ui/layout/Sidebar";
 import QuoteWorkspace from "@/features/quotes/QuoteWorkspace";
 import QuoteDashboard from "@/features/quotes/pages/QuoteDashboard";
@@ -11,15 +12,42 @@ import RateDashboard from "@/features/tariffs/pages/RateDashboard";
 import RateWorkspace from "@/features/tariffs/pages/RateWorkspace";
 import UserDirectoryPage from "@/features/users/pages/UserDirectoryPage"; 
 import LandingPage from "@/features/landing/LandingPage";
+import LoginPage from "@/features/auth/LoginPage"; // Ensure you created this file
 
 import { Toaster } from "@/components/ui/use-toast";
+import { Loader2 } from "lucide-react";
 
 function App() {
+  const [session, setSession] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [showLanding, setShowLanding] = useState(true);
+
+  // Application State
   const [currentPage, setCurrentPage] = useState<'dashboard' | 'create' | 'dossier' | 'crm' | 'finance' | 'tariffs' | 'users'>('dashboard');
   const [crmView, setCrmView] = useState<'list' | 'details'>('list');
   const [dossierView, setDossierView] = useState<'dashboard' | 'dossier'>('dashboard'); 
   const [tariffView, setTariffView] = useState<'dashboard' | 'workspace'>('dashboard');
+
+  useEffect(() => {
+    // 1. Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoading(false);
+    });
+
+    // 2. Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      // If we just logged out, reset landing page
+      if (!session) {
+        setShowLanding(true);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const handleSidebarNav = (page: any) => {
       setCurrentPage(page);
@@ -28,17 +56,55 @@ function App() {
       if (page === 'tariffs') setTariffView('dashboard');
   };
 
-  if (showLanding) {
-    return <LandingPage onEnterApp={() => setShowLanding(false)} />;
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    // State update handled by onAuthStateChange listener
+  };
+
+  // --------------------------------------------------------------------------
+  // RENDER LOGIC
+  // --------------------------------------------------------------------------
+
+  // 1. Loading State
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
+      </div>
+    );
   }
 
+  // 2. Landing Page (Public)
+  // If user is logged in, clicking "Enter App" skips login.
+  // If user is NOT logged in, clicking "Enter App" goes to Login Page.
+  if (showLanding) {
+    return (
+        <LandingPage 
+            onEnterApp={() => {
+                if (session) {
+                    setShowLanding(false);
+                } else {
+                    // Trigger switch to login view by hiding landing but not having session
+                    setShowLanding(false);
+                }
+            }} 
+        />
+    );
+  }
+
+  // 3. Login Page (Not Authenticated)
+  if (!session) {
+    return <LoginPage onLoginSuccess={() => setShowLanding(false)} />;
+  }
+
+  // 4. Main Application (Authenticated)
   return (
     <div className="flex min-h-screen w-full bg-slate-50 text-slate-900 font-sans">
       <aside className="w-64 flex-none hidden md:block z-30 shadow-sm">
           <Sidebar 
             currentView={currentPage} 
             onNavigate={handleSidebarNav} 
-            onLogout={() => setShowLanding(true)}
+            onLogout={handleLogout}
           /> 
       </aside>
 
