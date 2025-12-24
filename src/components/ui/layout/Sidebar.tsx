@@ -8,7 +8,8 @@ import {
   LogOut,
   ChevronRight,
   Box,
-  Banknote // Imported for Tariffs
+  Banknote,
+  UserCog // Added for Users
 } from "lucide-react";
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button";
@@ -16,8 +17,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
     currentView: string;
-    // Updated type definition
-    onNavigate: (view: 'dashboard' | 'dossier' | 'crm' | 'finance' | 'tariffs') => void;
+    onNavigate: (view: 'dashboard' | 'dossier' | 'crm' | 'finance' | 'tariffs' | 'users') => void;
 }
 
 export function Sidebar({ className, currentView, onNavigate }: SidebarProps) {
@@ -66,7 +66,7 @@ export function Sidebar({ className, currentView, onNavigate }: SidebarProps) {
       {/* 2. NAVIGATION MODULES */}
       <div className="flex-1 py-4 px-3 space-y-6 overflow-y-auto">
         
-        {/* Core Operations */}
+        {/* Operations */}
         <div>
             <h4 className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Operations</h4>
             <div className="space-y-0.5">
@@ -84,7 +84,6 @@ export function Sidebar({ className, currentView, onNavigate }: SidebarProps) {
                     active={currentView === 'dossier'}
                     onClick={() => onNavigate('dossier')} 
                 />
-                {/* NEW TARIFF MODULE */}
                 <NavItem 
                     id="tariffs" 
                     icon={Banknote} 
@@ -108,6 +107,7 @@ export function Sidebar({ className, currentView, onNavigate }: SidebarProps) {
         <div>
             <h4 className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">System</h4>
             <div className="space-y-0.5">
+                <NavItem id="users" icon={UserCog} label="User Directory" active={currentView === 'users'} onClick={() => onNavigate('users')} />
                 <NavItem id="analytics" icon={LayoutDashboard} label="Analytics" onClick={() => {}} />
                 <NavItem id="settings" icon={Settings} label="Settings" onClick={() => {}} />
             </div>

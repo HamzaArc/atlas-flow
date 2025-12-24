@@ -27,7 +27,7 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
   
   const [hsInput, setHsInput] = useState('');
   
-  // Sourcing Supplier Form State
+  // Sourcing Supplier / Carrier Form State
   const [newSupplier, setNewSupplier] = useState({ 
       name: '', 
       role: 'EXPORTER' as SupplierRole, 
@@ -42,6 +42,7 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
       notes: ''
   });
   const [isSupplierDialogOpen, setIsSupplierDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<'SUPPLIER' | 'CARRIER'>('SUPPLIER');
 
   if (!activeClient) return null;
 
@@ -63,16 +64,22 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
       updateOperationalProfile('hsCodes', operational.hsCodes.filter(c => c !== code));
   };
 
+  const openAddDialog = (mode: 'SUPPLIER' | 'CARRIER') => {
+      setDialogMode(mode);
+      setNewSupplier({ 
+          name: '', 
+          role: mode === 'SUPPLIER' ? 'EXPORTER' : 'SEA_LINE', 
+          tier: 'APPROVED', 
+          country: '', city: '', address: '', contactName: '', email: '', phone: '', products: '', notes: ''
+      });
+      setIsSupplierDialogOpen(true);
+  };
+
   const handleAddSupplier = () => {
       if(!newSupplier.name) return;
       addSupplier({
           id: Math.random().toString(36).substr(2, 9),
           ...newSupplier
-      });
-      // Reset form
-      setNewSupplier({ 
-          name: '', role: 'EXPORTER', tier: 'APPROVED', 
-          country: '', city: '', address: '', contactName: '', email: '', phone: '', products: '', notes: ''
       });
       setIsSupplierDialogOpen(false);
   };
@@ -94,7 +101,78 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
   return (
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-10">
           
-          {/* 1. CAPACITY HEADER (UNCHANGED) */}
+          {/* SHARED DIALOG FOR BOTH SUPPLIERS AND CARRIERS */}
+          <Dialog open={isSupplierDialogOpen} onOpenChange={setIsSupplierDialogOpen}>
+              <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                      <DialogTitle>{dialogMode === 'SUPPLIER' ? 'Add Commercial Supplier' : 'Add Logistics Partner'}</DialogTitle>
+                  </DialogHeader>
+                  <div className="grid grid-cols-2 gap-4 py-4">
+                      <div className="space-y-2 col-span-2">
+                          <Label>Company Name</Label>
+                          <Input value={newSupplier.name} onChange={(e) => setNewSupplier({...newSupplier, name: e.target.value})} placeholder={dialogMode === 'SUPPLIER' ? "e.g. Shanghai Textile Co." : "e.g. Maersk Line"} />
+                      </div>
+                      <div className="space-y-2">
+                          <Label>Role</Label>
+                          <Select 
+                            value={newSupplier.role} 
+                            onValueChange={(v: any) => setNewSupplier({...newSupplier, role: v})}
+                            disabled={dialogMode === 'SUPPLIER'} // Lock to exporter if adding supplier
+                          >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                  {dialogMode === 'SUPPLIER' ? (
+                                    <SelectItem value="EXPORTER">Exporter / Factory</SelectItem>
+                                  ) : (
+                                    <>
+                                        <SelectItem value="SEA_LINE">Shipping Line</SelectItem>
+                                        <SelectItem value="AIRLINE">Airline</SelectItem>
+                                        <SelectItem value="HAULIER">Haulier</SelectItem>
+                                        <SelectItem value="FORWARDER">Freight Forwarder</SelectItem>
+                                    </>
+                                  )}
+                              </SelectContent>
+                          </Select>
+                      </div>
+                      <div className="space-y-2">
+                          <Label>Relationship Tier</Label>
+                          <Select value={newSupplier.tier} onValueChange={(v: any) => setNewSupplier({...newSupplier, tier: v})}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                  <SelectItem value="STRATEGIC">Strategic</SelectItem>
+                                  <SelectItem value="APPROVED">Approved</SelectItem>
+                                  <SelectItem value="BACKUP">Backup</SelectItem>
+                                  <SelectItem value="BLOCKED">Blocked</SelectItem>
+                              </SelectContent>
+                          </Select>
+                      </div>
+                      
+                      <div className="col-span-2 border-t border-slate-100 my-2"></div>
+
+                      <div className="space-y-2">
+                          <Label>Country</Label>
+                          <Input value={newSupplier.country} onChange={(e) => setNewSupplier({...newSupplier, country: e.target.value})} placeholder="e.g. China" />
+                      </div>
+                      <div className="space-y-2">
+                          <Label>City</Label>
+                          <Input value={newSupplier.city} onChange={(e) => setNewSupplier({...newSupplier, city: e.target.value})} placeholder="e.g. Shanghai" />
+                      </div>
+
+                      {dialogMode === 'SUPPLIER' && (
+                        <>
+                            <div className="col-span-2 border-t border-slate-100 my-2"></div>
+                            <div className="space-y-2 col-span-2">
+                                <Label>Primary Goods / Products</Label>
+                                <Input value={newSupplier.products} onChange={(e) => setNewSupplier({...newSupplier, products: e.target.value})} placeholder="e.g. Cotton Fabrics" />
+                            </div>
+                        </>
+                      )}
+                  </div>
+                  <Button onClick={handleAddSupplier} className="w-full">Save Partner</Button>
+              </DialogContent>
+          </Dialog>
+
+          {/* 1. CAPACITY HEADER */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <Card className="bg-blue-50 border-blue-100 shadow-sm flex items-center p-4 gap-3">
                   <div className="p-2 bg-white rounded-lg shadow-sm text-blue-600"><Ship className="h-5 w-5" /></div>
@@ -134,7 +212,7 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
 
           <div className="grid grid-cols-12 gap-6">
               
-              {/* 2. SOURCING NETWORK (NEW SECTION) */}
+              {/* 2. SOURCING NETWORK */}
               <div className="col-span-12 space-y-4">
                   <div className="flex justify-between items-center">
                       <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
@@ -142,79 +220,9 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
                       </h3>
                       
                       {isEditing && (
-                        <Dialog open={isSupplierDialogOpen} onOpenChange={setIsSupplierDialogOpen}>
-                          <DialogTrigger asChild>
-                              <Button size="sm" className="h-8 bg-slate-900 text-white shadow-sm">
-                                  <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Supplier
-                              </Button>
-                          </DialogTrigger>
-                          <DialogContent className="max-w-2xl">
-                              <DialogHeader>
-                                  <DialogTitle>Add Commercial Supplier</DialogTitle>
-                              </DialogHeader>
-                              <div className="grid grid-cols-2 gap-4 py-4">
-                                  <div className="space-y-2 col-span-2">
-                                      <Label>Company Name</Label>
-                                      <Input value={newSupplier.name} onChange={(e) => setNewSupplier({...newSupplier, name: e.target.value})} placeholder="e.g. Shanghai Textile Co." />
-                                  </div>
-                                  <div className="space-y-2">
-                                      <Label>Role</Label>
-                                      <Select value={newSupplier.role} onValueChange={(v: any) => setNewSupplier({...newSupplier, role: v})}>
-                                          <SelectTrigger><SelectValue /></SelectTrigger>
-                                          <SelectContent>
-                                              <SelectItem value="EXPORTER">Exporter / Factory</SelectItem>
-                                              <SelectItem value="SEA_LINE">Shipping Line (Carrier)</SelectItem>
-                                              <SelectItem value="AIRLINE">Airline</SelectItem>
-                                              <SelectItem value="HAULIER">Haulier</SelectItem>
-                                          </SelectContent>
-                                      </Select>
-                                  </div>
-                                  <div className="space-y-2">
-                                      <Label>Relationship Tier</Label>
-                                      <Select value={newSupplier.tier} onValueChange={(v: any) => setNewSupplier({...newSupplier, tier: v})}>
-                                          <SelectTrigger><SelectValue /></SelectTrigger>
-                                          <SelectContent>
-                                              <SelectItem value="STRATEGIC">Strategic</SelectItem>
-                                              <SelectItem value="APPROVED">Approved</SelectItem>
-                                              <SelectItem value="BACKUP">Backup</SelectItem>
-                                              <SelectItem value="BLOCKED">Blocked</SelectItem>
-                                          </SelectContent>
-                                      </Select>
-                                  </div>
-                                  
-                                  <div className="col-span-2 border-t border-slate-100 my-2"></div>
-
-                                  <div className="space-y-2">
-                                      <Label>Country</Label>
-                                      <Input value={newSupplier.country} onChange={(e) => setNewSupplier({...newSupplier, country: e.target.value})} placeholder="e.g. China" />
-                                  </div>
-                                  <div className="space-y-2">
-                                      <Label>City</Label>
-                                      <Input value={newSupplier.city} onChange={(e) => setNewSupplier({...newSupplier, city: e.target.value})} placeholder="e.g. Shanghai" />
-                                  </div>
-                                  <div className="space-y-2 col-span-2">
-                                      <Label>Address</Label>
-                                      <Input value={newSupplier.address} onChange={(e) => setNewSupplier({...newSupplier, address: e.target.value})} placeholder="Full pickup address..." />
-                                  </div>
-
-                                  <div className="col-span-2 border-t border-slate-100 my-2"></div>
-
-                                  <div className="space-y-2">
-                                      <Label>Contact Person</Label>
-                                      <Input value={newSupplier.contactName} onChange={(e) => setNewSupplier({...newSupplier, contactName: e.target.value})} placeholder="e.g. Mr. Chen" />
-                                  </div>
-                                  <div className="space-y-2">
-                                      <Label>Email</Label>
-                                      <Input value={newSupplier.email} onChange={(e) => setNewSupplier({...newSupplier, email: e.target.value})} placeholder="sales@factory.com" />
-                                  </div>
-                                  <div className="space-y-2 col-span-2">
-                                      <Label>Primary Goods / Products</Label>
-                                      <Input value={newSupplier.products} onChange={(e) => setNewSupplier({...newSupplier, products: e.target.value})} placeholder="e.g. Cotton Fabrics, Polyester, Machinery Parts" />
-                                  </div>
-                              </div>
-                              <Button onClick={handleAddSupplier} className="w-full">Save Supplier</Button>
-                          </DialogContent>
-                        </Dialog>
+                          <Button size="sm" className="h-8 bg-slate-900 text-white shadow-sm" onClick={() => openAddDialog('SUPPLIER')}>
+                              <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Supplier
+                          </Button>
                       )}
                   </div>
 
@@ -250,30 +258,7 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
                                               {sup.products || 'General Cargo'}
                                           </span>
                                       </div>
-                                      <div className="flex flex-wrap gap-3 pt-1">
-                                          {sup.contactName && (
-                                              <div className="flex items-center gap-1.5 text-[10px] text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
-                                                  <span className="font-bold">{sup.contactName}</span>
-                                              </div>
-                                          )}
-                                          {sup.email && (
-                                              <div className="flex items-center gap-1.5 text-[10px] text-blue-600 cursor-pointer hover:underline">
-                                                  <Mail className="h-3 w-3" /> {sup.email}
-                                              </div>
-                                          )}
-                                          {sup.phone && (
-                                              <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
-                                                  <Phone className="h-3 w-3" /> {sup.phone}
-                                              </div>
-                                          )}
-                                      </div>
                                   </div>
-                                  
-                                  {sup.address && (
-                                      <div className="mt-3 text-[10px] text-slate-400 font-mono pl-1 border-l-2 border-slate-200 truncate">
-                                          {sup.address}
-                                      </div>
-                                  )}
                               </CardContent>
                           </Card>
                       ))}
@@ -286,7 +271,7 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
                   </div>
               </div>
 
-              {/* 3. TRADE LANES (Left Column) */}
+              {/* 3. TRADE LANES */}
               <div className="col-span-12 lg:col-span-8 space-y-4">
                   <div className="flex justify-between items-center">
                       <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
@@ -339,7 +324,7 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
                   </div>
               </div>
 
-              {/* 4. INTELLIGENCE & LOGISTICS VENDORS (Right Column) */}
+              {/* 4. INTELLIGENCE & LOGISTICS VENDORS */}
               <div className="col-span-12 lg:col-span-4 space-y-6">
                   
                   {/* CARD A: HANDLING SPECS */}
@@ -393,24 +378,34 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
                       </CardContent>
                   </Card>
 
-                   {/* LOGISTICS VENDORS (Reduced View) */}
+                   {/* LOGISTICS VENDORS (Carrier Management) */}
                    <Card className="shadow-sm border-slate-200">
                       <CardHeader className="py-3 px-4 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
                           <CardTitle className="text-xs font-bold uppercase text-slate-500 flex items-center gap-2">
                               <Anchor className="h-3.5 w-3.5" /> Approved Carriers
                           </CardTitle>
+                          {isEditing && (
+                             <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openAddDialog('CARRIER')}>
+                                <Plus className="h-3.5 w-3.5 text-blue-600" />
+                             </Button>
+                          )}
                       </CardHeader>
                       <CardContent className="p-4">
                           <div className="space-y-2">
                                 {logisticsPartners.map((sup) => (
-                                    <div key={sup.id} className="flex justify-between items-center text-xs p-2.5 bg-slate-50 rounded-md border border-slate-100">
+                                    <div key={sup.id} className="flex justify-between items-center text-xs p-2.5 bg-slate-50 rounded-md border border-slate-100 group">
                                         <div className="flex items-center gap-2">
                                             <Badge variant="outline" className={`text-[9px] h-4 px-1 py-0 ${getTierColor(sup.tier)}`}>
                                                 {sup.tier}
                                             </Badge>
                                             <span className="font-semibold text-slate-700">{sup.name}</span>
                                         </div>
-                                        <span className="text-[9px] text-slate-400">{sup.role.replace('_', ' ')}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[9px] text-slate-400">{sup.role.replace('_', ' ')}</span>
+                                            {isEditing && (
+                                                <Trash2 className="h-3 w-3 text-slate-300 hover:text-red-500 cursor-pointer" onClick={() => removeSupplier(sup.id)} />
+                                            )}
+                                        </div>
                                     </div>
                                 ))}
                                 {logisticsPartners.length === 0 && <span className="text-xs text-slate-400 italic">No carriers assigned.</span>}

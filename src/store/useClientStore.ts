@@ -65,15 +65,17 @@ export const useClientStore = create<ClientState>((set, get) => ({
   setFilterStatus: (status) => set((state) => ({ filters: { ...state.filters, status } })),
 
   fetchClients: async () => {
-    if (get().clients.length > 0) return;
-
     set({ isLoading: true });
     try {
         const clients = await ClientService.fetchAll();
         set({ isLoading: false, clients });
-    } catch (e) {
+    } catch (e: any) {
         set({ isLoading: false });
-        useToast.getState().toast("Failed to load clients", "error");
+        // FIXED: Using simple signature (message, type)
+        useToast.getState().toast(
+            `Error loading clients: ${e.message || "Could not connect to database"}`, 
+            "error"
+        );
     }
   },
 
@@ -88,31 +90,64 @@ export const useClientStore = create<ClientState>((set, get) => ({
     // Simulate selection delay
     setTimeout(() => {
         set({ activeClient: found ? JSON.parse(JSON.stringify(found)) : null, isLoading: false });
-    }, 100);
+    }, 50);
   },
 
   saveClient: async (client) => {
     set({ isLoading: true });
     
-    await ClientService.save(client);
+    try {
+        // 1. Persist to DB
+        const savedClient = await ClientService.save(client);
 
-    const { clients } = get();
-    const existsIndex = clients.findIndex(c => c.id === client.id);
-    let updatedList = [...clients];
+        // 2. Update Local State
+        const { clients } = get();
+        const existsIndex = clients.findIndex(c => c.id === client.id);
+        
+        let updatedList = [...clients];
 
-    if (existsIndex >= 0) {
-        updatedList[existsIndex] = { ...client, updated_at: new Date().toISOString() };
-    } else {
-        updatedList = [{ ...client, id: client.id, created_at: new Date().toISOString() }, ...clients];
+        if (existsIndex >= 0) {
+            updatedList[existsIndex] = savedClient;
+        } else {
+            updatedList = [savedClient, ...clients];
+        }
+
+        set({ clients: updatedList, activeClient: savedClient, isLoading: false });
+        
+        // FIXED: Using simple signature (message, type)
+        useToast.getState().toast(
+            `Client ${savedClient.entityName} saved successfully`,
+            "success"
+        );
+
+    } catch (e: any) {
+        set({ isLoading: false });
+        // FIXED: Using simple signature (message, type)
+        useToast.getState().toast(
+            `Save Failed: ${e.message}`,
+            "error"
+        );
     }
-
-    set({ clients: updatedList, activeClient: client, isLoading: false });
-    useToast.getState().toast("Client profile saved successfully", "success");
   },
 
   deleteClient: async (id) => {
-    set({ clients: get().clients.filter(c => c.id !== id) });
-    useToast.getState().toast("Client removed from directory", "info");
+    // Optimistic Update
+    const previousClients = get().clients;
+    set({ clients: previousClients.filter(c => c.id !== id) });
+
+    try {
+        await ClientService.delete(id);
+        // FIXED: Using simple signature (message, type)
+        useToast.getState().toast("Client removed from directory", "info");
+    } catch (e: any) {
+        // Revert on failure
+        set({ clients: previousClients });
+        // FIXED: Using simple signature (message, type)
+        useToast.getState().toast(
+            `Could not delete client: ${e.message}`,
+            "error"
+        );
+    }
   },
 
   // --- GENERIC UPDATES ---

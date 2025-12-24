@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { useClientStore } from "@/store/useClientStore"; 
+import { useUserStore } from "@/store/useUserStore"; // Import User Store
 import { Currency } from "@/types/index";
 import { cn } from "@/lib/utils";
 import { ApprovalAction } from "./ApprovalAction";
@@ -38,7 +39,7 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
   // Quote Store
   const { 
     reference, status, clientName, clientId, validityDate, version,
-    salespersonName,
+    salespersonId, salespersonName, // Ensure we have ID and Name from store
     quoteCurrency, exchangeRates, paymentTerms,
     setIdentity, setStatus, saveQuote, duplicateQuote, createRevision,
     setQuoteCurrency, setExchangeRate,
@@ -47,6 +48,9 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
 
   // Client Store Integration
   const { clients, fetchClients } = useClientStore();
+  // User Store Integration
+  const { users, fetchUsers } = useUserStore();
+  
   const { toast } = useToast();
   
   // Local State for Combobox
@@ -55,10 +59,14 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
   // Initialize Data
   useEffect(() => {
     fetchClients();
-  }, [fetchClients]);
+    fetchUsers();
+  }, [fetchClients, fetchUsers]);
 
   const isReadOnly = status === 'ACCEPTED' || status === 'REJECTED' || status === 'SENT';
   const isLocked = status === 'ACCEPTED' || status === 'REJECTED';
+
+  // --- FILTERS ---
+  const salesReps = users.filter(u => ['SALES', 'MANAGER', 'DIRECTOR', 'ADMIN'].includes(u.role));
 
   // --- HANDLER: SMART CLIENT SELECTION ---
   const handleClientSelect = (selectedId: string) => {
@@ -69,6 +77,15 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
     setIdentity('clientId', client.id);
     setIdentity('clientName', client.entityName);
     setIdentity('paymentTerms', client.financials.paymentTerms || '30 Days');
+    
+    // Auto-assign Sales Rep from Client Profile if exists
+    if (client.salesRepId) {
+        const rep = users.find(u => u.id === client.salesRepId);
+        if (rep) {
+            setIdentity('salespersonId', rep.id);
+            setIdentity('salespersonName', rep.fullName);
+        }
+    }
     
     setOpenClient(false);
   };
@@ -357,24 +374,24 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                   </Label>
                   <Select 
                       disabled={isReadOnly}
-                      value={salespersonName} 
+                      value={salespersonId} 
                       onValueChange={(v) => {
-                          setIdentity('salespersonName', v);
-                          const ids: Record<string, string> = {
-                              'Youssef (Sales)': 'user-1',
-                              'Fatima (Manager)': 'user-2',
-                              'Ali (Logistics)': 'user-3'
-                          };
-                          setIdentity('salespersonId', ids[v] || 'user-1');
+                          const user = users.find(u => u.id === v);
+                          if(user) {
+                             setIdentity('salespersonId', user.id);
+                             setIdentity('salespersonName', user.fullName);
+                          }
                       }}
                   >
                       <SelectTrigger className="h-8 w-full bg-white border-slate-200 text-xs shadow-sm focus:ring-blue-500 font-medium">
-                          <SelectValue placeholder="Rep" />
+                          <SelectValue placeholder="Select Rep..." />
                       </SelectTrigger>
                       <SelectContent>
-                          <SelectItem value="Youssef (Sales)">Youssef</SelectItem>
-                          <SelectItem value="Fatima (Manager)">Fatima</SelectItem>
-                          <SelectItem value="Ali (Logistics)">Ali</SelectItem>
+                          {salesReps.map(user => (
+                              <SelectItem key={user.id} value={user.id}>
+                                  {user.fullName}
+                              </SelectItem>
+                          ))}
                       </SelectContent>
                   </Select>
               </div>

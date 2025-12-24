@@ -76,19 +76,33 @@ export function ClientBillingConfig({ isEditing }: { isEditing: boolean }) {
                         </div>
                     </div>
 
-                    {/* 3. Péage (RESTORED) */}
+                    {/* 3. Péage */}
                     <div className="space-y-2">
                         <Label className="text-xs font-bold text-slate-500 uppercase">Péage (Toll Fee - Default)</Label>
-                        <div className="relative">
-                            <Input 
-                                disabled={!isEditing}
-                                type="number"
-                                className="pl-9 font-mono"
-                                placeholder="0.00"
-                                value={activeClient.financials.tollFee || ''}
-                                onChange={(e) => updateActiveFinancials('tollFee', parseFloat(e.target.value))}
-                            />
-                            <Truck className="h-4 w-4 text-slate-400 absolute left-3 top-2.5" />
+                        <div className="flex gap-2">
+                            <div className="relative flex-1">
+                                <Input 
+                                    disabled={!isEditing}
+                                    type="number"
+                                    className="pl-9 font-mono"
+                                    placeholder="0.00"
+                                    value={activeClient.financials.tollFee || ''}
+                                    onChange={(e) => updateActiveFinancials('tollFee', parseFloat(e.target.value))}
+                                />
+                                <Truck className="h-4 w-4 text-slate-400 absolute left-3 top-2.5" />
+                            </div>
+                            <Select 
+                                disabled={!isEditing} 
+                                value={activeClient.financials.tollFeeCurrency || 'MAD'}
+                                onValueChange={(v: any) => updateActiveFinancials('tollFeeCurrency', v)}
+                            >
+                                <SelectTrigger className="w-24 bg-slate-50"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="MAD">MAD</SelectItem>
+                                    <SelectItem value="EUR">EUR</SelectItem>
+                                    <SelectItem value="USD">USD</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                         <p className="text-[10px] text-slate-400">
                             Default fixed value. Note: For Sea LCL, this is auto-calculated based on weight.

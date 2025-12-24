@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Building2, Mail, Phone, Globe, FileText, CreditCard, Briefcase, Trash2, Plus, AlertCircle } from "lucide-react";
 import { useClientStore } from "@/store/useClientStore";
-// FIXED: Import types from @/types/index, not the store
-import { ClientType, ClientStatus } from "@/types/index"; 
+import { ClientType, ClientStatus, Currency } from "@/types/index"; 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -25,13 +24,16 @@ const FieldGroup = ({ label, children, required = false }: { label: string, chil
 );
 
 export function ClientOverview({ isEditing }: { isEditing: boolean }) {
-    const { activeClient, updateActiveField, updateActiveFinancials, addTag, removeTag } = useClientStore();
+    const { activeClient, clients, updateActiveField, updateActiveFinancials, addTag, removeTag } = useClientStore();
     const [tagInput, setTagInput] = useState('');
 
     if (!activeClient) return null;
 
     const totalExposure = (activeClient.unbilledWork || 0) + (activeClient.unpaidInvoices || 0);
     const utilizationPercent = activeClient.creditLimit > 0 ? (totalExposure / activeClient.creditLimit) * 100 : 0;
+
+    // Filter out the current client to prevent self-parenting
+    const potentialParents = clients.filter(c => c.id !== activeClient.id);
 
     const handleAddTag = () => {
         if(tagInput.trim()) {
@@ -176,9 +178,26 @@ export function ClientOverview({ isEditing }: { isEditing: boolean }) {
                         <CardTitle className="text-sm font-bold text-slate-700 flex items-center gap-2">
                             <CreditCard className="h-4 w-4 text-slate-400" /> Credit & Exposure Profile
                         </CardTitle>
-                        <Badge variant="outline" className="bg-white border-slate-200 text-slate-500 font-mono">
-                            CUR: {activeClient.financials.currency}
-                        </Badge>
+                        {isEditing ? (
+                            <Select 
+                                value={activeClient.financials.currency} 
+                                onValueChange={(v) => updateActiveFinancials('currency', v)}
+                            >
+                                <SelectTrigger className="w-24 h-8 text-xs bg-white">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="MAD">MAD</SelectItem>
+                                    <SelectItem value="EUR">EUR</SelectItem>
+                                    <SelectItem value="USD">USD</SelectItem>
+                                    <SelectItem value="GBP">GBP</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        ) : (
+                            <Badge variant="outline" className="bg-white border-slate-200 text-slate-500 font-mono">
+                                CUR: {activeClient.financials.currency}
+                            </Badge>
+                        )}
                     </CardHeader>
                     <CardContent className="p-5">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -261,9 +280,12 @@ export function ClientOverview({ isEditing }: { isEditing: boolean }) {
                                  <Select disabled={!isEditing} value={activeClient.parentCompanyId} onValueChange={(v) => updateActiveField('parentCompanyId', v)}>
                                     <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Standalone Entity" /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="group_a">Holmarcom Group</SelectItem>
-                                        <SelectItem value="group_b">Akwa Group</SelectItem>
-                                        <SelectItem value="group_c">Ynna Holding</SelectItem>
+                                        <SelectItem value="none">Standalone Entity</SelectItem>
+                                        {potentialParents.map(parent => (
+                                            <SelectItem key={parent.id} value={parent.id}>
+                                                {parent.entityName}
+                                            </SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </FieldGroup>

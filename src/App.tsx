@@ -7,18 +7,16 @@ import DossierDashboard from "@/features/dossier/pages/DossierDashboard";
 import ClientDetailsPage from "@/features/crm/pages/ClientDetailsPage";
 import ClientListPage from "@/features/crm/pages/ClientListPage";
 import FinanceDashboard from "@/features/finance/pages/FinanceDashboard";
-// === IMPORT TARIFF MODULES ===
 import RateDashboard from "@/features/tariffs/pages/RateDashboard";
 import RateWorkspace from "@/features/tariffs/pages/RateWorkspace";
+import UserDirectoryPage from "@/features/users/pages/UserDirectoryPage"; 
 
 import { Toaster } from "@/components/ui/use-toast";
 
 function App() {
-  // Added 'tariffs' to type union
-  const [currentPage, setCurrentPage] = useState<'dashboard' | 'create' | 'dossier' | 'crm' | 'finance' | 'tariffs'>('dashboard');
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'create' | 'dossier' | 'crm' | 'finance' | 'tariffs' | 'users'>('dashboard');
   const [crmView, setCrmView] = useState<'list' | 'details'>('list');
   const [dossierView, setDossierView] = useState<'dashboard' | 'dossier'>('dashboard'); 
-  // Added state for tariff sub-navigation
   const [tariffView, setTariffView] = useState<'dashboard' | 'workspace'>('dashboard');
 
   const handleSidebarNav = (page: any) => {
@@ -55,11 +53,13 @@ function App() {
             crmView === 'list' ? <ClientListPage onNavigate={setCrmView} /> : (
                 <div className="absolute inset-0 z-20 bg-white">
                     <div className="h-full flex flex-col">
+                        {/* CRM Header for Mobile/Navigation */}
                         <div className="bg-white border-b px-4 py-2">
                             <button onClick={() => setCrmView('list')} className="text-xs text-blue-600 hover:underline">← Back to List</button>
                         </div>
                         <div className="flex-1 overflow-hidden">
-                            <ClientDetailsPage />
+                            {/* FIXED: Passed onNavigate prop */}
+                            <ClientDetailsPage onNavigate={setCrmView} />
                         </div>
                     </div>
                 </div>
@@ -70,13 +70,16 @@ function App() {
             <FinanceDashboard />
         )}
 
-        {/* === TARIFF MANAGER LOGIC === */}
         {currentPage === 'tariffs' && (
             tariffView === 'dashboard' ? <RateDashboard onNavigate={setTariffView} /> : (
                 <div className="absolute inset-0 z-20 bg-white">
                     <RateWorkspace onBack={() => setTariffView('dashboard')} />
                 </div>
             )
+        )}
+
+        {currentPage === 'users' && (
+            <UserDirectoryPage />
         )}
 
       </main>

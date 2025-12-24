@@ -1,10 +1,12 @@
-import { ArrowLeft, CheckCircle2, MapPin, Calendar, User, LayoutDashboard, FilePlus, Ship, AlertCircle, Ban, AlertTriangle } from "lucide-react";
+import { useEffect } from "react";
+import { ArrowLeft, CheckCircle2, MapPin, User, LayoutDashboard, FilePlus, Ship, Ban, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useClientStore } from "@/store/useClientStore";
+import { useUserStore } from "@/store/useUserStore"; // Import User Store
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -17,8 +19,27 @@ interface ClientHeaderProps {
 
 export function ClientHeader({ isEditing, setIsEditing, onSave, onBack }: ClientHeaderProps) {
     const { activeClient, updateActiveField } = useClientStore();
+    const { users, fetchUsers } = useUserStore(); // Hook into User System
+
+    // Load users on mount
+    useEffect(() => {
+        fetchUsers();
+    }, []);
 
     if (!activeClient) return null;
+
+    // --- USER FILTERS ---
+    // Sales: Sales Reps, Managers, Directors
+    const salesReps = users.filter(u => ['SALES', 'MANAGER', 'DIRECTOR', 'ADMIN'].includes(u.role));
+    // Ops: Operations, Managers, Directors
+    const opsManagers = users.filter(u => ['OPERATIONS', 'MANAGER', 'DIRECTOR', 'ADMIN'].includes(u.role));
+
+    // Helper to resolve ID to Name
+    const getUserName = (id: string | undefined) => {
+        if (!id) return 'Unassigned';
+        const user = users.find(u => u.id === id);
+        return user ? user.fullName : id; // Fallback to ID if not found (or legacy data)
+    };
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -34,7 +55,7 @@ export function ClientHeader({ isEditing, setIsEditing, onSave, onBack }: Client
     const totalExposure = (activeClient.unpaidInvoices || 0) + (activeClient.unbilledWork || 0);
     const utilization = activeClient.creditLimit > 0 ? (totalExposure / activeClient.creditLimit) : 0;
     
-    let healthColor = "bg-emerald-500"; // Healthy
+    let healthColor = "bg-emerald-500"; 
     let healthText = "Healthy";
     if (activeClient.status === 'BLACKLISTED') { healthColor = "bg-slate-900"; healthText = "Blacklisted"; }
     else if (utilization > 1) { healthColor = "bg-red-500"; healthText = "Credit Exceeded"; }
@@ -86,32 +107,46 @@ export function ClientHeader({ isEditing, setIsEditing, onSave, onBack }: Client
                             
                             {/* Ownership Split */}
                             <div className="flex items-center gap-4">
+                                
+                                {/* 1. SALES REP SELECTOR */}
                                 <div className="flex items-center gap-1.5 text-xs" title="Sales Owner">
                                     <User className="h-3.5 w-3.5 text-blue-500" />
                                     {isEditing ? (
                                         <Select value={activeClient.salesRepId} onValueChange={(v) => updateActiveField('salesRepId', v)}>
-                                            <SelectTrigger className="h-6 w-32 text-xs border-slate-200 bg-slate-50"><SelectValue placeholder="Sales" /></SelectTrigger>
+                                            <SelectTrigger className="h-6 w-36 text-xs border-slate-200 bg-slate-50"><SelectValue placeholder="Select Sales Rep" /></SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="Youssef (Sales)">Youssef (Sales)</SelectItem>
-                                                <SelectItem value="Admin">Admin</SelectItem>
+                                                {salesReps.map(user => (
+                                                    <SelectItem key={user.id} value={user.id}>
+                                                        {user.fullName}
+                                                    </SelectItem>
+                                                ))}
                                             </SelectContent>
                                         </Select>
                                     ) : (
-                                        <span>{activeClient.salesRepId || 'No Sales Rep'}</span>
+                                        <span className="font-medium text-slate-700">
+                                            {getUserName(activeClient.salesRepId)}
+                                        </span>
                                     )}
                                 </div>
+
+                                {/* 2. OPS KAM SELECTOR */}
                                 <div className="flex items-center gap-1.5 text-xs" title="Operational KAM">
                                     <Ship className="h-3.5 w-3.5 text-slate-400" />
                                     {isEditing ? (
                                         <Select value={activeClient.opsManagerId || ''} onValueChange={(v) => updateActiveField('opsManagerId', v)}>
-                                            <SelectTrigger className="h-6 w-32 text-xs border-slate-200 bg-slate-50"><SelectValue placeholder="Ops KAM" /></SelectTrigger>
+                                            <SelectTrigger className="h-6 w-36 text-xs border-slate-200 bg-slate-50"><SelectValue placeholder="Select Ops KAM" /></SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="Fatima (Ops)">Fatima (Ops)</SelectItem>
-                                                <SelectItem value="Ahmed (Ops)">Ahmed (Ops)</SelectItem>
+                                                {opsManagers.map(user => (
+                                                    <SelectItem key={user.id} value={user.id}>
+                                                        {user.fullName}
+                                                    </SelectItem>
+                                                ))}
                                             </SelectContent>
                                         </Select>
                                     ) : (
-                                        <span>{activeClient.opsManagerId || 'No KAM'}</span>
+                                        <span className="font-medium text-slate-700">
+                                            {getUserName(activeClient.opsManagerId)}
+                                        </span>
                                     )}
                                 </div>
                             </div>

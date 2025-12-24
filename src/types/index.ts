@@ -301,6 +301,7 @@ export interface ClientFinancials {
   adminFee?: number;             
   adminFeeCurrency?: Currency;   
   tollFee?: number;              // CONFIRMED PRESENT
+  tollFeeCurrency?: Currency; 
   averageDaysToPay?: number;     
   specialInstructions?: string;  
 }
@@ -370,4 +371,22 @@ export interface Client {
   commodities: ClientCommodity[];
   operational: OperationalProfile;
   activities: ActivityItem[];
+}
+
+// --- 6. USER MANAGEMENT (NEW) ---
+export type CompanyRole = 'DIRECTOR' | 'MANAGER' | 'SALES' | 'OPERATIONS' | 'FINANCE' | 'ADMIN';
+export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'INVITED';
+export type UserDepartment = 'COMMERCIAL' | 'OPERATIONS' | 'FINANCE' | 'MANAGEMENT' | 'IT';
+
+export interface CompanyUser {
+  id: string;
+  created_at: string;
+  email: string;
+  fullName: string;
+  role: CompanyRole;
+  department: UserDepartment;
+  jobTitle?: string;
+  status: UserStatus;
+  avatarUrl?: string;
+  phone?: string;
 }

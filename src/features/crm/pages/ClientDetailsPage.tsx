@@ -10,9 +10,13 @@ import { ClientOverview } from "../components/ClientOverview";
 import { ClientContacts } from "../components/ClientContacts";
 import { ClientDocuments } from "../components/ClientDocuments";
 import { ClientLogistics } from "../components/ClientLogistics"; 
-import { ClientBillingConfig } from "../components/ClientBillingConfig"; // Import the new component
+import { ClientBillingConfig } from "../components/ClientBillingConfig"; 
 
-export default function ClientDetailsPage() {
+interface ClientDetailsPageProps {
+    onNavigate: (view: 'list' | 'details') => void;
+}
+
+export default function ClientDetailsPage({ onNavigate }: ClientDetailsPageProps) {
   const { activeClient, saveClient } = useClientStore();
   const [isEditing, setIsEditing] = useState(false);
   const { toast } = useToast();
@@ -43,7 +47,7 @@ export default function ClientDetailsPage() {
           isEditing={isEditing} 
           setIsEditing={setIsEditing} 
           onSave={handleSave} 
-          onBack={() => { /* Navigation handled by parent usually, or add logic here */ }} 
+          onBack={() => onNavigate('list')} 
       />
 
       {/* 2. Tabs & Workspace */}
