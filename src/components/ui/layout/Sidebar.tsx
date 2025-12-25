@@ -10,8 +10,7 @@ import {
   ChevronRight,
   Box,
   Banknote,
-  UserCog,
-  BarChart3 
+  UserCog 
 } from "lucide-react";
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button";
