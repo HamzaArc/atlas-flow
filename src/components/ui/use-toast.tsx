@@ -1,9 +1,8 @@
 import { create } from 'zustand';
-import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react'; // Added AlertTriangle
+import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react'; 
 import { cn } from "@/lib/utils";
 
 // 1. The Store to manage notifications
-// Added 'warning' to the allowed types
 type ToastType = 'success' | 'error' | 'info' | 'warning';
 
 interface Toast {
@@ -32,6 +31,10 @@ export const useToast = create<ToastState>((set) => ({
   dismiss: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
 }));
 
+// --- EXPORTED HELPER FOR NON-COMPONENT USAGE ---
+export const toast = (message: string, type: ToastType = 'info') => 
+  useToast.getState().toast(message, type);
+
 // 2. The Component to display them
 export function Toaster() {
   const { toasts, dismiss } = useToast();
@@ -43,7 +46,6 @@ export function Toaster() {
           key={t.id}
           className={cn(
             "flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border text-sm font-medium transition-all animate-in slide-in-from-right-full",
-            // Added conditional styling for 'warning'
             t.type === 'success' ? "bg-white border-green-200 text-green-700" :
             t.type === 'error' ? "bg-white border-red-200 text-red-700" :
             t.type === 'warning' ? "bg-white border-amber-200 text-amber-700" :

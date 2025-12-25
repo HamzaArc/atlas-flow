@@ -4,11 +4,12 @@ import {
     ClientContact, 
     ClientRoute, 
     ClientSupplier, 
-    ClientCommodity } from '@/types/index';
+    ClientCommodity 
+} from '@/types/index';
 
 // --- TRANSFORMERS (DB <-> APP) ---
 
-// 1. Convert DB Row (Snake_Case + Strings) -> App Client (CamelCase + Date Objects)
+// 1. Convert DB Row (Snake_Case) -> App Client (CamelCase + Date Objects)
 const mapRowToClient = (row: any): Client => {
     return {
         id: row.id,
@@ -24,14 +25,17 @@ const mapRowToClient = (row: any): Client => {
         country: row.country || '',
         billingAddress: row.billing_address || '',
         deliveryAddress: row.delivery_address || '',
-        creditLimit: row.credit_limit || 0,
-        creditUsed: row.credit_used || 0, // FIXED: Mapped correctly
-        unbilledWork: row.unbilled_work || 0,
-        unpaidInvoices: row.unpaid_invoices || 0,
+        
+        // Numeric Fields (Ensure they are numbers)
+        creditLimit: Number(row.credit_limit) || 0,
+        creditUsed: Number(row.credit_used) || 0,
+        unbilledWork: Number(row.unbilled_work) || 0,
+        unpaidInvoices: Number(row.unpaid_invoices) || 0,
+        
         salesRepId: row.sales_rep_id || '',
         tags: row.tags || [],
         
-        // JSONB Fields
+        // JSONB Fields (Default to empty objects/arrays if null)
         financials: row.financials || {},
         operational: row.operational || {},
         
@@ -54,37 +58,38 @@ const mapRowToClient = (row: any): Client => {
     };
 };
 
-// 2. Convert App Client -> DB Row
+// 2. Convert App Client -> DB Row (Snake_Case)
 const mapClientToRow = (client: Client) => {
     return {
         entity_name: client.entityName,
         status: client.status,
         type: client.type,
-        email: client.email,
-        phone: client.phone,
-        website: client.website,
-        city: client.city,
-        country: client.country,
-        billing_address: client.billingAddress,
-        delivery_address: client.deliveryAddress,
-        credit_limit: client.creditLimit,
-        credit_used: client.creditUsed, // FIXED: Mapped correctly
-        sales_rep_id: client.salesRepId,
-        tags: client.tags,
+        email: client.email || null,
+        phone: client.phone || null,
+        website: client.website || null,
+        city: client.city || null,
+        country: client.country || null,
+        billing_address: client.billingAddress || null,
+        delivery_address: client.deliveryAddress || null,
+        
+        // Statistics & Limits
+        credit_limit: client.creditLimit || 0,
+        credit_used: client.creditUsed || 0,
+        unbilled_work: client.unbilledWork || 0,
+        unpaid_invoices: client.unpaidInvoices || 0,
+        
+        sales_rep_id: client.salesRepId || null,
+        tags: client.tags || [],
         
         // JSONB Columns
-        financials: client.financials,
-        operational: client.operational,
-        contacts: client.contacts,
-        routes: client.routes,
-        suppliers: client.suppliers,
-        commodities: client.commodities,
-        documents: client.documents,
-        activities: client.activities,
-        
-        // Read-only/Stats fields
-        unbilled_work: client.unbilledWork,
-        unpaid_invoices: client.unpaidInvoices
+        financials: client.financials || {},
+        operational: client.operational || {},
+        contacts: client.contacts || [],
+        routes: client.routes || [],
+        suppliers: client.suppliers || [],
+        commodities: client.commodities || [],
+        documents: client.documents || [],
+        activities: client.activities || []
     };
 };
 
@@ -99,7 +104,7 @@ export const ClientService = {
             .order('created_at', { ascending: false });
 
         if (error) {
-            console.error('Error fetching clients:', error);
+            console.error('SERVER ERROR: Fetching clients failed', error);
             throw new Error(error.message);
         }
 
@@ -112,40 +117,55 @@ export const ClientService = {
     save: async (client: Client): Promise<Client> => {
         const payload = mapClientToRow(client);
         
-        // Check if ID is a valid UUID vs Temporary ID
+        // Check if ID is a valid UUID vs Temporary ID (e.g., 'new-170...')
         const isNewRecord = !client.id || client.id.startsWith('new-');
 
         let data, error;
 
-        if (isNewRecord) {
-            // INSERT
-            const response = await supabase
-                .from('clients')
-                .insert([payload])
-                .select()
-                .single();
+        try {
+            if (isNewRecord) {
+                // INSERT: Supabase generates the UUID
+                const response = await supabase
+                    .from('clients')
+                    .insert([payload])
+                    .select()
+                    .single();
+                
+                data = response.data;
+                error = response.error;
+            } else {
+                // UPDATE: Use existing UUID
+                const response = await supabase
+                    .from('clients')
+                    .update({ 
+                        ...payload, 
+                        updated_at: new Date().toISOString() 
+                    })
+                    .eq('id', client.id)
+                    .select()
+                    .single();
+
+                data = response.data;
+                error = response.error;
+            }
+
+            if (error) {
+                // Log detailed error for debugging
+                console.error('SUPABASE SAVE ERROR:', {
+                    code: error.code,
+                    message: error.message,
+                    details: error.details,
+                    payload // Verify what we tried to send
+                });
+                throw new Error(error.message);
+            }
+
+            return mapRowToClient(data);
             
-            data = response.data;
-            error = response.error;
-        } else {
-            // UPDATE
-            const response = await supabase
-                .from('clients')
-                .update({ ...payload, updated_at: new Date().toISOString() })
-                .eq('id', client.id)
-                .select()
-                .single();
-
-            data = response.data;
-            error = response.error;
+        } catch (err: any) {
+            console.error('CLIENT SERVICE EXCEPTION:', err);
+            throw err;
         }
-
-        if (error) {
-            console.error('Error saving client:', error);
-            throw new Error(error.message);
-        }
-
-        return mapRowToClient(data);
     },
 
     /**
@@ -158,6 +178,7 @@ export const ClientService = {
             .eq('id', id);
 
         if (error) {
+            console.error('DELETE ERROR:', error);
             throw new Error(error.message);
         }
     },
@@ -176,11 +197,12 @@ export const ClientService = {
         city: '',
         country: 'Morocco',
         billingAddress: '',
+        deliveryAddress: '',
         creditLimit: 0,
-        creditUsed: 0, // FIXED: Added initialization
+        creditUsed: 0,
         unbilledWork: 0,
         unpaidInvoices: 0,
-        salesRepId: 'Youssef (Sales)',
+        salesRepId: '', 
         tags: [],
         contacts: [],
         routes: [],

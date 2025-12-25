@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "@/components/ui/use-toast"; // Now works!
 import { 
     Client, 
     ClientContact, 
@@ -71,8 +71,7 @@ export const useClientStore = create<ClientState>((set, get) => ({
         set({ isLoading: false, clients });
     } catch (e: any) {
         set({ isLoading: false });
-        // FIXED: Using simple signature (message, type)
-        useToast.getState().toast(
+        toast(
             `Error loading clients: ${e.message || "Could not connect to database"}`, 
             "error"
         );
@@ -87,9 +86,12 @@ export const useClientStore = create<ClientState>((set, get) => ({
     set({ isLoading: true });
     const found = get().clients.find(c => c.id === id);
     
-    // Simulate selection delay
+    // Simulate selection delay for UI transition
     setTimeout(() => {
-        set({ activeClient: found ? JSON.parse(JSON.stringify(found)) : null, isLoading: false });
+        set({ 
+            activeClient: found ? JSON.parse(JSON.stringify(found)) : null, 
+            isLoading: false 
+        });
     }, 50);
   },
 
@@ -100,7 +102,7 @@ export const useClientStore = create<ClientState>((set, get) => ({
         // 1. Persist to DB
         const savedClient = await ClientService.save(client);
 
-        // 2. Update Local State
+        // 2. Update Local State (Optimistic-ish)
         const { clients } = get();
         const existsIndex = clients.findIndex(c => c.id === client.id);
         
@@ -114,16 +116,14 @@ export const useClientStore = create<ClientState>((set, get) => ({
 
         set({ clients: updatedList, activeClient: savedClient, isLoading: false });
         
-        // FIXED: Using simple signature (message, type)
-        useToast.getState().toast(
+        toast(
             `Client ${savedClient.entityName} saved successfully`,
             "success"
         );
 
     } catch (e: any) {
         set({ isLoading: false });
-        // FIXED: Using simple signature (message, type)
-        useToast.getState().toast(
+        toast(
             `Save Failed: ${e.message}`,
             "error"
         );
@@ -137,13 +137,11 @@ export const useClientStore = create<ClientState>((set, get) => ({
 
     try {
         await ClientService.delete(id);
-        // FIXED: Using simple signature (message, type)
-        useToast.getState().toast("Client removed from directory", "info");
+        toast("Client removed from directory", "info");
     } catch (e: any) {
         // Revert on failure
         set({ clients: previousClients });
-        // FIXED: Using simple signature (message, type)
-        useToast.getState().toast(
+        toast(
             `Could not delete client: ${e.message}`,
             "error"
         );
@@ -173,6 +171,7 @@ export const useClientStore = create<ClientState>((set, get) => ({
       if (!state.activeClient) return {};
       const newContacts = [...state.activeClient.contacts, contact];
       if(contact.isPrimary) {
+          // Ensure only one primary contact
           newContacts.forEach(c => { if(c.id !== contact.id) c.isPrimary = false });
       }
       return { activeClient: { ...state.activeClient, contacts: newContacts } };
