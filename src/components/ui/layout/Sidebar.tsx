@@ -1,3 +1,4 @@
+import React from 'react';
 import { 
   LayoutDashboard, 
   FileText, 
@@ -9,7 +10,8 @@ import {
   ChevronRight,
   Box,
   Banknote,
-  UserCog 
+  UserCog,
+  BarChart3 
 } from "lucide-react";
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button";
@@ -23,26 +25,65 @@ interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export function Sidebar({ className, currentView, onNavigate, onLogout }: SidebarProps) {
   
+  // Enhanced NavItem to support Status Flags
   const NavItem = ({ 
-      icon: Icon, label, active = false, onClick 
-  }: { id: string, icon: any, label: string, active?: boolean, onClick: () => void }) => (
-      <Button 
-        variant="ghost" 
-        onClick={onClick}
-        className={cn(
-            "w-full justify-between group px-3 py-2 h-9 mb-1 transition-all duration-200",
-            active 
-                ? "bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 border-r-2 border-blue-600 rounded-r-none" 
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-        )}
-      >
-        <div className="flex items-center">
-            <Icon className={cn("mr-3 h-4 w-4", active ? "text-blue-600" : "text-slate-400 group-hover:text-slate-600")} />
-            <span className={cn("text-sm font-medium", active ? "font-semibold" : "")}>{label}</span>
-        </div>
-        {active && <ChevronRight className="h-3 w-3 text-blue-600 opacity-50" />}
-      </Button>
-  );
+      icon: Icon, 
+      label, 
+      active = false, 
+      onClick,
+      status,       // 'beta' | 'soon'
+      statusText    // The text to display
+  }: { 
+      id: string, 
+      icon: any, 
+      label: string, 
+      active?: boolean, 
+      onClick: () => void,
+      status?: 'beta' | 'soon',
+      statusText?: string
+  }) => {
+      const isSoon = status === 'soon';
+
+      return (
+        <Button 
+          variant="ghost" 
+          onClick={isSoon ? undefined : onClick}
+          disabled={isSoon}
+          className={cn(
+              "w-full justify-between group px-3 py-2 h-auto min-h-[44px] mb-1 transition-all duration-200 items-start", 
+              active 
+                  ? "bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 border-r-2 border-blue-600 rounded-r-none" 
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+              isSoon && "opacity-60 cursor-not-allowed hover:bg-transparent"
+          )}
+        >
+          <div className="flex flex-col w-full text-left">
+              <div className="flex items-center">
+                  <Icon className={cn("mr-3 h-4 w-4 mt-0.5", active ? "text-blue-600" : "text-slate-400 group-hover:text-slate-600")} />
+                  <span className={cn("text-sm font-medium", active ? "font-semibold" : "")}>{label}</span>
+              </div>
+              
+              {/* STATUS FLAG */}
+              {status && statusText && (
+                  <span className={cn(
+                      // CHANGED: text-[9px] (smaller), py-[1px] (tighter frame), leading-none
+                      "ml-7 text-[9px] leading-none font-semibold uppercase tracking-wide mt-1.5 w-fit px-1.5 py-[2px] rounded border",
+                      
+                      // Your requested Blue-only Logic for Beta
+                      status === 'beta' && "bg-blue-50 text-blue-600 border-blue-200", 
+                      
+                      // "Coming Soon" stays gray
+                      status === 'soon' && "bg-slate-50 text-slate-400 border-slate-200"
+                  )}>
+                      {statusText}
+                  </span>
+              )}
+          </div>
+          
+          {active && <ChevronRight className="h-3 w-3 text-blue-600 opacity-50 mt-1" />}
+        </Button>
+      );
+  };
 
   return (
     <div className={cn("flex flex-col h-screen bg-white border-r border-slate-200", className)}>
@@ -72,13 +113,8 @@ export function Sidebar({ className, currentView, onNavigate, onLogout }: Sideba
                     label="Quote Engine" 
                     active={currentView === 'dashboard' || currentView === 'create'}
                     onClick={() => onNavigate('dashboard')} 
-                />
-                <NavItem 
-                    id="dossier" 
-                    icon={Ship} 
-                    label="Shipment Dossiers" 
-                    active={currentView === 'dossier'}
-                    onClick={() => onNavigate('dossier')} 
+                    status="beta"
+                    statusText="Beta test in progress"
                 />
                 <NavItem 
                     id="tariffs" 
@@ -86,6 +122,17 @@ export function Sidebar({ className, currentView, onNavigate, onLogout }: Sideba
                     label="Tariff Manager" 
                     active={currentView === 'tariffs'}
                     onClick={() => onNavigate('tariffs')} 
+                    status="beta"
+                    statusText="Beta test in progress"
+                />
+                <NavItem 
+                    id="dossier" 
+                    icon={Ship} 
+                    label="Shipment Dossiers" 
+                    active={currentView === 'dossier'}
+                    onClick={() => onNavigate('dossier')} 
+                    status="soon"
+                    statusText="Coming soon"
                 />
             </div>
         </div>
@@ -93,17 +140,55 @@ export function Sidebar({ className, currentView, onNavigate, onLogout }: Sideba
         <div>
             <h4 className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Business</h4>
             <div className="space-y-0.5">
-                <NavItem id="crm" icon={Users} label="CRM (Clients)" active={currentView === 'crm'} onClick={() => onNavigate('crm')} />
-                <NavItem id="finance" icon={Briefcase} label="Finance & Billing" active={currentView === 'finance'} onClick={() => onNavigate('finance')} />
+                <NavItem 
+                    id="crm" 
+                    icon={Users} 
+                    label="CRM (Clients)" 
+                    active={currentView === 'crm'} 
+                    onClick={() => onNavigate('crm')} 
+                    status="beta"
+                    statusText="Beta test in progress"
+                />
+                <NavItem 
+                    id="finance" 
+                    icon={Briefcase} 
+                    label="Finance & Billing" 
+                    active={currentView === 'finance'} 
+                    onClick={() => onNavigate('finance')} 
+                    status="soon"
+                    statusText="Coming soon"
+                />
             </div>
         </div>
 
         <div>
             <h4 className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">System</h4>
             <div className="space-y-0.5">
-                <NavItem id="users" icon={UserCog} label="User Directory" active={currentView === 'users'} onClick={() => onNavigate('users')} />
-                <NavItem id="analytics" icon={LayoutDashboard} label="Analytics" onClick={() => {}} />
-                <NavItem id="settings" icon={Settings} label="Settings" onClick={() => {}} />
+                <NavItem 
+                    id="users" 
+                    icon={UserCog} 
+                    label="User Directory" 
+                    active={currentView === 'users'} 
+                    onClick={() => onNavigate('users')} 
+                    status="beta"
+                    statusText="Beta test in progress"
+                />
+                <NavItem 
+                    id="analytics" 
+                    icon={LayoutDashboard} 
+                    label="Analytics" 
+                    onClick={() => {}} 
+                    status="soon"
+                    statusText="Coming soon"
+                />
+                <NavItem 
+                    id="settings" 
+                    icon={Settings} 
+                    label="Settings" 
+                    onClick={() => {}} 
+                    status="soon"
+                    statusText="Coming soon"
+                />
             </div>
         </div>
       </div>
@@ -115,12 +200,12 @@ export function Sidebar({ className, currentView, onNavigate, onLogout }: Sideba
           >
               <div className="flex items-center gap-3">
                   <Avatar className="h-8 w-8 border border-slate-200">
-                      <AvatarImage src="https://github.com/shadcn.png" />
-                      <AvatarFallback className="bg-blue-600 text-white font-bold">YA</AvatarFallback>
+                      <AvatarImage src="" />
+                      <AvatarFallback className="bg-gradient-to-tr from-indigo-500 to-purple-500 text-white font-bold">TU</AvatarFallback>
                   </Avatar>
                   <div className="flex flex-col">
-                      <span className="text-sm font-semibold text-slate-700">Youssef A.</span>
-                      <span className="text-[10px] text-slate-500">Sales Manager</span>
+                      <span className="text-sm font-semibold text-slate-700">Test User</span>
+                      <span className="text-[10px] text-slate-500">Admin Access</span>
                   </div>
               </div>
               <LogOut className="h-4 w-4 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500" />
