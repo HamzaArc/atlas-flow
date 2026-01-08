@@ -207,7 +207,7 @@ const createDefaultOption = (quoteId: string, mode: TransportMode = 'SEA_LCL'): 
     return {
         id: Math.random().toString(36).substring(7),
         quoteId,
-        name: mode === 'AIR' ? 'Air Freight Option' : mode === 'ROAD' ? 'Road Freight Option' : 'Sea Freight Option',
+        name: 'Option', // Default generic name as requested
         isRecommended: true,
         mode,
         incoterm: mode === 'AIR' ? 'FCA' : 'FOB',
@@ -391,7 +391,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       }
       set({ options: [...options, newOpt], activeOptionId: newOpt.id });
       get().setActiveOption(newOpt.id);
-      useToast.getState().toast(`New ${mode} option added.`, "success");
+      useToast.getState().toast(`New option added.`, "success");
   },
 
   setActiveOption: (optionId) => {
@@ -451,6 +451,13 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
          defaultEquipmentList = getDefaultEquipmentForMode(mode);
       }
 
+      const modeNameMap: Record<string, string> = {
+          'SEA_FCL': 'Sea FCL',
+          'SEA_LCL': 'Sea LCL',
+          'AIR': 'Air Freight',
+          'ROAD': 'Road Freight'
+      };
+
       const updatedOptions = options.map(o => {
           if (o.id === activeOptionId) {
              const existingList = o.equipmentList && o.equipmentList.length > 0 ? o.equipmentList : defaultEquipmentList;
@@ -459,6 +466,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
              return { 
                  ...o, 
                  mode,
+                 name: modeNameMap[mode] || 'Option', // Dynamic Name Update
                  equipmentList: existingList,
                  equipmentType: primary.type,
                  containerCount: primary.count

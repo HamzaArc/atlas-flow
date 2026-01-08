@@ -2,7 +2,7 @@ import { useState } from "react";
 import { 
   Ship, Plane, Truck, Copy, Trash2, 
   Plus, MoreHorizontal, AlertCircle, FileOutput, 
-  RefreshCw, LayoutGrid, ArrowRightLeft, Anchor, CircleDollarSign, FileText
+  RefreshCw, LayoutGrid, ArrowRightLeft, Anchor, CircleDollarSign, FileText, Container
 } from "lucide-react";
 
 import { QuoteHeader } from "./components/QuoteHeader"; 
@@ -177,8 +177,10 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => createOption('SEA_LCL')}><Ship className="h-3 w-3 mr-2"/> Sea Freight</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => createOption('SEA_LCL')}><Ship className="h-3 w-3 mr-2"/> Sea LCL</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => createOption('SEA_FCL')}><Container className="h-3 w-3 mr-2"/> Sea FCL</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => createOption('AIR')}><Plane className="h-3 w-3 mr-2"/> Air Freight</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => createOption('ROAD')}><Truck className="h-3 w-3 mr-2"/> Road Freight</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
           </div>

@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Save, Ship, Calendar, Anchor, Clock, Calculator, Plane, Truck, MapPin, Handshake } from "lucide-react";
+import { ArrowLeft, Save, Ship, Calendar, Anchor, Clock, Calculator, Plane, Truck, MapPin, Handshake, Timer } from "lucide-react";
 import { useTariffStore } from "@/store/useTariffStore";
 import { RateGrid } from "../components/RateGrid";
 import { SmartPortSelector } from "@/features/quotes/components/RouteSelector"; 
@@ -174,7 +174,7 @@ export default function RateWorkspace({ onBack }: RateWorkspaceProps) {
                             </div>
                         </div>
 
-                        {/* 4. Carrier & Service */}
+                        {/* 4. Carrier & Service (UPDATED: Replaced Service Loop with Free Time) */}
                         <div className="space-y-4 border-t border-slate-100 pt-6">
                             <div className="space-y-1.5">
                                 <Label className="text-xs font-bold text-slate-700">Primary Carrier / Vendor</Label>
@@ -191,8 +191,17 @@ export default function RateWorkspace({ onBack }: RateWorkspaceProps) {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
-                                    <Label className="text-xs font-bold text-slate-700">Service Loop</Label>
-                                    <Input className="h-9" placeholder="e.g. AEU3" value={activeRate.serviceLoop || ''} onChange={(e) => updateRateField('serviceLoop', e.target.value)} />
+                                    <Label className="text-xs font-bold text-slate-700">Free Time (Days)</Label>
+                                    <div className="relative">
+                                        <Input 
+                                            type="number" 
+                                            className="h-9 pl-8" 
+                                            placeholder="e.g. 7" 
+                                            value={activeRate.freeTime || ''} 
+                                            onChange={(e) => updateRateField('freeTime', parseInt(e.target.value))} 
+                                        />
+                                        <Timer className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                                    </div>
                                 </div>
                                 <div className="space-y-1.5">
                                     <Label className="text-xs font-bold text-slate-700">Transit (Days)</Label>
