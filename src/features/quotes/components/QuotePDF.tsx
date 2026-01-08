@@ -152,11 +152,10 @@ export const QuotePDF: React.FC<QuotePDFProps> = ({ data }) => {
     const activeOption = data.options.find(o => o.id === data.activeOptionId) || data.options[0];
     const quoteCurrency = activeOption?.quoteCurrency || 'MAD';
     
-    // RESOLVE EQUIPMENT STRING
-    // If equipmentList exists, join them (e.g., "1x 40HC, 2x 20DV")
+    // RESOLVE EQUIPMENT STRING (UPDATED LOGIC)
     const equipmentStr = activeOption?.equipmentList && activeOption.equipmentList.length > 0
         ? activeOption.equipmentList.map(e => `${e.count}x ${e.type}`).join(', ')
-        : '-';
+        : (activeOption?.equipmentType ? `${activeOption.containerCount}x ${activeOption.equipmentType}` : '-');
 
     // FINANCIALS
     const subTotal = data.totalSellTarget || 0;

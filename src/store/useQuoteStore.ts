@@ -16,6 +16,17 @@ interface CargoRow {
 
 type PricingTemplate = 'IMPORT_STD' | 'EXPORT_STD' | 'CROSS_TRADE' | 'CLEARANCE_ONLY';
 
+// Updated interface for client snapshot data
+interface ClientSnapshotData {
+    id: string;
+    name: string;
+    terms: string;
+    taxId?: string;
+    ice?: string;
+    salespersonId?: string;
+    salespersonName?: string;
+}
+
 interface QuoteState {
   // --- DATABASE STATE ---
   quotes: Quote[];
@@ -75,6 +86,7 @@ interface QuoteState {
   // Equipment
   equipmentType: string;
   containerCount: number;
+  // NEW: Multi-row Equipment List
   equipmentList: { id: string; type: string; count: number }[]; 
 
   transitTime: number; 
@@ -110,7 +122,7 @@ interface QuoteState {
 
   // --- ACTIONS ---
   setIdentity: (field: string, value: any) => void;
-  setClientSnapshot: (data: { id: string, name: string, terms: string, taxId?: string, ice?: string }) => void;
+  setClientSnapshot: (data: ClientSnapshotData) => void;
   setStatus: (status: QuoteState['status']) => void;
   
   createOption: (mode: TransportMode) => void;
@@ -136,7 +148,6 @@ interface QuoteState {
   
   addLineItem: (section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION', initialData?: Partial<QuoteLineItem>) => void;
   
-  // UPDATED: Accepts Partial for safe default initialization
   initializeSmartLines: (clientFinancials?: Partial<ClientFinancials>) => void;
 
   updateLineItem: (id: string, updates: Partial<QuoteLineItem>) => void;
@@ -184,29 +195,39 @@ const checkStrictExpiry = (items: QuoteLineItem[]): boolean => {
     });
 };
 
-const createDefaultOption = (quoteId: string, mode: TransportMode = 'SEA_LCL'): QuoteOption => ({
-    id: Math.random().toString(36).substring(7),
-    quoteId,
-    name: mode === 'AIR' ? 'Air Freight Option' : 'Sea Freight Option',
-    isRecommended: true,
-    mode,
-    incoterm: mode === 'AIR' ? 'FCA' : 'FOB',
-    pol: 'CASABLANCA (MAP)',
-    pod: 'SHANGHAI (CN)',
-    placeOfLoading: '',
-    placeOfDelivery: '',
-    equipmentType: '40HC',
-    containerCount: 1,
-    equipmentList: [], // Initial empty list
-    transitTime: 0,
-    freeTime: 0,
-    items: [],
-    baseCurrency: 'MAD',
-    quoteCurrency: 'MAD',
-    exchangeRates: { MAD: 1, USD: 9.80, EUR: 10.75 }, 
-    marginBuffer: 1.02,
-    totalTTC: 0
-});
+// HELPER: Create default equipment based on mode
+const getDefaultEquipmentForMode = (mode: TransportMode) => {
+    if (mode === 'SEA_FCL') return [{ id: 'init-1', type: '40HC', count: 1 }];
+    if (mode === 'ROAD') return [{ id: 'init-1', type: 'FTL Mega', count: 1 }];
+    return [];
+};
+
+const createDefaultOption = (quoteId: string, mode: TransportMode = 'SEA_LCL'): QuoteOption => {
+    const defaultEquipment = getDefaultEquipmentForMode(mode);
+    return {
+        id: Math.random().toString(36).substring(7),
+        quoteId,
+        name: mode === 'AIR' ? 'Air Freight Option' : mode === 'ROAD' ? 'Road Freight Option' : 'Sea Freight Option',
+        isRecommended: true,
+        mode,
+        incoterm: mode === 'AIR' ? 'FCA' : 'FOB',
+        pol: 'CASABLANCA (MAP)',
+        pod: 'SHANGHAI (CN)',
+        placeOfLoading: '',
+        placeOfDelivery: '',
+        equipmentType: defaultEquipment.length > 0 ? defaultEquipment[0].type : '',
+        containerCount: defaultEquipment.length > 0 ? defaultEquipment[0].count : 1,
+        equipmentList: defaultEquipment, 
+        transitTime: 0,
+        freeTime: 0,
+        items: [],
+        baseCurrency: 'MAD',
+        quoteCurrency: 'MAD',
+        exchangeRates: { MAD: 1, USD: 9.80, EUR: 10.75 }, 
+        marginBuffer: 1.02,
+        totalTTC: 0
+    };
+};
 
 const DEFAULT_STATE = {
   id: 'new',
@@ -337,15 +358,20 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   },
 
   setClientSnapshot: (data) => {
-    set({
+    const updates: Partial<QuoteState> = {
         clientId: data.id,
         clientName: data.name,
         paymentTerms: data.terms,
         clientTaxId: data.taxId,
         clientIce: data.ice
-    });
+    };
+    if (data.salespersonId && data.salespersonName) {
+        updates.salespersonId = data.salespersonId;
+        updates.salespersonName = data.salespersonName;
+    }
+    set(updates as Partial<QuoteState>);
     get().updateLineItem('trigger', {});
-    useToast.getState().toast("Client profile linked & snapshot saved.", "success");
+    useToast.getState().toast("Client profile linked & data synced.", "success");
   },
   
   setStatus: async (status) => {
@@ -419,8 +445,38 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
   setMode: (mode) => {
       const { options, activeOptionId } = get();
-      const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, mode } : o);
-      set({ mode, options: updatedOptions });
+      // Ensure if switching to FCL/Road we have a default equipment if list is empty
+      let defaultEquipmentList = [] as any[];
+      if ((mode === 'SEA_FCL' || mode === 'ROAD')) {
+         defaultEquipmentList = getDefaultEquipmentForMode(mode);
+      }
+
+      const updatedOptions = options.map(o => {
+          if (o.id === activeOptionId) {
+             const existingList = o.equipmentList && o.equipmentList.length > 0 ? o.equipmentList : defaultEquipmentList;
+             const primary = existingList.length > 0 ? existingList[0] : { type: '', count: 1 };
+             
+             return { 
+                 ...o, 
+                 mode,
+                 equipmentList: existingList,
+                 equipmentType: primary.type,
+                 containerCount: primary.count
+             };
+          }
+          return o;
+      });
+
+      // Update state
+      const activeOpt = updatedOptions.find(o => o.id === activeOptionId);
+      set({ 
+          mode, 
+          options: updatedOptions,
+          equipmentList: activeOpt?.equipmentList || [],
+          equipmentType: activeOpt?.equipmentType || '',
+          containerCount: activeOpt?.containerCount || 1
+      });
+      
       get().updateCargo(get().cargoRows);
   },
   setIncoterm: (incoterm) => {
@@ -436,9 +492,24 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   
   // --- EQUIPMENT ACTIONS ---
   setEquipment: (type, count) => {
-      const { options, activeOptionId } = get();
-      const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, equipmentType: type, containerCount: count } : o);
-      set({ equipmentType: type, containerCount: count, options: updatedOptions });
+      const { options, activeOptionId, equipmentList } = get();
+      let newList = [...equipmentList];
+      
+      if (newList.length === 0) {
+          newList = [{ id: Math.random().toString(36).substr(2, 5), type, count }];
+      } else {
+          // Update the first one to stay in sync with legacy calls
+          newList[0] = { ...newList[0], type, count };
+      }
+
+      const updatedOptions = options.map(o => o.id === activeOptionId ? { 
+          ...o, 
+          equipmentList: newList,
+          equipmentType: type,
+          containerCount: count
+      } : o);
+      
+      set({ equipmentType: type, containerCount: count, equipmentList: newList, options: updatedOptions });
   },
 
   addEquipment: (type, count) => {
@@ -446,24 +517,63 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       const newItem = { id: Math.random().toString(36).substr(2, 5), type, count };
       const newList = [...equipmentList, newItem];
       
-      const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, equipmentList: newList } : o);
-      set({ equipmentList: newList, options: updatedOptions });
+      const primary = newList[0];
+      
+      const updatedOptions = options.map(o => o.id === activeOptionId ? { 
+          ...o, 
+          equipmentList: newList,
+          equipmentType: primary.type,
+          containerCount: primary.count
+      } : o);
+
+      set({ 
+          equipmentList: newList, 
+          options: updatedOptions,
+          equipmentType: primary.type,
+          containerCount: primary.count
+      });
   },
 
   updateEquipment: (id, type, count) => {
       const { options, activeOptionId, equipmentList } = get();
       const newList = equipmentList.map(e => e.id === id ? { ...e, type, count } : e);
       
-      const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, equipmentList: newList } : o);
-      set({ equipmentList: newList, options: updatedOptions });
+      const primary = newList.length > 0 ? newList[0] : { type: '', count: 1 };
+
+      const updatedOptions = options.map(o => o.id === activeOptionId ? { 
+          ...o, 
+          equipmentList: newList,
+          equipmentType: primary.type,
+          containerCount: primary.count
+      } : o);
+
+      set({ 
+          equipmentList: newList, 
+          options: updatedOptions,
+          equipmentType: primary.type,
+          containerCount: primary.count
+      });
   },
 
   removeEquipment: (id) => {
       const { options, activeOptionId, equipmentList } = get();
       const newList = equipmentList.filter(e => e.id !== id);
       
-      const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, equipmentList: newList } : o);
-      set({ equipmentList: newList, options: updatedOptions });
+      const primary = newList.length > 0 ? newList[0] : { type: '', count: 0 };
+
+      const updatedOptions = options.map(o => o.id === activeOptionId ? { 
+          ...o, 
+          equipmentList: newList,
+          equipmentType: primary.type,
+          containerCount: primary.count
+      } : o);
+
+      set({ 
+          equipmentList: newList, 
+          options: updatedOptions,
+          equipmentType: primary.type,
+          containerCount: primary.count
+      });
   },
 
   setLogisticsParam: (field, value) => {
@@ -515,11 +625,10 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       densityRatio: parseFloat(densityRatio.toFixed(0))
     });
 
-    // REACTIVE UPDATE: If Sea LCL, update any existing PEAGE_LCL lines
     if (mode === 'SEA_LCL') {
         items.forEach(item => {
             if (item.dynamicType === 'PEAGE_LCL') {
-                const newTollPrice = 250 * (chargeableFixed / 1000); // 250 MAD * Tons
+                const newTollPrice = 250 * (chargeableFixed / 1000); 
                 updateLineItem(item.id, { buyPrice: newTollPrice });
             }
         });
@@ -554,7 +663,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     get().updateLineItem('trigger', {});
   },
 
-  // --- NEW FEATURE: SMART INITIALIZATION ---
   initializeSmartLines: (clientFinancials) => {
     const { mode, activeOptionId, id, chargeableWeight } = get();
     const newItems: QuoteLineItem[] = [];
@@ -586,47 +694,23 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
     const { customsRebatePercent = 0, adminFee = 0, tollFee = 0 } = clientFinancials || {};
 
-    // SCENARIO A: AIR FREIGHT
     if (mode === 'AIR') {
-        // Main Fret (Empty, Required, No VAT)
         newItems.push(createSmartItem('FREIGHT', 'Main Freight (Vol AF)', 0, 'EXPORT_0_ART92', 'MAIN_FRET', true));
-        
-        // Retour de fond (% of Total Fret, VAT 20)
         newItems.push(createSmartItem('DESTINATION', 'Retour de fond', 0, 'STD_20', 'RET_FOND', false, customsRebatePercent));
-        
-        // Frais de dossier (Fixed)
         newItems.push(createSmartItem('DESTINATION', 'Frais de dossier', adminFee || 0));
-
-        // Frais NDL (Empty, Required)
         newItems.push(createSmartItem('DESTINATION', 'Frais NDL', 0, 'STD_20', 'STATIC', true));
     }
-    // SCENARIO B: SEA LCL
     else if (mode === 'SEA_LCL') {
-        // Main Fret (Empty, Required, No VAT)
         newItems.push(createSmartItem('FREIGHT', 'Main Freight (LCL)', 0, 'EXPORT_0_ART92', 'MAIN_FRET', true));
-
-        // Retour de fond (% of Fret)
         newItems.push(createSmartItem('DESTINATION', 'Retour de fond', 0, 'STD_20', 'RET_FOND', false, customsRebatePercent));
-
-        // Péage (Auto-Calc: 250 * Tons)
         const autoToll = 250 * (chargeableWeight / 1000);
         newItems.push(createSmartItem('DESTINATION', 'Péage (Portuaire)', autoToll, 'STD_20', 'PEAGE_LCL'));
-
-        // Frais de dossier (Fixed)
         newItems.push(createSmartItem('DESTINATION', 'Frais de dossier', adminFee || 0));
     }
-    // SCENARIO C: ALL OTHERS (FCL, ROAD)
     else {
-        // Main Fret (Empty, Required)
         newItems.push(createSmartItem('FREIGHT', `Main Freight (${mode})`, 0, 'EXPORT_0_ART92', 'MAIN_FRET', true));
-
-        // Retour de fond
         newItems.push(createSmartItem('DESTINATION', 'Retour de fond', 0, 'STD_20', 'RET_FOND', false, customsRebatePercent));
-
-        // Péage (Fixed from Config)
         newItems.push(createSmartItem('DESTINATION', 'Péage', tollFee || 0, 'STD_20'));
-
-        // Frais de dossier
         newItems.push(createSmartItem('DESTINATION', 'Frais de dossier', adminFee || 0));
     }
 
@@ -654,10 +738,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   },
 
   applyTemplate: () => {
-      // (Keep existing logic - omitted for brevity if not used, but kept to prevent break)
       const { activeOptionId } = get();
       const newItems: QuoteLineItem[] = [];
-      // ... existing generic template logic ...
       const { options } = get();
       const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, items: newItems } : o);
       set({ items: newItems, options: updatedOptions });
@@ -676,16 +758,14 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       return item;
     });
 
-    // 2. REACTIVE LOGIC: Update Linked Lines (Main Fret -> Retour de fond)
+    // 2. REACTIVE LOGIC: Update Linked Lines
     if (id !== 'trigger') {
         const changedItem = updatedItems.find(i => i.id === id);
         
-        // If Main Fret changed price, find Ret Fond and update it
         if (changedItem && changedItem.dynamicType === 'MAIN_FRET' && updates.buyPrice !== undefined) {
             const rebateLine = updatedItems.find(i => i.dynamicType === 'RET_FOND');
             if (rebateLine && rebateLine.calculationFactor) {
                 const mainPrice = changedItem.buyPrice;
-                // Calculation: Price * (Percent / 100)
                 const newRebatePrice = mainPrice * (rebateLine.calculationFactor / 100);
                 
                 updatedItems = updatedItems.map(i => 
@@ -697,7 +777,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         }
     }
     
-    // 3. FINANCIAL CALCULATIONS (Existing Logic)
+    // 3. FINANCIAL CALCULATIONS
     let totalCostMAD = 0, totalSellMAD = 0, totalTaxMAD = 0;
 
     updatedItems.forEach(item => {
@@ -875,7 +955,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       useToast.getState().toast(`Created Revision v${newVersion}`, "success");
   },
 
-  // --- DATABASE ACTIONS (UPDATED to SAVE new fields) ---
+  // --- DATABASE ACTIONS ---
   fetchQuotes: async () => {
       set({ isLoading: true });
       try {
@@ -914,20 +994,18 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           
           pol: state.pol,
           pod: state.pod,
-          mode: state.mode,           // PERSISTED
-          incoterm: state.incoterm,   // PERSISTED
-          activeOptionId: state.activeOptionId, // PERSISTED for UI state
+          mode: state.mode,           
+          incoterm: state.incoterm,   
+          activeOptionId: state.activeOptionId,
           
           totalTTC: state.totalTTCMAD,
           
-          // PERSISTED FINANCIAL TARGETS
           totalSellTarget: state.totalSellTarget,
           totalTaxTarget: state.totalTaxTarget,
           totalTTCTarget: state.totalTTCTarget,
 
           cargoRows: state.cargoRows,
           
-          // PERSISTED WEIGHTS
           totalWeight: state.totalWeight,
           totalVolume: state.totalVolume,
           chargeableWeight: state.chargeableWeight,
@@ -973,7 +1051,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               return;
           }
 
-          // Resolve active option logic (use persisted if available, else default to first)
           let activeOptId = quote.activeOptionId;
           let activeOpt = quote.options.find(o => o.id === activeOptId);
           if (!activeOpt && quote.options.length > 0) {
@@ -981,7 +1058,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               activeOptId = activeOpt.id;
           }
 
-          // Legacy Data Migration: If triggers are missing but reason exists, mock a trigger
           let migratedApproval = quote.approval;
           if (quote.approval && quote.approval.requiresApproval && (!quote.approval.triggers || quote.approval.triggers.length === 0)) {
               migratedApproval = {
@@ -1013,12 +1089,10 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               
               cargoRows: quote.cargoRows,
               
-              // Load persisted stats (fallback to 0 if missing from old quotes)
               totalWeight: quote.totalWeight || 0,
               totalVolume: quote.totalVolume || 0,
               chargeableWeight: quote.chargeableWeight || 0,
               
-              // Load persisted targets
               totalSellTarget: quote.totalSellTarget || 0,
               totalTaxTarget: quote.totalTaxTarget || 0,
               totalTTCTarget: quote.totalTTCTarget || 0,
@@ -1041,7 +1115,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               options: quote.options,
               activeOptionId: activeOptId || '', 
               
-              // Load Equipment List (New Feature)
               equipmentList: activeOpt?.equipmentList || [],
           });
 

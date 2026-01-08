@@ -11,7 +11,7 @@ import {
 import { useQuoteStore } from "@/store/useQuoteStore";
 import {
   Plane, Ship, Truck, Map as MapIcon, MapPin, Container, Clock, Calendar, Anchor,
-  Leaf, ShieldCheck, Check, ChevronsUpDown, Info
+  Leaf, ShieldCheck, Check, ChevronsUpDown, Info, Plus, Trash2
 } from "lucide-react";
 import { TransportMode, Incoterm } from "@/types/index";
 import { cn } from "@/lib/utils";
@@ -324,11 +324,13 @@ export function RouteSelector() {
   const { 
       pol, pod, mode, incoterm, 
       placeOfLoading, placeOfDelivery,
-      equipmentType, containerCount,
       transitTime, freeTime,
       totalWeight, totalVolume,
-      setMode, setIncoterm, setRouteLocations, setEquipment, setIdentity, setLogisticsParam,
-      requestedDepartureDate, estimatedArrivalDate 
+      setMode, setIncoterm, setRouteLocations, setIdentity, setLogisticsParam,
+      requestedDepartureDate, estimatedArrivalDate,
+      // Updated Equipment Props
+      equipmentList, addEquipment, updateEquipment, removeEquipment,
+      status
   } = useQuoteStore();
 
   const isAir = mode === 'AIR';
@@ -345,10 +347,13 @@ export function RouteSelector() {
   };
 
   const showEquipment = isSeaFCL || isRoad;
-  const showContainerCount = isSeaFCL;
   const showFreeTime = isSeaFCL || isSeaLCL; 
   const EQUIP_SEA = ['20DV', '40DV', '40HC', '20RF', '40RF', '40OT', '20FR', '40FR'];
-  const EQUIP_ROAD = ['FTL Tilt Trailer', 'FTL Mega', 'FTL Box', 'FTL Reefer', 'LTL Groupage'];
+  const EQUIP_ROAD = ['FTL Mega', 'FTL Standard', 'FTL Box', 'FTL Reefer', 'LTL Groupage'];
+
+  const getEquipmentOptions = () => isRoad ? EQUIP_ROAD : EQUIP_SEA;
+
+  const isReadOnly = status === 'ACCEPTED' || status === 'REJECTED' || status === 'SENT';
 
   return (
     <div className="h-full flex flex-col bg-white overflow-hidden">
@@ -381,7 +386,7 @@ export function RouteSelector() {
               <div className="grid grid-cols-2 gap-5">
                   <div className="space-y-1.5">
                     <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Transport Mode</Label>
-                    <Select value={mode} onValueChange={(val) => setMode(val as TransportMode)}>
+                    <Select value={mode} onValueChange={(val) => !isReadOnly && setMode(val as TransportMode)} disabled={isReadOnly}>
                       <SelectTrigger className="h-9 border-slate-200 bg-white font-semibold text-xs shadow-sm hover:border-blue-300 transition-colors">
                         <SelectValue />
                       </SelectTrigger>
@@ -396,7 +401,7 @@ export function RouteSelector() {
                   
                   <div className="space-y-1.5">
                     <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Incoterm (2020)</Label>
-                    <Select value={incoterm} onValueChange={(val) => setIncoterm(val as Incoterm)}>
+                    <Select value={incoterm} onValueChange={(val) => setIncoterm(val as Incoterm)} disabled={isReadOnly}>
                       <SelectTrigger className="h-9 border-slate-200 bg-white font-semibold text-xs shadow-sm hover:border-blue-300 transition-colors">
                         <SelectValue />
                       </SelectTrigger>
@@ -421,7 +426,7 @@ export function RouteSelector() {
                           <Label className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Pickup Address</Label>
                           <div className="relative group">
                               <Input className="h-9 bg-white border-amber-200 text-xs pl-9 focus:border-amber-400 transition-all shadow-sm" placeholder="Factory Address" 
-                                  value={placeOfLoading} onChange={(e) => setRouteLocations('placeOfLoading', e.target.value)} 
+                                  value={placeOfLoading} onChange={(e) => setRouteLocations('placeOfLoading', e.target.value)} disabled={isReadOnly}
                               />
                               <Truck className="absolute left-3 top-2.5 h-4 w-4 text-amber-500" />
                           </div>
@@ -448,7 +453,7 @@ export function RouteSelector() {
                           <Label className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Final Delivery Address</Label>
                           <div className="relative group">
                               <Input className="h-9 bg-white border-blue-200 text-xs pl-9 focus:border-blue-400 transition-all shadow-sm" placeholder="Warehouse Address" 
-                                  value={placeOfDelivery} onChange={(e) => setRouteLocations('placeOfDelivery', e.target.value)}
+                                  value={placeOfDelivery} onChange={(e) => setRouteLocations('placeOfDelivery', e.target.value)} disabled={isReadOnly}
                               />
                               <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-blue-500" />
                           </div>
@@ -457,54 +462,107 @@ export function RouteSelector() {
               </div>
           </div>
 
-          {/* LEVEL 3: LOGISTICS DETAILS */}
-          <div className="grid grid-cols-2 gap-5">
-              {showEquipment && (
-                  <div className="space-y-1">
-                      <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Equipment</Label>
-                      <Select value={equipmentType} onValueChange={(val) => setEquipment(val, containerCount)}>
-                          <SelectTrigger className="h-8 text-xs bg-slate-50 border-transparent hover:bg-white hover:border-slate-200 transition-all"><SelectValue placeholder="Select Type" /></SelectTrigger>
-                          <SelectContent>
-                              {(isRoad ? EQUIP_ROAD : EQUIP_SEA).map(eq => <SelectItem key={eq} value={eq}>{eq}</SelectItem>)}
-                          </SelectContent>
-                      </Select>
+          {/* LEVEL 3: LOGISTICS DETAILS (UPDATED for Multi-Row Equipment) */}
+          <div className="grid grid-cols-12 gap-5">
+              
+              {/* EQUIPMENT MANAGER (Col Span 7) */}
+              {showEquipment ? (
+                  <div className="col-span-12 md:col-span-8 bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-3">
+                       <div className="flex items-center justify-between">
+                           <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                               {mode === 'ROAD' ? <Truck className="h-3 w-3"/> : <Container className="h-3 w-3"/>}
+                               Equipment List
+                           </Label>
+                           {!isReadOnly && (
+                               <Button size="sm" variant="ghost" onClick={() => addEquipment(getEquipmentOptions()[0], 1)} className="h-6 w-6 p-0 rounded-full hover:bg-blue-50 text-blue-600">
+                                   <Plus className="h-4 w-4" />
+                               </Button>
+                           )}
+                       </div>
+                       
+                       <div className="space-y-2">
+                           {equipmentList.map((eq) => (
+                               <div key={eq.id} className="grid grid-cols-12 gap-2 items-center bg-white p-1.5 rounded-md border border-slate-100 shadow-sm group">
+                                    <div className="col-span-2">
+                                        <Input 
+                                            type="number" 
+                                            min={1}
+                                            className="h-7 text-xs text-center font-bold px-1 bg-slate-50 border-transparent hover:bg-white focus:bg-white transition-all"
+                                            value={eq.count}
+                                            onChange={(e) => updateEquipment(eq.id, eq.type, parseInt(e.target.value) || 1)}
+                                            disabled={isReadOnly}
+                                        />
+                                    </div>
+                                    <div className="col-span-8">
+                                        <Select 
+                                            value={eq.type} 
+                                            onValueChange={(v) => updateEquipment(eq.id, v, eq.count)}
+                                            disabled={isReadOnly}
+                                        >
+                                            <SelectTrigger className="h-7 text-xs bg-slate-50 border-transparent hover:bg-white focus:bg-white">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {getEquipmentOptions().map(t => (
+                                                    <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="col-span-2 flex justify-end">
+                                        <Button 
+                                            size="icon" 
+                                            variant="ghost" 
+                                            className="h-6 w-6 text-slate-300 hover:text-red-500 hover:bg-red-50"
+                                            onClick={() => removeEquipment(eq.id)}
+                                            disabled={isReadOnly || equipmentList.length <= 1}
+                                        >
+                                            <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                    </div>
+                               </div>
+                           ))}
+                           {equipmentList.length === 0 && (
+                               <div className="text-[10px] text-red-400 italic text-center py-2 bg-red-50 rounded">
+                                   No equipment selected. Please add one.
+                               </div>
+                           )}
+                       </div>
+                  </div>
+              ) : (
+                  // AIR / LCL Placeholder
+                  <div className="col-span-12 md:col-span-8 bg-slate-50 border border-slate-200 rounded-lg p-4 flex items-center justify-center text-center">
+                        <div className="space-y-1">
+                            <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Standard Cargo</Label>
+                            <span className="text-xs text-slate-500">Unitized cargo handling applies. See Cargo Engine.</span>
+                        </div>
                   </div>
               )}
 
-              {showContainerCount && (
-                  <div className="space-y-1">
-                      <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Units</Label>
-                      <div className="relative">
-                          <Input type="number" min={1} className="h-8 text-xs pl-8 bg-slate-50 border-transparent hover:bg-white hover:border-slate-200 transition-all" 
-                              value={containerCount} onChange={(e) => setEquipment(equipmentType, parseInt(e.target.value))}
-                          />
-                          <Container className="absolute left-2.5 top-2 h-4 w-4 text-slate-400" />
+              {/* TIMING & PARAMS (Col Span 4) */}
+              <div className="col-span-12 md:col-span-4 space-y-4">
+                  {showFreeTime && (
+                      <div className="space-y-1">
+                          <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Free Time</Label>
+                          <div className="relative">
+                              <Input type="number" className="h-8 text-xs pl-8 bg-slate-50 border-transparent hover:bg-white hover:border-slate-200 transition-all" placeholder="0" 
+                                  value={freeTime} onChange={(e) => setLogisticsParam('freeTime', parseInt(e.target.value) || 0)} disabled={isReadOnly}
+                              />
+                              <Clock className="absolute left-2.5 top-2 h-4 w-4 text-slate-400" />
+                              <span className="absolute right-3 top-2 text-[10px] text-slate-400 font-medium">Days</span>
+                          </div>
                       </div>
-                  </div>
-              )}
+                  )}
 
-              {showFreeTime && (
                   <div className="space-y-1">
-                      <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Free Time</Label>
+                      <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Est. Transit</Label>
                       <div className="relative">
                           <Input type="number" className="h-8 text-xs pl-8 bg-slate-50 border-transparent hover:bg-white hover:border-slate-200 transition-all" placeholder="0" 
-                              value={freeTime} onChange={(e) => setLogisticsParam('freeTime', parseInt(e.target.value) || 0)} 
+                              value={transitTime} onChange={(e) => setLogisticsParam('transitTime', parseInt(e.target.value) || 0)} disabled={isReadOnly}
                           />
                           <Clock className="absolute left-2.5 top-2 h-4 w-4 text-slate-400" />
                           <span className="absolute right-3 top-2 text-[10px] text-slate-400 font-medium">Days</span>
                       </div>
-                  </div>
-              )}
-
-              {/* Transit Time (Editable) */}
-              <div className="space-y-1">
-                  <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Est. Transit</Label>
-                  <div className="relative">
-                      <Input type="number" className="h-8 text-xs pl-8 bg-slate-50 border-transparent hover:bg-white hover:border-slate-200 transition-all" placeholder="0" 
-                          value={transitTime} onChange={(e) => setLogisticsParam('transitTime', parseInt(e.target.value) || 0)} 
-                      />
-                      <Clock className="absolute left-2.5 top-2 h-4 w-4 text-slate-400" />
-                      <span className="absolute right-3 top-2 text-[10px] text-slate-400 font-medium">Days</span>
                   </div>
               </div>
           </div>
@@ -523,14 +581,14 @@ export function RouteSelector() {
         <div className="space-y-1">
             <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Requested Dep.</Label>
             <div className="relative">
-                <Input type="date" className="h-7 text-[10px] pl-7 bg-white border-slate-200" value={requestedDepartureDate || ''} onChange={(e) => setIdentity('requestedDepartureDate', e.target.value)} />
+                <Input type="date" className="h-7 text-[10px] pl-7 bg-white border-slate-200" value={requestedDepartureDate || ''} onChange={(e) => setIdentity('requestedDepartureDate', e.target.value)} disabled={isReadOnly} />
                 <Calendar className="absolute left-2 top-1.5 h-3.5 w-3.5 text-slate-400" />
             </div>
         </div>
         <div className="space-y-1">
             <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Est. Arrival</Label>
             <div className="relative">
-                <Input type="date" className="h-7 text-[10px] pl-7 bg-white border-slate-200" value={estimatedArrivalDate || ''} onChange={(e) => setIdentity('estimatedArrivalDate', e.target.value)} />
+                <Input type="date" className="h-7 text-[10px] pl-7 bg-white border-slate-200" value={estimatedArrivalDate || ''} onChange={(e) => setIdentity('estimatedArrivalDate', e.target.value)} disabled={isReadOnly} />
                 <Calendar className="absolute left-2 top-1.5 h-3.5 w-3.5 text-slate-400" />
             </div>
         </div>

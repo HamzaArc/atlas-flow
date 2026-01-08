@@ -31,8 +31,10 @@ export function QuoteComparison({ onSelect }: QuoteComparisonProps) {
              {options.map((opt) => {
                  const isActive = opt.id === activeOptionId;
                  
-                 // Note: In a real scenario, we might want to recalculate totals here if the store isn't perfectly synced,
-                 // but we'll rely on the store's `totalTTC` for now.
+                 // RESOLVE EQUIPMENT STRING
+                 const equipmentStr = opt.equipmentList && opt.equipmentList.length > 0
+                    ? opt.equipmentList.map(e => `${e.count}x${e.type}`).join(', ')
+                    : `${opt.containerCount}x ${opt.equipmentType || 'Unit'}`;
                  
                  return (
                     <Card key={opt.id} 
@@ -104,7 +106,7 @@ export function QuoteComparison({ onSelect }: QuoteComparisonProps) {
                                  </div>
                                  <div className="flex items-center justify-between text-xs">
                                      <span className="text-slate-500">Equipment</span>
-                                     <span className="font-mono font-bold text-slate-700">{opt.containerCount}x {opt.equipmentType || 'Unit'}</span>
+                                     <span className="font-mono font-bold text-slate-700 truncate max-w-[120px]" title={equipmentStr}>{equipmentStr}</span>
                                  </div>
                              </div>
                         </div>

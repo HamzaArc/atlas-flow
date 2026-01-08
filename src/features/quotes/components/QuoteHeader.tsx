@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -35,15 +35,17 @@ const STEPS = [
     { id: 'ACCEPTED', label: 'Won' }
 ];
 
+const STANDARD_PAYMENT_TERMS = ["Cash", "30 Days", "60 Days", "NET_60", "90 Days"];
+
 export function QuoteHeader({ onBack }: QuoteHeaderProps) {
   // Quote Store
   const { 
     reference, status, clientName, clientId, validityDate, version,
-    salespersonId, // Ensure we have ID and Name from store
+    salespersonId, 
     quoteCurrency, exchangeRates, paymentTerms,
-    setIdentity, setStatus, saveQuote, duplicateQuote, createRevision,
+    setIdentity, setClientSnapshot, setStatus, saveQuote, duplicateQuote, createRevision,
     setQuoteCurrency, setExchangeRate,
-    mode, incoterm, pol, pod, totalTTCTarget
+    totalTTCTarget, mode, incoterm, pol, pod
   } = useQuoteStore();
 
   // Client Store Integration
@@ -68,24 +70,42 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
   // --- FILTERS ---
   const salesReps = users.filter(u => ['SALES', 'MANAGER', 'DIRECTOR', 'ADMIN'].includes(u.role));
 
+  // --- DYNAMIC PAYMENT TERMS ---
+  // Ensure we display the current payment term even if it's not in the standard list
+  const displayPaymentTerms = useMemo(() => {
+      const current = paymentTerms || '30 Days';
+      const termsSet = new Set([...STANDARD_PAYMENT_TERMS, current]);
+      return Array.from(termsSet);
+  }, [paymentTerms]);
+
   // --- HANDLER: SMART CLIENT SELECTION ---
   const handleClientSelect = (selectedId: string) => {
     const client = clients.find(c => c.id === selectedId);
     if (!client) return;
 
-    // Manually update identity fields
-    setIdentity('clientId', client.id);
-    setIdentity('clientName', client.entityName);
-    setIdentity('paymentTerms', client.financials.paymentTerms || '30 Days');
-    
-    // Auto-assign Sales Rep from Client Profile if exists
+    // Resolve Sales Rep from Client
+    let assignedRepId = undefined;
+    let assignedRepName = undefined;
+
+    // Mission 2: Auto-pull sales representative from customer
     if (client.salesRepId) {
         const rep = users.find(u => u.id === client.salesRepId);
         if (rep) {
-            setIdentity('salespersonId', rep.id);
-            setIdentity('salespersonName', rep.fullName);
+            assignedRepId = rep.id;
+            assignedRepName = rep.fullName;
         }
     }
+
+    // Use Centralized Snapshot Setter
+    setClientSnapshot({
+        id: client.id,
+        name: client.entityName,
+        terms: client.financials.paymentTerms || '30 Days',
+        taxId: client.financials.taxId,
+        ice: client.financials.ice,
+        salespersonId: assignedRepId,
+        salespersonName: assignedRepName
+    });
     
     setOpenClient(false);
   };
@@ -330,7 +350,7 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                   </Popover>
               </div>
 
-               {/* Payment Terms Selector (col-span-3) */}
+               {/* Payment Terms Selector (col-span-3) - MISSION 1: DYNAMIC OPTIONS */}
                <div className="col-span-3 space-y-1">
                   <Label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
                       <Coins className="h-3 w-3" /> Payment Terms
@@ -344,11 +364,11 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                           <SelectValue placeholder="Terms" />
                       </SelectTrigger>
                       <SelectContent>
-                          <SelectItem value="Cash">Cash / Immediate</SelectItem>
-                          <SelectItem value="30 Days">30 Days</SelectItem>
-                          <SelectItem value="60 Days">60 Days Check</SelectItem>
-                          <SelectItem value="NET_60">NET_60</SelectItem>
-                          <SelectItem value="90 Days">90 Days</SelectItem>
+                          {displayPaymentTerms.map((term) => (
+                              <SelectItem key={term} value={term}>
+                                  {term}
+                              </SelectItem>
+                          ))}
                       </SelectContent>
                   </Select>
               </div>
