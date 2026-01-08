@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { QuoteService } from '@/services/quote.service';
 import { Quote, QuoteLineItem, QuoteOption, TransportMode, Incoterm, Currency, Probability, PackagingType, ActivityItem, ActivityCategory, QuoteApproval, ApprovalTrigger, ClientFinancials } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
+import { useTariffStore } from '@/store/useTariffStore';
 
 interface CargoRow {
   id: string;
@@ -672,13 +673,59 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   },
 
   initializeSmartLines: (clientFinancials) => {
-    const { mode, activeOptionId, id, chargeableWeight } = get();
+    const { mode, activeOptionId, id, chargeableWeight, pol, pod, incoterm } = get();
     const newItems: QuoteLineItem[] = [];
+
+    const { customsRebatePercent = 0, adminFee, tollFee, fraisNDL } = clientFinancials || {};
+    
+    // --- TARIFF LOOKUP FOR FALLBACKS ---
+    // If client specific charges are missing, try to find them in tariff manager
+    let bestMatch: any = null;
+    try {
+        bestMatch = useTariffStore.getState().findBestMatch({ 
+            pol, pod, mode, incoterm, date: new Date() 
+        });
+    } catch (e) {
+        console.warn('Tariff store not ready or match failed', e);
+    }
+
+    // Helper: Priority = Client Profile -> Tariff -> Default
+    const resolveCharge = (
+        clientValue: number | undefined, 
+        chargeHeadKeywords: string[], 
+        defaultVal: number
+    ): { price: number; source: 'SMART_INIT' | 'TARIFF'; tariffId?: string } => {
+        
+        // 1. Client Profile
+        if (clientValue !== undefined && clientValue !== null && clientValue > 0) {
+            return { price: clientValue, source: 'SMART_INIT' };
+        }
+
+        // 2. Tariff Manager
+        if (bestMatch && bestMatch.destCharges && bestMatch.destCharges.length > 0) {
+             const matchedCharge = bestMatch.destCharges.find((c: any) => 
+                chargeHeadKeywords.some(keyword => c.chargeHead.toLowerCase().includes(keyword.toLowerCase()))
+             );
+
+             if (matchedCharge) {
+                 // Simplified logic: Use unitPrice directly (ignoring basis for now unless simple)
+                 return { 
+                     price: matchedCharge.unitPrice || 0, 
+                     source: 'TARIFF', 
+                     tariffId: bestMatch.id 
+                 };
+             }
+        }
+
+        // 3. Default
+        return { price: defaultVal, source: 'SMART_INIT' };
+    };
+
 
     const createSmartItem = (
         section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION', 
         desc: string, 
-        price: number, 
+        priceInfo: { price: number; source: 'SMART_INIT' | 'TARIFF'; tariffId?: string },
         vat: 'STD_20' | 'EXPORT_0_ART92' = 'STD_20',
         dynamicType: QuoteLineItem['dynamicType'] = 'STATIC',
         isRequired: boolean = false,
@@ -689,37 +736,52 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         optionId: activeOptionId,
         section,
         description: desc,
-        buyPrice: price,
+        buyPrice: priceInfo.price,
         buyCurrency: 'MAD',
         markupType: 'PERCENT',
         markupValue: 0,
         vatRule: vat,
-        source: 'SMART_INIT',
+        source: priceInfo.source,
+        tariffId: priceInfo.tariffId,
         dynamicType,
         isRequired,
         calculationFactor: calcFactor
     });
 
-    const { customsRebatePercent = 0, adminFee = 0, tollFee = 0 } = clientFinancials || {};
+    // --- LOGIC PER MODE ---
 
     if (mode === 'AIR') {
-        newItems.push(createSmartItem('FREIGHT', 'Main Freight (Vol AF)', 0, 'EXPORT_0_ART92', 'MAIN_FRET', true));
-        newItems.push(createSmartItem('DESTINATION', 'Retour de fond', 0, 'STD_20', 'RET_FOND', false, customsRebatePercent));
-        newItems.push(createSmartItem('DESTINATION', 'Frais de dossier', adminFee || 0));
-        newItems.push(createSmartItem('DESTINATION', 'Frais NDL', 0, 'STD_20', 'STATIC', true));
+        newItems.push(createSmartItem('FREIGHT', 'Main Freight (Vol AF)', { price: 0, source: 'SMART_INIT' }, 'EXPORT_0_ART92', 'MAIN_FRET', true));
+        newItems.push(createSmartItem('DESTINATION', 'Retour de fond', { price: 0, source: 'SMART_INIT' }, 'STD_20', 'RET_FOND', false, customsRebatePercent));
+        
+        const adminFeeResolved = resolveCharge(adminFee, ['Frais de dossier', 'Admin Fee', 'Dossier'], 0);
+        newItems.push(createSmartItem('DESTINATION', 'Frais de dossier', adminFeeResolved));
+        
+        const ndlResolved = resolveCharge(fraisNDL, ['Frais NDL', 'NDL', 'Note de livraison'], 0);
+        newItems.push(createSmartItem('DESTINATION', 'Frais NDL', ndlResolved, 'STD_20', 'STATIC', true));
     }
     else if (mode === 'SEA_LCL') {
-        newItems.push(createSmartItem('FREIGHT', 'Main Freight (LCL)', 0, 'EXPORT_0_ART92', 'MAIN_FRET', true));
-        newItems.push(createSmartItem('DESTINATION', 'Retour de fond', 0, 'STD_20', 'RET_FOND', false, customsRebatePercent));
+        newItems.push(createSmartItem('FREIGHT', 'Main Freight (LCL)', { price: 0, source: 'SMART_INIT' }, 'EXPORT_0_ART92', 'MAIN_FRET', true));
+        newItems.push(createSmartItem('DESTINATION', 'Retour de fond', { price: 0, source: 'SMART_INIT' }, 'STD_20', 'RET_FOND', false, customsRebatePercent));
+        
+        // Auto-calculated logic takes precedence for LCL Toll usually, but if client has specific override we might consider it. 
+        // For now sticking to weight based calculation as standard for LCL, unless overridden? 
+        // Logic: Standard LCL toll is calc based. 
         const autoToll = 250 * (chargeableWeight / 1000);
-        newItems.push(createSmartItem('DESTINATION', 'Péage (Portuaire)', autoToll, 'STD_20', 'PEAGE_LCL'));
-        newItems.push(createSmartItem('DESTINATION', 'Frais de dossier', adminFee || 0));
+        newItems.push(createSmartItem('DESTINATION', 'Péage (Portuaire)', { price: autoToll, source: 'SMART_INIT' }, 'STD_20', 'PEAGE_LCL'));
+        
+        const adminFeeResolved = resolveCharge(adminFee, ['Frais de dossier', 'Admin Fee', 'Dossier'], 0);
+        newItems.push(createSmartItem('DESTINATION', 'Frais de dossier', adminFeeResolved));
     }
     else {
-        newItems.push(createSmartItem('FREIGHT', `Main Freight (${mode})`, 0, 'EXPORT_0_ART92', 'MAIN_FRET', true));
-        newItems.push(createSmartItem('DESTINATION', 'Retour de fond', 0, 'STD_20', 'RET_FOND', false, customsRebatePercent));
-        newItems.push(createSmartItem('DESTINATION', 'Péage', tollFee || 0, 'STD_20'));
-        newItems.push(createSmartItem('DESTINATION', 'Frais de dossier', adminFee || 0));
+        newItems.push(createSmartItem('FREIGHT', `Main Freight (${mode})`, { price: 0, source: 'SMART_INIT' }, 'EXPORT_0_ART92', 'MAIN_FRET', true));
+        newItems.push(createSmartItem('DESTINATION', 'Retour de fond', { price: 0, source: 'SMART_INIT' }, 'STD_20', 'RET_FOND', false, customsRebatePercent));
+        
+        const tollResolved = resolveCharge(tollFee, ['Péage', 'Toll', 'Port Tax'], 0);
+        newItems.push(createSmartItem('DESTINATION', 'Péage', tollResolved, 'STD_20'));
+        
+        const adminFeeResolved = resolveCharge(adminFee, ['Frais de dossier', 'Admin Fee', 'Dossier'], 0);
+        newItems.push(createSmartItem('DESTINATION', 'Frais de dossier', adminFeeResolved));
     }
 
     const { options } = get();

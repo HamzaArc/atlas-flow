@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Percent, Coins, Truck, Clock, AlertCircle } from "lucide-react";
+import { Percent, Coins, Truck, Clock, AlertCircle, FileText } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -109,7 +109,40 @@ export function ClientBillingConfig({ isEditing }: { isEditing: boolean }) {
                         </p>
                     </div>
 
-                    {/* 4. Payment Behavior */}
+                    {/* 4. Frais NDL */}
+                    <div className="space-y-2">
+                        <Label className="text-xs font-bold text-slate-500 uppercase">Frais NDL (Delivery Note)</Label>
+                        <div className="flex gap-2">
+                            <div className="relative flex-1">
+                                <Input 
+                                    disabled={!isEditing}
+                                    type="number"
+                                    className="pl-9 font-mono"
+                                    placeholder="0.00"
+                                    value={activeClient.financials.fraisNDL || ''}
+                                    onChange={(e) => updateActiveFinancials('fraisNDL', parseFloat(e.target.value))}
+                                />
+                                <FileText className="h-4 w-4 text-slate-400 absolute left-3 top-2.5" />
+                            </div>
+                            <Select 
+                                disabled={!isEditing} 
+                                value={activeClient.financials.fraisNDLCurrency || 'MAD'}
+                                onValueChange={(v: any) => updateActiveFinancials('fraisNDLCurrency', v)}
+                            >
+                                <SelectTrigger className="w-24 bg-slate-50"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="MAD">MAD</SelectItem>
+                                    <SelectItem value="EUR">EUR</SelectItem>
+                                    <SelectItem value="USD">USD</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <p className="text-[10px] text-slate-400">
+                             Applied typically for Air Import shipments.
+                        </p>
+                    </div>
+
+                    {/* 5. Payment Behavior */}
                     <div className="space-y-2 bg-orange-50 p-3 rounded-lg border border-orange-100">
                         <Label className="text-xs font-bold text-orange-700 uppercase flex items-center gap-2">
                             <Clock className="h-3.5 w-3.5" /> Average Days to Pay

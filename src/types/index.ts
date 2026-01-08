@@ -302,6 +302,8 @@ export interface ClientFinancials {
   adminFeeCurrency?: Currency;   
   tollFee?: number;              // CONFIRMED PRESENT
   tollFeeCurrency?: Currency; 
+  fraisNDL?: number;             // NEW: NDL Fee
+  fraisNDLCurrency?: Currency;   // NEW: NDL Currency
   averageDaysToPay?: number;     
   specialInstructions?: string;  
 }
