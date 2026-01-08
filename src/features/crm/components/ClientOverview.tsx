@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Building2, Mail, Phone, Globe, FileText, CreditCard, Briefcase, Trash2, Plus } from "lucide-react";
+import { Building2, Mail, Phone, Globe, FileText, CreditCard } from "lucide-react";
 import { useClientStore } from "@/store/useClientStore";
 import { ClientType, ClientStatus } from "@/types/index"; 
 import { Input } from "@/components/ui/input";
@@ -9,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
 const FieldGroup = ({ label, children, required = false }: { label: string, children: React.ReactNode, required?: boolean }) => (
@@ -23,38 +21,27 @@ const FieldGroup = ({ label, children, required = false }: { label: string, chil
 );
 
 export function ClientOverview({ isEditing }: { isEditing: boolean }) {
-    const { activeClient, clients, updateActiveField, updateActiveFinancials, addTag, removeTag } = useClientStore();
-    const [tagInput, setTagInput] = useState('');
+    const { activeClient, updateActiveField, updateActiveFinancials } = useClientStore();
 
     if (!activeClient) return null;
 
     const totalExposure = (activeClient.unbilledWork || 0) + (activeClient.unpaidInvoices || 0);
     const utilizationPercent = activeClient.creditLimit > 0 ? (totalExposure / activeClient.creditLimit) * 100 : 0;
 
-    // Filter out the current client to prevent self-parenting
-    const potentialParents = clients.filter(c => c.id !== activeClient.id);
-
-    const handleAddTag = () => {
-        if(tagInput.trim()) {
-            addTag(tagInput.trim());
-            setTagInput('');
-        }
-    };
-
     return (
         <div className="grid grid-cols-12 gap-6 animate-in fade-in duration-500 pb-6">
             
-            {/* LEFT COLUMN: IDENTITY & LEGAL */}
+            {/* LEFT COLUMN: IDENTITY */}
             <div className="col-span-12 lg:col-span-4 flex flex-col gap-6">
                 
                 {/* Identity Card */}
-                <Card className="border-slate-200 shadow-md bg-white">
+                <Card className="border-slate-200 shadow-md bg-white h-full">
                     <CardHeader className="pb-3 bg-slate-50/50 border-b border-slate-100 h-14 justify-center">
                         <CardTitle className="text-sm font-bold text-slate-700 flex items-center gap-2">
                             <Building2 className="h-4 w-4 text-slate-400" /> Corporate Identity
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="p-5 space-y-4">
+                    <CardContent className="p-5 space-y-5">
                         <div className="grid grid-cols-2 gap-3">
                             <FieldGroup label="Client Type">
                                 <Select disabled={!isEditing} value={activeClient.type} onValueChange={(v) => updateActiveField('type', v as ClientType)}>
@@ -96,7 +83,7 @@ export function ClientOverview({ isEditing }: { isEditing: boolean }) {
                         <Separator />
 
                         {/* Addresses */}
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                              <FieldGroup label="Billing Address (Siège Social)" required>
                                  <Input value={activeClient.billingAddress || ''} disabled={!isEditing} placeholder="Legal address for Invoicing" className="h-8 text-xs" onChange={(e) => updateActiveField('billingAddress', e.target.value)} />
                              </FieldGroup>
@@ -111,7 +98,7 @@ export function ClientOverview({ isEditing }: { isEditing: boolean }) {
 
                         <Separator />
 
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                             <div className="flex items-center gap-3">
                                 <Mail className="h-4 w-4 text-slate-400" />
                                 <Input value={activeClient.email} disabled={!isEditing} placeholder="Email Address" className="h-8 text-xs" onChange={(e) => updateActiveField('email', e.target.value)} />
@@ -127,48 +114,9 @@ export function ClientOverview({ isEditing }: { isEditing: boolean }) {
                         </div>
                     </CardContent>
                 </Card>
-
-                {/* Legal Card - Moroccan Specifics */}
-                <Card className="border-slate-200 shadow-md bg-white">
-                    <CardHeader className="pb-3 bg-slate-50/50 border-b border-slate-100 h-14 justify-center">
-                        <CardTitle className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-slate-400" /> Fiscal Identity (Morocco)
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-5 grid grid-cols-2 gap-4">
-                        <div className="col-span-2">
-                            <FieldGroup label="ICE (15 Digits)" required>
-                                <div className="relative">
-                                    <Input 
-                                        value={activeClient.financials.ice || ''} 
-                                        disabled={!isEditing} 
-                                        maxLength={15}
-                                        className={`font-mono text-xs h-8 ${activeClient.financials.ice?.length !== 15 ? 'border-amber-300 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`} 
-                                        onChange={(e) => updateActiveFinancials('ice', e.target.value)} 
-                                    />
-                                    {activeClient.financials.ice?.length !== 15 && (
-                                        <span className="absolute right-2 top-2 text-[9px] text-amber-600 font-bold">INVALID</span>
-                                    )}
-                                </div>
-                            </FieldGroup>
-                        </div>
-                        <FieldGroup label="Patente">
-                            <Input value={activeClient.financials.patente || ''} disabled={!isEditing} className="font-mono text-xs h-8" onChange={(e) => updateActiveFinancials('patente', e.target.value)} />
-                        </FieldGroup>
-                        <FieldGroup label="RC Number">
-                            <Input value={activeClient.financials.rc || ''} disabled={!isEditing} className="font-mono text-xs h-8" onChange={(e) => updateActiveFinancials('rc', e.target.value)} />
-                        </FieldGroup>
-                        <FieldGroup label="VAT / IF">
-                            <Input value={activeClient.financials.vatNumber} disabled={!isEditing} className="font-mono text-xs h-8" onChange={(e) => updateActiveFinancials('vatNumber', e.target.value)} />
-                        </FieldGroup>
-                        <FieldGroup label="CNSS">
-                            <Input value={activeClient.financials.cnss || ''} disabled={!isEditing} className="font-mono text-xs h-8" onChange={(e) => updateActiveFinancials('cnss', e.target.value)} />
-                        </FieldGroup>
-                    </CardContent>
-                </Card>
             </div>
 
-            {/* RIGHT COLUMN */}
+            {/* RIGHT COLUMN: FINANCIAL & LEGAL */}
             <div className="col-span-12 lg:col-span-8 flex flex-col gap-6">
                 
                 {/* 1. FINANCIAL RISK & EXPOSURE */}
@@ -262,65 +210,45 @@ export function ClientOverview({ isEditing }: { isEditing: boolean }) {
                     </CardContent>
                 </Card>
 
-                {/* 2. SEGMENTATION & PARENT COMPANY */}
-                <Card className="flex-1 bg-white border border-slate-200 shadow-md">
-                    <CardHeader className="px-4 py-3 bg-slate-50/50 border-b border-slate-100 shrink-0 h-14 justify-center">
+                {/* 2. FISCAL & LEGAL ENTITY (Moved from Left Column) */}
+                <Card className="border-slate-200 shadow-md bg-white flex-1">
+                    <CardHeader className="pb-3 bg-slate-50/50 border-b border-slate-100 h-14 justify-center">
                         <CardTitle className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                            <div className="p-1.5 bg-white border border-slate-200 rounded-md shadow-sm text-slate-500">
-                                <Briefcase className="h-3.5 w-3.5" /> 
-                            </div>
-                            Commercial Segmentation
+                            <FileText className="h-4 w-4 text-slate-400" /> Fiscal Identity & Legal Registration
                         </CardTitle>
                     </CardHeader>
-
-                    <CardContent className="p-5 flex flex-col gap-6">
-                        <div className="grid grid-cols-2 gap-4">
-                            <FieldGroup label="Parent Company (Group)">
-                                 <Select disabled={!isEditing} value={activeClient.parentCompanyId} onValueChange={(v) => updateActiveField('parentCompanyId', v)}>
-                                    <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Standalone Entity" /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">Standalone Entity</SelectItem>
-                                        {potentialParents.map(parent => (
-                                            <SelectItem key={parent.id} value={parent.id}>
-                                                {parent.entityName}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                    <CardContent className="p-5">
+                         {/* Grid updated to 3 cols to utilize the wider space */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="col-span-1">
+                                <FieldGroup label="ICE (15 Digits)" required>
+                                    <div className="relative">
+                                        <Input 
+                                            value={activeClient.financials.ice || ''} 
+                                            disabled={!isEditing} 
+                                            maxLength={15}
+                                            className={`font-mono text-xs h-9 ${activeClient.financials.ice?.length !== 15 ? 'border-amber-300 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`} 
+                                            onChange={(e) => updateActiveFinancials('ice', e.target.value)} 
+                                        />
+                                        {activeClient.financials.ice?.length !== 15 && (
+                                            <span className="absolute right-2 top-2.5 text-[9px] text-amber-600 font-bold">INVALID</span>
+                                        )}
+                                    </div>
+                                </FieldGroup>
+                            </div>
+                            <FieldGroup label="VAT / IF">
+                                <Input value={activeClient.financials.vatNumber} disabled={!isEditing} className="font-mono text-xs h-9" onChange={(e) => updateActiveFinancials('vatNumber', e.target.value)} />
                             </FieldGroup>
-                            <FieldGroup label="Sales Funnel Win Rate">
-                                <div className="h-9 flex items-center px-3 bg-slate-50 border border-slate-200 rounded-md text-xs font-mono text-slate-600">
-                                    14% (Low)
-                                </div>
+                            <FieldGroup label="RC Number">
+                                <Input value={activeClient.financials.rc || ''} disabled={!isEditing} className="font-mono text-xs h-9" onChange={(e) => updateActiveFinancials('rc', e.target.value)} />
+                            </FieldGroup>
+                            <FieldGroup label="Patente">
+                                <Input value={activeClient.financials.patente || ''} disabled={!isEditing} className="font-mono text-xs h-9" onChange={(e) => updateActiveFinancials('patente', e.target.value)} />
+                            </FieldGroup>
+                            <FieldGroup label="CNSS">
+                                <Input value={activeClient.financials.cnss || ''} disabled={!isEditing} className="font-mono text-xs h-9" onChange={(e) => updateActiveFinancials('cnss', e.target.value)} />
                             </FieldGroup>
                         </div>
-                        
-                        <FieldGroup label="Market Tags">
-                            <div className="flex flex-wrap gap-2">
-                                {activeClient.tags?.map((tag, idx) => (
-                                    <Badge key={idx} variant="secondary" className="bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 px-2 py-1 gap-1.5 shadow-sm">
-                                        {tag}
-                                        {isEditing && (
-                                            <button onClick={() => removeTag(tag)} className="text-slate-400 hover:text-red-500 transition-colors">
-                                                <Trash2 className="h-3 w-3" />
-                                            </button>
-                                        )}
-                                    </Badge>
-                                ))}
-                                {isEditing && (
-                                    <div className="flex gap-2">
-                                        <Input 
-                                            value={tagInput}
-                                            onChange={(e) => setTagInput(e.target.value)}
-                                            className="h-7 w-32 text-[10px] bg-white"
-                                            placeholder="Add tag..."
-                                            onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
-                                        />
-                                        <Button size="icon" onClick={handleAddTag} className="h-7 w-7"><Plus className="h-3 w-3" /></Button>
-                                    </div>
-                                )}
-                            </div>
-                        </FieldGroup>
                     </CardContent>
                 </Card>
             </div>
