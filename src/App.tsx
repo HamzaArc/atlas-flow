@@ -16,7 +16,6 @@ import LoginPage from "@/features/auth/LoginPage";
 
 import { Toaster } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 function App() {
   const [session, setSession] = useState<any>(null);
@@ -28,9 +27,6 @@ function App() {
   const [crmView, setCrmView] = useState<'list' | 'details'>('list');
   const [dossierView, setDossierView] = useState<'dashboard' | 'dossier'>('dashboard'); 
   const [tariffView, setTariffView] = useState<'dashboard' | 'workspace'>('dashboard');
-
-  // Layout State
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     // 1. Get initial session
@@ -101,33 +97,32 @@ function App() {
   // 4. Main Application (Authenticated)
   return (
     <div className="flex min-h-screen w-full bg-slate-50 text-slate-900 font-sans">
-      <aside 
-        className={cn(
-          "flex-none hidden md:block z-30 shadow-sm transition-all duration-300 ease-in-out bg-white border-r border-slate-200",
-          isSidebarCollapsed ? "w-[70px]" : "w-64"
-        )}
-      >
-          <Sidebar 
-            currentView={currentPage} 
-            onNavigate={handleSidebarNav} 
-            onLogout={handleLogout}
-            collapsed={isSidebarCollapsed}
-            onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          /> 
-      </aside>
+      
+      {/* Sidebar is now self-contained and fixed. 
+        We do not wrap it in an <aside> that changes width, because the sidebar expands OVER content.
+      */}
+      <Sidebar 
+        currentView={currentPage} 
+        onNavigate={handleSidebarNav} 
+        onLogout={handleLogout}
+      /> 
 
-      <main className="flex-1 h-screen overflow-hidden flex flex-col relative transition-all duration-300">
+      {/* Main Content Area 
+        We use padding-left (pl-[72px]) to reserve space for the *collapsed* sidebar.
+        This ensures the content never jumps when the sidebar expands.
+      */}
+      <main className="flex-1 h-screen overflow-hidden flex flex-col relative transition-all duration-300 pl-[72px]">
         
         {currentPage === 'dashboard' && <QuoteDashboard onNavigate={setCurrentPage} />}
         {currentPage === 'create' && (
-          <div className="absolute inset-0 z-20 bg-white">
+          <div className="absolute inset-0 z-20 bg-white left-[72px]"> {/* Ensure overlaid content also respects sidebar */}
              <QuoteWorkspace onBack={() => setCurrentPage('dashboard')} />
           </div>
         )}
 
         {currentPage === 'dossier' && (
             dossierView === 'dashboard' ? <DossierDashboard onNavigate={setDossierView} /> : (
-                <div className="absolute inset-0 z-20 bg-white">
+                <div className="absolute inset-0 z-20 bg-white left-[72px]">
                     <DossierWorkspace onBack={() => setDossierView('dashboard')} />
                 </div>
             )
@@ -135,9 +130,8 @@ function App() {
 
         {currentPage === 'crm' && (
             crmView === 'list' ? <ClientListPage onNavigate={setCrmView} /> : (
-                <div className="absolute inset-0 z-20 bg-white">
+                <div className="absolute inset-0 z-20 bg-white left-[72px]">
                     <div className="h-full flex flex-col">
-                        {/* CRM Header for Mobile/Navigation */}
                         <div className="bg-white border-b px-4 py-2">
                             <button onClick={() => setCrmView('list')} className="text-xs text-blue-600 hover:underline">← Back to List</button>
                         </div>
@@ -155,7 +149,7 @@ function App() {
 
         {currentPage === 'tariffs' && (
             tariffView === 'dashboard' ? <RateDashboard onNavigate={setTariffView} /> : (
-                <div className="absolute inset-0 z-20 bg-white">
+                <div className="absolute inset-0 z-20 bg-white left-[72px]">
                     <RateWorkspace onBack={() => setTariffView('dashboard')} />
                 </div>
             )
