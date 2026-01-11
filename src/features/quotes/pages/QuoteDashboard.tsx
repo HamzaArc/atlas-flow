@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { 
-  Plus, Search, Filter, MoreHorizontal, 
+  Search, Filter, MoreHorizontal, 
   FileText, Clock, CheckCircle2, 
   ChevronRight, LayoutGrid, Zap, Gauge,
   ArrowUpDown, Trash2, X, Loader2
