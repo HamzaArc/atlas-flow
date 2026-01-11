@@ -221,7 +221,7 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
           
-          <div className="px-6 pt-4 shrink-0">
+          <div className="px-6 pt-4 shrink-0 flex items-center justify-between">
             <TabsList className="inline-flex h-9 items-center justify-center rounded-lg bg-slate-200/50 p-1 text-slate-500">
                 <TabsTrigger value="logistics" className="gap-2 px-4 text-xs font-semibold data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm rounded-md transition-all">
                     <Anchor className="h-3.5 w-3.5" /> Logistics & Cargo
@@ -233,14 +233,16 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
                     <FileText className="h-3.5 w-3.5" /> Summary & Audit
                 </TabsTrigger>
             </TabsList>
+            
+            {activeTab === 'logistics' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <AgentEmailDialog />
+                </div>
+            )}
           </div>
 
-          <TabsContent value="logistics" className="flex-1 p-6 min-h-0 data-[state=inactive]:hidden animate-in fade-in duration-300">
-              <div className="flex justify-end mb-4">
-                  <AgentEmailDialog />
-              </div>
-
-              <div className="h-[calc(100%-40px)] grid grid-cols-12 gap-6 min-h-0 w-full">
+          <TabsContent value="logistics" className="flex-1 p-6 min-h-0 data-[state=inactive]:hidden animate-in fade-in duration-300 pt-4">
+              <div className="h-full grid grid-cols-12 gap-6 min-h-0 w-full">
                   <div className="col-span-12 lg:col-span-4 h-full flex flex-col min-h-0">
                       <div className={modernCardClass}>
                           <RouteSelector />

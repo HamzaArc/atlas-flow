@@ -604,9 +604,6 @@ export function RouteSelector() {
       {/* 2. Scrollable Content */}
       <div className="flex-1 overflow-y-auto p-5 space-y-6">
           
-          {/* Feature: Intelligent Map */}
-          <WorldMap pol={pol} pod={pod} mode={mode} transitTime={transitTime} totalWeight={totalWeight} />
-
           {/* Configuration Group */}
           <div className="bg-slate-50 rounded-lg p-4 border border-slate-100 space-y-5">
               
@@ -804,6 +801,9 @@ export function RouteSelector() {
                   <span className="text-[10px] text-red-600 font-medium">Air Freight requires valid Weight & Volume.</span>
               </div>
           )}
+
+          {/* Feature: Intelligent Map - MOVED TO BOTTOM */}
+          <WorldMap pol={pol} pod={pod} mode={mode} transitTime={transitTime} totalWeight={totalWeight} />
       </div>
 
       {/* 4. Dates Footer */}

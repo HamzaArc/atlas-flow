@@ -19,7 +19,7 @@ export function AgentEmailDialog() {
       totalWeight, totalVolume, chargeableWeight, totalPackages, cargoRows,
       goodsDescription, hsCode, isHazmat, isReefer, temperature, 
       equipmentType, containerCount,
-      cargoReadyDate, requestedDepartureDate,
+      requestedDepartureDate, estimatedArrivalDate,
       addActivity 
   } = useQuoteStore();
 
@@ -36,8 +36,8 @@ export function AgentEmailDialog() {
   // --- GENERATE CONTENT ---
   const generateEmail = (lang: 'EN' | 'FR') => {
       // 1. HEADER DATA
-      const readyDateStr = formatDate(cargoReadyDate);
-      const targetDateStr = requestedDepartureDate ? formatDate(requestedDepartureDate) : (lang === 'EN' ? 'Earliest possible' : 'Dès que possible');
+      const etdStr = formatDate(requestedDepartureDate);
+      const etaStr = formatDate(estimatedArrivalDate);
       
       const routeLine = `${pol || 'Origin'} ➡️ ${pod || 'Destination'}`;
       
@@ -65,7 +65,7 @@ export function AgentEmailDialog() {
 
       // --- ENGLISH TEMPLATE ---
       if (lang === 'EN') {
-        return `Subject: RFQ: ${mode} - ${pol} to ${pod} - Ready ${readyDateStr} - Ref: ${reference}
+        return `Subject: RFQ: ${mode} - ${pol} to ${pod} - ETD ${etdStr} - Ref: ${reference}
 
 Dear Partner,
 
@@ -75,8 +75,8 @@ Please provide your best spot rate availability for the following shipment.
 ------------------------------------------------
 • Mode:           ${mode} (${incoterm})
 • Route:          ${routeLine}
-• Cargo Ready:    ${readyDateStr}
-• Target ETD:     ${targetDateStr}
+• Target ETD:     ${etdStr}
+• Target ETA:     ${etaStr}
 
 📋 CARGO SPECIFICATIONS
 ------------------------------------------------
@@ -105,7 +105,7 @@ Best regards,`;
       
       // --- FRENCH TEMPLATE ---
       else {
-        return `Objet: Demande de Cotation: ${mode} - ${pol} > ${pod} - Prêt ${readyDateStr} - Ref: ${reference}
+        return `Objet: Demande de Cotation: ${mode} - ${pol} > ${pod} - ETD ${etdStr} - Ref: ${reference}
 
 Cher Partenaire,
 
@@ -115,8 +115,8 @@ Merci de nous communiquer votre meilleure offre pour le flux suivant.
 ------------------------------------------------
 • Mode:           ${mode} (${incoterm})
 • Trajet:         ${routeLine}
-• Dispo March.:   ${readyDateStr}
-• ETD Souhaité:   ${targetDateStr}
+• ETD Souhaité:   ${etdStr}
+• ETA Souhaitée:  ${etaStr}
 
 📋 SPECIFICATIONS CARGAISON
 ------------------------------------------------

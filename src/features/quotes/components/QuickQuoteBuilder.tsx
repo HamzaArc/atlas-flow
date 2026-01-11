@@ -278,7 +278,7 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
     // Route
     pol, pod, mode, incoterm, setMode, setIncoterm, setRouteLocations,
     placeOfLoading, placeOfDelivery, // Added these destructures
-    validityDate, cargoReadyDate, requestedDepartureDate, setIdentity,
+    validityDate, requestedDepartureDate, estimatedArrivalDate, setIdentity,
     transitTime, freeTime, setLogisticsParam,
     // Equipment / Cargo
     equipmentList, updateEquipment, addEquipment, removeEquipment,
@@ -341,10 +341,10 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
           ? equipmentList.map(e => `${e.count}x ${e.type}`).join(', ')
           : "LCL / Shared";
 
-      const readyDateStr = cargoReadyDate ? format(new Date(cargoReadyDate), 'dd MMM yyyy') : 'TBD';
-      const etdStr = requestedDepartureDate ? format(new Date(requestedDepartureDate), 'dd MMM yyyy') : 'ASAP';
+      const etdStr = requestedDepartureDate ? format(new Date(requestedDepartureDate), 'dd MMM yyyy') : 'TBD';
+      const etaStr = estimatedArrivalDate ? format(new Date(estimatedArrivalDate), 'dd MMM yyyy') : 'TBD';
       
-      const text = `Subject: RFQ: ${mode} - ${pol.split('(')[0].trim()} to ${pod.split('(')[0].trim()} - Ready ${readyDateStr} - Ref: ${reference}
+      const text = `Subject: RFQ: ${mode} - ${pol.split('(')[0].trim()} to ${pod.split('(')[0].trim()} - ETD ${etdStr} - Ref: ${reference}
 
 Dear Partner,
 
@@ -354,8 +354,8 @@ Please provide your best spot rate availability for the following shipment.
 ------------------------------------------------
 • Mode:           ${mode} (${incoterm})
 • Route:          ${pol} ➡️ ${pod}
-• Cargo Ready:    ${readyDateStr}
 • Target ETD:     ${etdStr}
+• Target ETA:     ${etaStr}
 
 📋 CARGO SPECIFICATIONS
 ------------------------------------------------
@@ -599,18 +599,6 @@ Best regards,`;
                              </Select>
                         </div>
                         <div className="space-y-1.5">
-                             <Label className="text-xs font-semibold text-slate-500">Cargo Ready</Label>
-                             <div className="relative">
-                                <Input 
-                                    type="date" 
-                                    className="h-10 pl-9"
-                                    value={cargoReadyDate ? cargoReadyDate.toString().split('T')[0] : ''}
-                                    onChange={(e) => setIdentity('cargoReadyDate', e.target.value)}
-                                />
-                                <Calendar className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                             </div>
-                        </div>
-                        <div className="space-y-1.5">
                              <Label className="text-xs font-semibold text-slate-500">Target ETD</Label>
                              <div className="relative">
                                 <Input 
@@ -618,6 +606,18 @@ Best regards,`;
                                     className="h-10 pl-9"
                                     value={requestedDepartureDate ? requestedDepartureDate.toString().split('T')[0] : ''}
                                     onChange={(e) => setIdentity('requestedDepartureDate', e.target.value)}
+                                />
+                                <Calendar className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                             </div>
+                        </div>
+                        <div className="space-y-1.5">
+                             <Label className="text-xs font-semibold text-slate-500">Target ETA</Label>
+                             <div className="relative">
+                                <Input 
+                                    type="date" 
+                                    className="h-10 pl-9"
+                                    value={estimatedArrivalDate ? estimatedArrivalDate.toString().split('T')[0] : ''}
+                                    onChange={(e) => setIdentity('estimatedArrivalDate', e.target.value)}
                                 />
                                 <Clock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                              </div>

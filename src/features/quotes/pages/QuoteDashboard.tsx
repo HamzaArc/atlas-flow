@@ -160,10 +160,20 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
       const accepted = quotes.filter(q => q.status === 'ACCEPTED').length;
       const validation = quotes.filter(q => q.status === 'VALIDATION').length;
       
-      const totalValue = quotes.reduce((acc, curr) => acc + (curr.totalTTCTarget || 0), 0);
+      // Helper to robustly get the quote value
+      const getQuoteValue = (quote: any) => {
+        // Prioritize the explicitly stored target value
+        if (quote.totalTTCTarget && quote.totalTTCTarget > 0) return quote.totalTTCTarget;
+        
+        // Fallback to active option logic (same as Table display)
+        const activeOption = quote.options?.find((o: any) => o.id === quote.activeOptionId) || quote.options?.[0];
+        return activeOption?.totalTTC || 0;
+      };
+
+      const totalValue = quotes.reduce((acc, curr) => acc + getQuoteValue(curr), 0);
       const pipelineValue = quotes
           .filter(q => ['DRAFT', 'VALIDATION', 'SENT'].includes(q.status))
-          .reduce((acc, curr) => acc + (curr.totalTTCTarget || 0), 0);
+          .reduce((acc, curr) => acc + getQuoteValue(curr), 0);
           
       const winRate = total > 0 ? Math.round((accepted / total) * 100) : 0;
       
@@ -417,7 +427,7 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/50 p-6 space-y-8 font-sans">
+    <div className="h-full overflow-y-auto bg-slate-50/50 p-6 space-y-8 font-sans">
         
         {/* HEADER & ACTIONS */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
