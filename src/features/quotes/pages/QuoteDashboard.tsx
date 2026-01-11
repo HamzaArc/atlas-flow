@@ -432,7 +432,7 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
         {/* HEADER & ACTIONS */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="space-y-1">
-                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Sales Dashboard</h1>
+                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Quote Dashboard</h1>
                 <p className="text-slate-500 text-sm font-medium">Welcome back. You have <span className="text-blue-600 font-bold">{stats.validation} quotes</span> pending approval.</p>
             </div>
             
