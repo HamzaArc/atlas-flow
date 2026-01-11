@@ -2,51 +2,117 @@ import { useEffect, useState, useMemo } from "react";
 import { 
   Search, Filter, MoreHorizontal, 
   FileText, Clock, CheckCircle2, 
-  ChevronRight, LayoutGrid, Zap, Gauge,
-  ArrowUpDown, Trash2, X, Loader2
+  LayoutGrid, Zap, Gauge,
+  ArrowUpDown, Trash2, X, Loader2,
+  Calendar, ArrowUpRight, User,
+  MapPin, Plane, Ship, Truck, AlertCircle,
+  Layers
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator 
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel 
 } from "@/components/ui/dropdown-menu";
-import { 
-    Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
-} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+
 import { useQuoteStore } from "@/store/useQuoteStore";
-import { format } from "date-fns";
+import { format, differenceInDays, addDays, isValid } from "date-fns";
 import { cn } from "@/lib/utils";
 
-// Types matching original
+// --- TYPES ---
 type PageType = 'dashboard' | 'create';
-type SortField = 'reference' | 'clientName' | 'validityDate' | 'totalTTCTarget';
+type SortField = 'reference' | 'clientName' | 'validityDate' | 'totalTTCTarget' | 'probability';
 type SortOrder = 'asc' | 'desc';
+type TabView = 'ALL' | 'DRAFT' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'EXPIRING' | 'ARCHIVED';
 
-// KPI Component
-const KpiCard = ({ title, value, subtext, icon: Icon, colorClass }: any) => (
-    <Card className="shadow-sm border-slate-200">
+// --- COMPONENTS ---
+
+const KpiCard = ({ title, value, subtext, icon: Icon, colorClass, trend, trendValue, bgClass }: any) => (
+    <Card className="shadow-sm border-slate-200 bg-white relative overflow-hidden group hover:shadow-md transition-all duration-300">
+        <div className={cn("absolute right-0 top-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity", colorClass)}>
+            <Icon className="h-24 w-24 transform translate-x-4 -translate-y-4" />
+        </div>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">{title}</CardTitle>
-            <Icon className={cn("h-4 w-4", colorClass)} />
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-500">{title}</CardTitle>
+            <div className={cn("p-2 rounded-full", bgClass)}>
+                 <Icon className={cn("h-4 w-4", colorClass)} />
+            </div>
         </CardHeader>
         <CardContent>
-            <div className={cn("text-2xl font-bold", colorClass?.replace('text-', 'text-'))}>{value}</div>
-            <p className="text-xs text-slate-400 mt-1">{subtext}</p>
+            <div className="flex items-baseline space-x-2">
+                <div className="text-2xl font-bold text-slate-900">{value}</div>
+                {trend && (
+                    <div className={cn("flex items-center text-xs font-medium", trend === 'up' ? "text-emerald-600" : "text-red-600")}>
+                        {trend === 'up' ? <ArrowUpRight className="h-3 w-3 mr-0.5" /> : <ArrowUpRight className="h-3 w-3 mr-0.5 rotate-180" />}
+                        {trendValue}
+                    </div>
+                )}
+            </div>
+            <p className="text-xs text-slate-400 mt-2 font-medium">{subtext}</p>
         </CardContent>
     </Card>
 );
+
+const ValidityIndicator = ({ date }: { date: Date | string }) => {
+    const target = new Date(date);
+    const today = new Date();
+    const daysLeft = differenceInDays(target, today);
+    const totalDuration = 30; 
+    const progress = Math.max(0, Math.min(100, (daysLeft / totalDuration) * 100));
+    
+    let color = "bg-emerald-500";
+    let textColor = "text-slate-500";
+    let text = `${daysLeft} days`;
+    
+    if (daysLeft < 0) {
+        color = "bg-slate-300";
+        textColor = "text-slate-400";
+        text = "Expired";
+    } else if (daysLeft <= 3) {
+        color = "bg-red-500";
+        textColor = "text-red-600 font-bold";
+        text = `${daysLeft} days left`;
+    } else if (daysLeft <= 7) {
+        color = "bg-amber-500";
+        textColor = "text-amber-600";
+        text = `${daysLeft} days`;
+    }
+
+    return (
+        <div className="w-[90px] flex flex-col gap-1.5">
+             <div className="flex justify-between items-center text-[10px] leading-none">
+                <span className="text-slate-400 font-medium">Valid</span>
+                <span className={cn(textColor)}>{text}</span>
+            </div>
+            <Progress value={progress} className="h-1.5 bg-slate-100" indicatorClassName={color} />
+        </div>
+    );
+};
+
+// Helper for Mode Icons
+const ModeIcon = ({ mode }: { mode: string | undefined }) => {
+    switch(mode) {
+        case 'AIR': return <Plane className="h-3.5 w-3.5 text-sky-500" />;
+        case 'SEA_FCL':
+        case 'SEA_LCL': return <Ship className="h-3.5 w-3.5 text-blue-600" />;
+        case 'ROAD': return <Truck className="h-3.5 w-3.5 text-amber-600" />;
+        default: return <MapPin className="h-3.5 w-3.5 text-slate-400" />;
+    }
+};
 
 export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: PageType) => void }) {
   const { quotes, fetchQuotes, isLoading, createNewQuote, setEditorMode, deleteQuote, loadQuote } = useQuoteStore();
   
   // Local State
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [currentTab, setCurrentTab] = useState<TabView>("ALL");
   const [sortField, setSortField] = useState<SortField>('validityDate');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
@@ -54,7 +120,6 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
     fetchQuotes();
   }, []);
 
-  // --- ACTIONS ---
   const handleQuickEntry = () => {
       createNewQuote();
       setEditorMode('EXPRESS');
@@ -74,7 +139,9 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
       e.stopPropagation();
-      await deleteQuote(id);
+      if(confirm("Are you sure you want to delete this quote?")) {
+          await deleteQuote(id);
+      }
   };
 
   const toggleSort = (field: SortField) => {
@@ -86,32 +153,56 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
       }
   };
 
-  // --- MEMOIZED LOGIC (No Regression) ---
-  
-  // 1. Stats Calculation
   const stats = useMemo(() => {
       const total = quotes.length;
       const draft = quotes.filter(q => q.status === 'DRAFT').length;
+      const sent = quotes.filter(q => q.status === 'SENT').length;
       const accepted = quotes.filter(q => q.status === 'ACCEPTED').length;
       const validation = quotes.filter(q => q.status === 'VALIDATION').length;
-      const pipelineValue = quotes.reduce((acc, curr) => acc + (curr.totalTTCTarget || 0), 0);
+      
+      const totalValue = quotes.reduce((acc, curr) => acc + (curr.totalTTCTarget || 0), 0);
+      const pipelineValue = quotes
+          .filter(q => ['DRAFT', 'VALIDATION', 'SENT'].includes(q.status))
+          .reduce((acc, curr) => acc + (curr.totalTTCTarget || 0), 0);
+          
       const winRate = total > 0 ? Math.round((accepted / total) * 100) : 0;
+      
+      const nextWeek = addDays(new Date(), 7);
+      const expiringSoon = quotes.filter(q => {
+          const vDate = new Date(q.validityDate);
+          return vDate > new Date() && vDate <= nextWeek && q.status !== 'ACCEPTED' && q.status !== 'REJECTED';
+      }).length;
 
-      return { total, draft, accepted, validation, pipelineValue, winRate };
+      return { total, draft, sent, accepted, validation, pipelineValue, totalValue, winRate, expiringSoon };
   }, [quotes]);
 
-  // 2. Filtering & Sorting
   const filteredQuotes = useMemo(() => {
-      // Filter
-      let data = quotes.filter(q => {
-        const matchesSearch = 
-            (q.reference || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (q.clientName || '').toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesStatus = statusFilter === 'ALL' || q.status === statusFilter;
-        return matchesSearch && matchesStatus;
-      });
+      let data = quotes;
 
-      // Sort
+      // TAB FILTERS
+      if (currentTab !== 'ALL') {
+          if (currentTab === 'ARCHIVED') {
+              data = data.filter(q => ['ACCEPTED', 'REJECTED'].includes(q.status));
+          } else if (currentTab === 'EXPIRING') {
+              const nextWeek = addDays(new Date(), 7);
+              data = data.filter(q => {
+                  const vDate = new Date(q.validityDate);
+                  return vDate > new Date() && vDate <= nextWeek && q.status !== 'ACCEPTED' && q.status !== 'REJECTED';
+              });
+          } else {
+              data = data.filter(q => q.status === currentTab);
+          }
+      }
+
+      if (searchTerm) {
+          const lower = searchTerm.toLowerCase();
+          data = data.filter(q => 
+            (q.reference || '').toLowerCase().includes(lower) ||
+            (q.clientName || '').toLowerCase().includes(lower) ||
+            (q.salespersonName || '').toLowerCase().includes(lower)
+          );
+      }
+
       return data.sort((a, b) => {
           const valA = a[sortField];
           const valB = b[sortField];
@@ -133,229 +224,351 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
           if (strA > strB) return sortOrder === 'asc' ? 1 : -1;
           return 0;
       });
-  }, [quotes, searchTerm, statusFilter, sortField, sortOrder]);
+  }, [quotes, searchTerm, currentTab, sortField, sortOrder]);
+
+  // --- RENDER HELPERS ---
+  const renderTableBody = () => {
+    if (isLoading) {
+        return (
+            <TableRow>
+                <TableCell colSpan={9} className="h-48 text-center text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                        <span className="text-sm">Fetching latest opportunities...</span>
+                    </div>
+                </TableCell>
+            </TableRow>
+        );
+    }
+
+    if (filteredQuotes.length === 0) {
+        return (
+            <TableRow>
+                <TableCell colSpan={9} className="h-48 text-center text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                        <div className="p-3 bg-slate-50 rounded-full">
+                            <Filter className="h-6 w-6 text-slate-300" />
+                        </div>
+                        <div>
+                            <p className="font-medium text-slate-600">No quotes found.</p>
+                            <p className="text-xs text-slate-400 mt-1">Try adjusting your filters.</p>
+                        </div>
+                    </div>
+                </TableCell>
+            </TableRow>
+        );
+    }
+
+    return filteredQuotes.map((quote: any) => {
+        // --- DATA RESOLUTION ---
+        // Fallback to active option if top-level quote properties are missing
+        const activeOption = quote.options?.find((o: any) => o.id === quote.activeOptionId) || quote.options?.[0];
+        const optionsCount = quote.options?.length || 0;
+        
+        // 1. Resolve Mode & Incoterm
+        const displayMode = quote.mode || activeOption?.mode || 'N/A';
+        const displayIncoterm = quote.incoterm || activeOption?.incoterm || 'N/A';
+        const displayPOL = quote.pol || activeOption?.pol || '---';
+        const displayPOD = quote.pod || activeOption?.pod || '---';
+
+        // 2. Resolve Financials
+        // If Target TTC is 0, use the Calculated TTC from the active option
+        const ttc = quote.totalTTCTarget || activeOption?.totalTTC || 0;
+
+        // 3. Resolve Dates
+        const reqDepDate = quote.requestedDepartureDate 
+            ? new Date(quote.requestedDepartureDate) 
+            : null;
+
+        return (
+            <TableRow 
+                key={quote.id} 
+                className="group hover:bg-blue-50/30 transition-colors cursor-pointer border-b border-slate-100" 
+                onClick={() => handleEdit(quote.id)}
+            >
+                <TableCell className="pl-6 align-top py-4 w-[160px]">
+                    <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2 font-mono font-bold text-xs text-blue-700">
+                            {quote.reference}
+                        </div>
+                        <Badge className={cn(
+                            "w-fit text-[9px] h-4 px-1 rounded-sm border font-semibold",
+                            quote.status === 'DRAFT' ? "bg-slate-100 text-slate-500 border-slate-200" :
+                            quote.status === 'SENT' ? "bg-blue-50 text-blue-600 border-blue-100" :
+                            quote.status === 'ACCEPTED' ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                            quote.status === 'VALIDATION' ? "bg-amber-50 text-amber-600 border-amber-100" :
+                            "bg-red-50 text-red-600 border-red-100"
+                        )}>
+                            {quote.status}
+                        </Badge>
+                        {quote.version > 1 && <span className="text-[9px] text-slate-400 font-medium">Version {quote.version}</span>}
+                    </div>
+                </TableCell>
+                
+                <TableCell className="align-top py-4 w-[200px]">
+                    <div className="flex items-start gap-3">
+                        <Avatar className="h-8 w-8 border border-slate-100 bg-white shadow-sm mt-1">
+                            <AvatarFallback className="text-[10px] bg-indigo-50 text-indigo-600 font-bold">
+                                {quote.clientName.substring(0,2).toUpperCase()}
+                            </AvatarFallback>
+                        </Avatar>
+                        <div>
+                            <div className="font-bold text-xs text-slate-800 line-clamp-1">{quote.clientName}</div>
+                            <div className="flex items-center gap-1 text-[10px] text-slate-500 mt-0.5">
+                                <User className="h-3 w-3" />
+                                {quote.salespersonName || 'Unassigned'}
+                            </div>
+                        </div>
+                    </div>
+                </TableCell>
+
+                <TableCell className="align-top py-4">
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-xs text-slate-700">
+                            <div className="flex flex-col items-start gap-0.5">
+                                <span className="font-bold text-[10px] text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" /> Origin
+                                </span>
+                                <span className="font-semibold" title={displayPOL}>{displayPOL.split('(')[0]}</span>
+                            </div>
+                            
+                            <div className="flex items-center px-2 pt-3">
+                                <div className="h-px w-6 bg-slate-300"></div>
+                                <div className="p-1 rounded-full bg-slate-100 border border-slate-200 -ml-3 z-10">
+                                    <ModeIcon mode={displayMode} />
+                                </div>
+                            </div>
+                            
+                            <div className="flex flex-col items-start gap-0.5">
+                                <span className="font-bold text-[10px] text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" /> Dest
+                                </span>
+                                <span className="font-semibold" title={displayPOD}>{displayPOD.split('(')[0]}</span>
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <Badge variant="outline" className="text-[9px] h-4 bg-slate-50 text-slate-600 border-slate-200">
+                                {displayMode}
+                            </Badge>
+                            <Badge variant="outline" className="text-[9px] h-4 bg-slate-50 text-slate-600 border-slate-200">
+                                {displayIncoterm}
+                            </Badge>
+                        </div>
+                    </div>
+                </TableCell>
+
+                <TableCell className="align-top py-4">
+                    <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] text-slate-400 font-medium">Req. Departure</span>
+                        <div className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                            <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                            {reqDepDate && isValid(reqDepDate) ? format(reqDepDate, 'dd MMM yyyy') : <span className="text-slate-400">--</span>}
+                        </div>
+                    </div>
+                </TableCell>
+
+                 {/* NEW COLUMN: Options Count */}
+                 <TableCell className="align-top py-4">
+                    <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] text-slate-400 font-medium">Options</span>
+                        <Badge variant="secondary" className="w-fit bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-200 gap-1.5 h-6">
+                            <Layers className="h-3 w-3" />
+                            {optionsCount} {optionsCount === 1 ? 'Option' : 'Options'}
+                        </Badge>
+                    </div>
+                </TableCell>
+
+                <TableCell className="align-top py-4 text-right">
+                    <div className="font-mono text-sm font-bold text-slate-800">
+                        {ttc.toLocaleString(undefined, { minimumFractionDigits: 2 })} <span className="text-xs text-slate-400 font-normal">MAD</span>
+                    </div>
+                </TableCell>
+
+                <TableCell className="align-top py-4">
+                    <ValidityIndicator date={quote.validityDate} />
+                </TableCell>
+
+                <TableCell className="align-middle text-right pr-4">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-all">
+                                <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleEdit(quote.id)} className="cursor-pointer">
+                                <FileText className="h-4 w-4 mr-2" /> Open Quote
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="cursor-pointer">
+                                <Zap className="h-4 w-4 mr-2" /> Duplicate
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="text-red-600 cursor-pointer focus:bg-red-50" onClick={(e) => handleDelete(e, quote.id)}>
+                                <Trash2 className="h-4 w-4 mr-2" /> Delete Quote
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </TableCell>
+            </TableRow>
+        );
+    });
+  };
 
   return (
     <div className="min-h-screen bg-slate-50/50 p-6 space-y-8 font-sans">
         
         {/* HEADER & ACTIONS */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-                <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Quote Management</h1>
-                <p className="text-slate-500 text-sm">Monitor pipeline, approvals, and conversion rates.</p>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-1">
+                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Sales Dashboard</h1>
+                <p className="text-slate-500 text-sm font-medium">Welcome back. You have <span className="text-blue-600 font-bold">{stats.validation} quotes</span> pending approval.</p>
             </div>
             
             <div className="flex items-center gap-3">
-                <Button 
-                    onClick={handleExpertEntry} 
-                    className="bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 shadow-sm transition-all"
-                >
-                    <Gauge className="h-4 w-4 mr-2 text-slate-500" />
-                    Expert Entry
-                </Button>
-                
+                 <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="bg-white text-slate-700 border-slate-200 shadow-sm">
+                            <Gauge className="h-4 w-4 mr-2 text-slate-500" />
+                            Advanced
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuLabel>Create Options</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={handleExpertEntry}>
+                            <Gauge className="h-4 w-4 mr-2" /> Expert Mode (Full)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem disabled>
+                            <FileText className="h-4 w-4 mr-2" /> From Template (Soon)
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+
                 <Button 
                     onClick={handleQuickEntry} 
-                    className="bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-200 transition-all"
+                    className="bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-200/50 transition-all h-10 px-6"
                 >
-                    <Zap className="h-4 w-4 mr-2" />
-                    Quick Quote
+                    <Zap className="h-4 w-4 mr-2 fill-current" />
+                    New Quote
                 </Button>
             </div>
         </div>
 
         {/* KPI GRID */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
             <KpiCard 
-                title="Total Pipeline" 
-                value={stats.total} 
-                subtext="Active quotations" 
+                title="Active Pipeline" 
+                value={stats.pipelineValue > 1000000 ? `${(stats.pipelineValue / 1000000).toFixed(2)}M` : `${(stats.pipelineValue / 1000).toFixed(0)}k`} 
+                subtext={`${stats.draft + stats.validation + stats.sent} active deals`} 
                 icon={LayoutGrid} 
-                colorClass="text-blue-600" 
+                colorClass="text-blue-600"
+                bgClass="bg-blue-50"
+                trend="up"
+                trendValue="+12%"
             />
             <KpiCard 
                 title="Pending Approval" 
                 value={stats.validation} 
-                subtext="Needs validation" 
+                subtext="Requires manager review" 
                 icon={FileText} 
-                colorClass="text-amber-500" 
+                colorClass="text-amber-500"
+                bgClass="bg-amber-50" 
+                trend={stats.validation > 3 ? "down" : "up"}
+                trendValue="Action Needed"
+            />
+            <KpiCard 
+                title="Expiring Soon" 
+                value={stats.expiringSoon} 
+                subtext="Within next 7 days" 
+                icon={Clock} 
+                colorClass="text-red-500"
+                bgClass="bg-red-50"
+                trend="down"
+                trendValue="Critical"
             />
              <KpiCard 
                 title="Win Ratio" 
                 value={`${stats.winRate}%`} 
-                subtext="Conversion rate" 
+                subtext="Trailing 30 days" 
                 icon={CheckCircle2} 
-                colorClass="text-emerald-600" 
+                colorClass="text-emerald-600"
+                bgClass="bg-emerald-50"
+                trend="up"
+                trendValue="+2.4%"
             />
-            <Card className="shadow-sm border-slate-200 bg-blue-50/50">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-blue-700">Value (Est)</CardTitle>
-                    <span className="font-bold text-blue-700">MAD</span>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-blue-900">
-                        {(stats.pipelineValue / 1000).toFixed(1)}k
+        </div>
+
+        {/* MAIN CONTENT AREA */}
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+            
+            <Tabs defaultValue="ALL" onValueChange={(v) => setCurrentTab(v as TabView)} className="w-full">
+                
+                {/* TOOLBAR */}
+                <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/30">
+                    <TabsList className="bg-slate-100 p-1 rounded-lg h-9">
+                        <TabsTrigger value="ALL" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm">All Quotes</TabsTrigger>
+                        <TabsTrigger value="DRAFT" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm">Drafts</TabsTrigger>
+                        <TabsTrigger value="VALIDATION" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                            In Review
+                            {stats.validation > 0 && <span className="ml-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-100 text-[9px] font-bold text-amber-600">{stats.validation}</span>}
+                        </TabsTrigger>
+                        <TabsTrigger value="SENT" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm">Sent</TabsTrigger>
+                        <TabsTrigger value="EXPIRING" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                            <span className="flex items-center gap-1.5">
+                                Expiring
+                                {stats.expiringSoon > 0 && <AlertCircle className="h-3 w-3 text-red-500" />}
+                            </span>
+                        </TabsTrigger>
+                        <TabsTrigger value="ARCHIVED" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm">History (Won/Lost)</TabsTrigger>
+                    </TabsList>
+
+                    <div className="relative w-full sm:max-w-xs">
+                         <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                         <Input 
+                            placeholder="Filter by ref, client or rep..." 
+                            className="pl-9 bg-white border-slate-200 h-9 text-xs focus:ring-blue-100 transition-all"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                         />
+                         {searchTerm && (
+                             <button onClick={() => setSearchTerm('')} className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600">
+                                 <X className="h-4 w-4" />
+                             </button>
+                         )}
                     </div>
-                    <p className="text-xs text-blue-600/60 mt-1">Total TTC Volume</p>
-                </CardContent>
-            </Card>
-        </div>
+                </div>
 
-        {/* TOOLBAR */}
-        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-             <div className="relative flex-1 w-full sm:max-w-sm">
-                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                 <Input 
-                    placeholder="Search reference or client..." 
-                    className="pl-9 bg-slate-50 border-slate-200 focus:bg-white transition-all"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                 />
-                 {searchTerm && (
-                     <button onClick={() => setSearchTerm('')} className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600">
-                         <X className="h-4 w-4" />
-                     </button>
-                 )}
-            </div>
-            <div className="flex gap-2 w-full sm:w-auto">
-                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[180px] bg-white border-slate-200">
-                        <Filter className="h-3.5 w-3.5 mr-2 text-slate-500" />
-                        <SelectValue placeholder="Filter Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="ALL">All Statuses</SelectItem>
-                        <SelectItem value="DRAFT">Draft</SelectItem>
-                        <SelectItem value="VALIDATION">Validation</SelectItem>
-                        <SelectItem value="SENT">Sent</SelectItem>
-                        <SelectItem value="ACCEPTED">Accepted</SelectItem>
-                        <SelectItem value="REJECTED">Rejected</SelectItem>
-                    </SelectContent>
-                 </Select>
-            </div>
-        </div>
-
-        {/* QUOTE LIST TABLE */}
-        <Card className="border-slate-200 shadow-sm overflow-hidden">
-            <Table>
-                <TableHeader className="bg-slate-50/80">
-                    <TableRow className="hover:bg-transparent">
-                        <TableHead className="w-[150px] font-bold text-xs uppercase text-slate-500 cursor-pointer" onClick={() => toggleSort('reference')}>
-                            <div className="flex items-center gap-1">
-                                Reference {sortField === 'reference' && <ArrowUpDown className="h-3 w-3" />}
-                            </div>
-                        </TableHead>
-                        <TableHead className="font-bold text-xs uppercase text-slate-500 cursor-pointer" onClick={() => toggleSort('clientName')}>
-                             <div className="flex items-center gap-1">
-                                Client {sortField === 'clientName' && <ArrowUpDown className="h-3 w-3" />}
-                            </div>
-                        </TableHead>
-                        <TableHead className="font-bold text-xs uppercase text-slate-500">Route</TableHead>
-                        <TableHead className="font-bold text-xs uppercase text-slate-500">Mode</TableHead>
-                        <TableHead className="font-bold text-xs uppercase text-slate-500 text-right cursor-pointer" onClick={() => toggleSort('totalTTCTarget')}>
-                             <div className="flex items-center justify-end gap-1">
-                                Value (TTC) {sortField === 'totalTTCTarget' && <ArrowUpDown className="h-3 w-3" />}
-                            </div>
-                        </TableHead>
-                        <TableHead className="font-bold text-xs uppercase text-slate-500 text-center">Status</TableHead>
-                        <TableHead className="font-bold text-xs uppercase text-slate-500 text-right cursor-pointer" onClick={() => toggleSort('validityDate')}>
-                             <div className="flex items-center justify-end gap-1">
-                                Valid Until {sortField === 'validityDate' && <ArrowUpDown className="h-3 w-3" />}
-                            </div>
-                        </TableHead>
-                        <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {isLoading ? (
-                         <TableRow>
-                            <TableCell colSpan={8} className="h-32 text-center text-slate-400">
-                                <div className="flex flex-col items-center justify-center gap-2">
-                                    <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
-                                    <span>Loading quotes...</span>
-                                </div>
-                            </TableCell>
-                         </TableRow>
-                    ) : filteredQuotes.length === 0 ? (
-                        <TableRow>
-                            <TableCell colSpan={8} className="h-32 text-center text-slate-400">
-                                <div className="flex flex-col items-center justify-center gap-2">
-                                    <FileText className="h-8 w-8 opacity-20" />
-                                    <p>No quotes found matching your filters.</p>
-                                    <Button variant="link" size="sm" onClick={() => {setSearchTerm(''); setStatusFilter('ALL');}}>Clear Filters</Button>
-                                </div>
-                            </TableCell>
-                        </TableRow>
-                    ) : (
-                        filteredQuotes.map((quote) => (
-                            <TableRow key={quote.id} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => handleEdit(quote.id)}>
-                                <TableCell className="font-mono font-medium text-xs text-blue-600">
-                                    <div className="flex items-center gap-2">
-                                        {quote.reference}
-                                        {quote.version > 1 && <span className="text-[9px] text-slate-400 bg-slate-100 px-1 rounded">v{quote.version}</span>}
-                                    </div>
-                                </TableCell>
-                                <TableCell>
-                                    <div className="font-medium text-xs text-slate-700">{quote.clientName}</div>
-                                    <div className="text-[10px] text-slate-400">{quote.salespersonName || 'Unassigned'}</div>
-                                </TableCell>
-                                <TableCell>
-                                    <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                                        <span className="max-w-[80px] truncate font-semibold" title={quote.pol}>{quote.pol?.split('(')[0]}</span>
-                                        <ChevronRight className="h-3 w-3 text-slate-300" />
-                                        <span className="max-w-[80px] truncate font-semibold" title={quote.pod}>{quote.pod?.split('(')[0]}</span>
-                                    </div>
-                                </TableCell>
-                                <TableCell>
-                                    <Badge variant="outline" className="text-[10px] h-5 bg-white border-slate-200 text-slate-600">
-                                        {quote.mode}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell className="text-right font-mono text-xs font-bold text-slate-700">
-                                    {quote.totalTTCTarget?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                    <Badge className={cn(
-                                        "text-[9px] h-5 w-20 justify-center",
-                                        quote.status === 'DRAFT' ? "bg-slate-100 text-slate-600 hover:bg-slate-200 border-slate-200" :
-                                        quote.status === 'SENT' ? "bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200" :
-                                        quote.status === 'ACCEPTED' ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200" :
-                                        quote.status === 'VALIDATION' ? "bg-amber-100 text-amber-700 hover:bg-amber-200 border-amber-200" :
-                                        "bg-red-50 text-red-600 border-red-200"
-                                    )}>
-                                        {quote.status}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell className="text-right text-xs text-slate-500 font-mono">
-                                    <div className="flex items-center justify-end gap-1">
-                                        <Clock className="h-3 w-3 text-slate-300" />
-                                        {format(new Date(quote.validityDate), 'dd MMM yyyy')}
-                                    </div>
-                                </TableCell>
-                                <TableCell>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                            <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-slate-600">
-                                                <MoreHorizontal className="h-3.5 w-3.5" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuItem onClick={() => handleEdit(quote.id)}>Edit Quote</DropdownMenuItem>
-                                            <DropdownMenuItem>Duplicate</DropdownMenuItem>
-                                            <DropdownMenuItem>Download PDF</DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem className="text-red-600" onClick={(e) => handleDelete(e, quote.id)}>
-                                                <Trash2 className="h-3 w-3 mr-2" /> Delete
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </TableCell>
+                {/* TABLE */}
+                <TabsContent value={currentTab} className="m-0">
+                    <Table>
+                        <TableHeader className="bg-slate-50 border-b border-slate-200">
+                            <TableRow className="hover:bg-transparent">
+                                <TableHead className="w-[160px] font-bold text-[11px] uppercase text-slate-500 cursor-pointer pl-6 h-10" onClick={() => toggleSort('reference')}>
+                                    <div className="flex items-center gap-1">Reference {sortField === 'reference' && <ArrowUpDown className="h-3 w-3" />}</div>
+                                </TableHead>
+                                <TableHead className="w-[200px] font-bold text-[11px] uppercase text-slate-500 cursor-pointer h-10" onClick={() => toggleSort('clientName')}>
+                                     <div className="flex items-center gap-1">Customer & Rep {sortField === 'clientName' && <ArrowUpDown className="h-3 w-3" />}</div>
+                                </TableHead>
+                                <TableHead className="font-bold text-[11px] uppercase text-slate-500 h-10">Route Details</TableHead>
+                                <TableHead className="font-bold text-[11px] uppercase text-slate-500 h-10">Req. Dep</TableHead>
+                                <TableHead className="font-bold text-[11px] uppercase text-slate-500 h-10">Options</TableHead>
+                                
+                                <TableHead className="font-bold text-[11px] uppercase text-slate-500 text-right cursor-pointer h-10" onClick={() => toggleSort('totalTTCTarget')}>
+                                     <div className="flex items-center justify-end gap-1">Value (TTC) {sortField === 'totalTTCTarget' && <ArrowUpDown className="h-3 w-3" />}</div>
+                                </TableHead>
+                                <TableHead className="font-bold text-[11px] uppercase text-slate-500 h-10 pl-4">Validity</TableHead>
+                                <TableHead className="w-[50px] h-10"></TableHead>
                             </TableRow>
-                        ))
-                    )}
-                </TableBody>
-            </Table>
-        </Card>
+                        </TableHeader>
+                        <TableBody>
+                            {renderTableBody()}
+                        </TableBody>
+                    </Table>
+                </TabsContent>
+            </Tabs>
+        </div>
     </div>
   );
 }
