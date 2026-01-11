@@ -34,6 +34,7 @@ interface QuoteState {
   isLoading: boolean;
 
   // --- EDITOR STATE ---
+  editorMode: 'EXPRESS' | 'EXPERT'; // NEW: Toggle between quick and detailed views
   id: string;
   reference: string;
   masterReference: string; 
@@ -122,6 +123,7 @@ interface QuoteState {
   hasExpiredRates: boolean;
 
   // --- ACTIONS ---
+  setEditorMode: (mode: 'EXPRESS' | 'EXPERT') => void; // NEW Action
   setIdentity: (field: string, value: any) => void;
   setClientSnapshot: (data: ClientSnapshotData) => void;
   setStatus: (status: QuoteState['status']) => void;
@@ -231,6 +233,7 @@ const createDefaultOption = (quoteId: string, mode: TransportMode = 'SEA_LCL'): 
 };
 
 const DEFAULT_STATE = {
+  editorMode: 'EXPRESS' as const, // Default to Express mode for new quotes
   id: 'new',
   reference: 'Q-24-DRAFT',
   masterReference: 'Q-24-DRAFT',
@@ -323,6 +326,8 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   quotes: [],
   isLoading: false,
   ...DEFAULT_STATE,
+
+  setEditorMode: (mode) => set({ editorMode: mode }),
 
   createNewQuote: () => {
     const randomRef = `Q-24-${Math.floor(Math.random() * 10000)}`;
@@ -1186,6 +1191,9 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               activeOptionId: activeOptId || '', 
               
               equipmentList: activeOpt?.equipmentList || [],
+              
+              // NEW: Default loaded quotes to EXPERT view if they are complex, otherwise EXPRESS
+              editorMode: 'EXPERT'
           });
 
           if (activeOptId) {
