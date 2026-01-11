@@ -1,17 +1,21 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { 
   MapPin, Package, Container, 
   Plane, Truck, ArrowRight, 
   Wand2, Scale,
   Box, X,
-  Plus, AlertCircle, FileOutput, DollarSign, Zap, MoreHorizontal
+  Plus, AlertCircle, FileOutput, DollarSign, Zap, MoreHorizontal, Mail, Copy, Clock, Calendar
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea"; // Ensure this component exists or use <textarea>
 import { 
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from "@/components/ui/select";
+import { 
+    Dialog, DialogContent, DialogHeader, DialogTitle 
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { SmartPortSelector } from "./RouteSelector";
 import { useQuoteStore } from "@/store/useQuoteStore";
@@ -20,6 +24,7 @@ import { useTariffStore } from "@/store/useTariffStore";
 import { cn } from "@/lib/utils";
 import { TransportMode, Incoterm, Currency } from "@/types/index";
 import { useToast } from "@/components/ui/use-toast";
+import { format } from "date-fns";
 
 // Helper for Mode Buttons
 const ModeButton = ({ 
@@ -74,14 +79,14 @@ interface QuickQuoteBuilderProps {
 export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
   const { 
     // Identity
-    clientName, setClientSnapshot,
+    reference, clientName, setClientSnapshot,
     // Route
     pol, pod, mode, incoterm, setMode, setIncoterm, setRouteLocations,
-    validityDate,
+    validityDate, cargoReadyDate, requestedDepartureDate, setIdentity,
     // Equipment / Cargo
     equipmentList, updateEquipment, addEquipment, removeEquipment,
-    cargoRows, updateCargo,
-    totalVolume, chargeableWeight, densityRatio,
+    cargoRows, updateCargo, goodsDescription, isHazmat, isReefer,
+    totalVolume, chargeableWeight, densityRatio, totalWeight, totalPackages,
     // Pricing
     items, addLineItem, updateLineItem, removeLineItem, initializeSmartLines,
     totalSellTarget, totalTTCTarget, quoteCurrency, totalMarginMAD, totalSellMAD
@@ -90,6 +95,8 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
   const { clients, fetchClients } = useClientStore();
   const { fetchRates } = useTariffStore();
   const { toast } = useToast();
+  const [rfqText, setRfqText] = useState("");
+  const [isRfqOpen, setIsRfqOpen] = useState(false);
 
   useEffect(() => {
     if (clients.length === 0) fetchClients();
@@ -103,9 +110,6 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
         toast("Missing Route Information", "error");
         return;
     }
-    
-    // Logic similar to PricingTable auto-apply
-    // We just trigger the Smart Init to re-run based on current route
     initializeSmartLines();
     toast("Auto-Rate Request triggered based on Route & Client.", "success");
   };
@@ -119,8 +123,62 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
       });
   };
 
+  const generateAgentRFQ = () => {
+      const equipString = equipmentList && equipmentList.length > 0
+          ? equipmentList.map(e => `${e.count}x ${e.type}`).join(', ')
+          : "LCL / Shared";
+
+      const readyDateStr = cargoReadyDate ? format(new Date(cargoReadyDate), 'dd MMM yyyy') : 'TBD';
+      const etdStr = requestedDepartureDate ? format(new Date(requestedDepartureDate), 'dd MMM yyyy') : 'ASAP';
+      
+      const text = `Subject: RFQ: ${mode} - ${pol.split('(')[0].trim()} to ${pod.split('(')[0].trim()} - Ready ${readyDateStr} - Ref: ${reference}
+
+Dear Partner,
+
+Please provide your best spot rate availability for the following shipment.
+
+📦 SHIPMENT DETAILS
+------------------------------------------------
+• Mode:           ${mode} (${incoterm})
+• Route:          ${pol} ➡️ ${pod}
+• Cargo Ready:    ${readyDateStr}
+• Target ETD:     ${etdStr}
+
+📋 CARGO SPECIFICATIONS
+------------------------------------------------
+• Commodity:      ${goodsDescription || 'General Cargo'}
+• Equipment:      ${equipString}
+• Packages:       ${totalPackages || 0} Pkgs
+• Gross Weight:   ${totalWeight || 0} kg
+• Chargeable Wgt: ${chargeableWeight || 0} kg
+• Volume:         ${totalVolume || 0} m3
+• Special:        ${isHazmat ? 'HAZMAT' : 'Non-Hazardous'} | ${isReefer ? 'REEFER' : 'Ambient / General'}
+
+📏 DIMENSIONS
+------------------------------------------------
+   (See Packing List)
+
+Please advise:
+1. All-in freight charges (Air/Sea)
+2. Local charges at origin/destination (if applicable)
+3. Estimated Transit Time & Frequency
+4. Validity of the offer
+
+Looking forward to your swift offer.
+
+Best regards,`;
+      
+      setRfqText(text);
+      setIsRfqOpen(true);
+  };
+
+  const handleCopyRFQ = () => {
+      navigator.clipboard.writeText(rfqText);
+      toast("RFQ text copied to clipboard!", "success");
+  };
+
   // Logic to determine inputs based on mode
-  const isFCL = mode === 'SEA_FCL' || mode === 'ROAD'; // Treat ROAD like FTL/FCL for simplicity in UI, or split if needed
+  const isFCL = mode === 'SEA_FCL' || mode === 'ROAD'; 
   
   // Calculate Margin %
   const marginPercent = totalSellMAD > 0 ? ((totalMarginMAD / totalSellMAD) * 100).toFixed(1) : "0.0";
@@ -142,12 +200,22 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
           <div className="flex gap-3">
              <Button 
                 variant="outline" 
+                onClick={generateAgentRFQ}
+                className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800"
+             >
+                 <Mail className="h-4 w-4 mr-2" />
+                 Agent Request
+             </Button>
+
+             <Button 
+                variant="outline" 
                 onClick={handleRequestRates}
                 className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
              >
                  <Zap className="h-4 w-4 mr-2" />
-                 Auto-Request Rates
+                 Auto-Rate
              </Button>
+             
              <Button onClick={onGeneratePDF} className="bg-slate-900 text-white hover:bg-slate-800">
                  <FileOutput className="h-4 w-4 mr-2" />
                  Preview Quote
@@ -182,13 +250,17 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
                                 value={clientName} 
                                 onValueChange={(val) => {
                                     const c = clients.find(cl => cl.entityName === val);
-                                    if(c) setClientSnapshot({ 
-                                        id: c.id, 
-                                        name: c.entityName, 
-                                        terms: c.financials.paymentTerms,
-                                        taxId: c.financials.taxId,
-                                        ice: c.financials.ice
-                                    });
+                                    if(c) {
+                                        setClientSnapshot({ 
+                                            id: c.id, 
+                                            name: c.entityName, 
+                                            terms: c.financials.paymentTerms,
+                                            taxId: c.financials.taxId,
+                                            ice: c.financials.ice,
+                                            salespersonId: c.salesRepId, 
+                                            salespersonName: "Assigned Rep" // Or lookup if available
+                                        });
+                                    }
                                 }}
                             >
                                 <SelectTrigger className={cn("h-10 bg-slate-50", !clientName && "border-red-300 ring-2 ring-red-50")}>
@@ -205,7 +277,7 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
                             <Label className="text-xs font-semibold text-slate-500">Reference</Label>
                             <Input 
                                 disabled 
-                                value="AUTO-GENERATED" 
+                                value={reference} 
                                 className="h-10 bg-slate-50 text-slate-400 font-mono text-xs" 
                             />
                         </div>
@@ -244,18 +316,45 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
                          </div>
                     </div>
                     
-                    <div className="space-y-1.5">
-                         <Label className="text-xs font-semibold text-slate-500">Incoterm</Label>
-                         <Select value={incoterm} onValueChange={(v: Incoterm) => setIncoterm(v)}>
-                            <SelectTrigger className="h-10">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {INCOTERMS.map(t => (
-                                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                                ))}
-                            </SelectContent>
-                         </Select>
+                    {/* DATES & INCOTERM */}
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className="space-y-1.5">
+                             <Label className="text-xs font-semibold text-slate-500">Incoterm</Label>
+                             <Select value={incoterm} onValueChange={(v: Incoterm) => setIncoterm(v)}>
+                                <SelectTrigger className="h-10">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {INCOTERMS.map(t => (
+                                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                             </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                             <Label className="text-xs font-semibold text-slate-500">Cargo Ready</Label>
+                             <div className="relative">
+                                <Input 
+                                    type="date" 
+                                    className="h-10 pl-9"
+                                    value={cargoReadyDate ? cargoReadyDate.toString().split('T')[0] : ''}
+                                    onChange={(e) => setIdentity('cargoReadyDate', e.target.value)}
+                                />
+                                <Calendar className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                             </div>
+                        </div>
+                        <div className="space-y-1.5">
+                             <Label className="text-xs font-semibold text-slate-500">Target ETD</Label>
+                             <div className="relative">
+                                <Input 
+                                    type="date" 
+                                    className="h-10 pl-9"
+                                    value={requestedDepartureDate ? requestedDepartureDate.toString().split('T')[0] : ''}
+                                    onChange={(e) => setIdentity('requestedDepartureDate', e.target.value)}
+                                />
+                                <Clock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                             </div>
+                        </div>
                     </div>
                 </div>
               </section>
@@ -278,7 +377,19 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
                     )}
                 </div>
 
-                <div className="p-6">
+                <div className="p-6 space-y-4">
+                    
+                    {/* GOODS DESC */}
+                    <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-slate-500">Commodity (Description)</Label>
+                        <Input 
+                            value={goodsDescription} 
+                            onChange={(e) => setIdentity('goodsDescription', e.target.value)}
+                            placeholder="E.g. Auto parts, Textiles, General Cargo..."
+                            className="h-10 bg-slate-50"
+                        />
+                    </div>
+
                     {isFCL ? (
                         <div className="space-y-3">
                             {equipmentList.map((eq, idx) => (
@@ -516,6 +627,35 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
               )}
 
           </div>
+
+          {/* AGENT RFQ DIALOG */}
+          <Dialog open={isRfqOpen} onOpenChange={setIsRfqOpen}>
+              <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                          <Mail className="h-5 w-5 text-indigo-600" />
+                          Agent Rate Request (RFQ)
+                      </DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                      <p className="text-sm text-slate-500">
+                          Review and copy the professional RFQ text below to send to your agent network.
+                      </p>
+                      <Textarea 
+                          value={rfqText} 
+                          readOnly 
+                          className="h-80 font-mono text-xs bg-slate-50 border-slate-200" 
+                      />
+                      <div className="flex justify-end gap-2">
+                          <Button variant="outline" onClick={() => setIsRfqOpen(false)}>Close</Button>
+                          <Button onClick={handleCopyRFQ} className="bg-indigo-600 hover:bg-indigo-700">
+                              <Copy className="h-4 w-4 mr-2" />
+                              Copy to Clipboard
+                          </Button>
+                      </div>
+                  </div>
+              </DialogContent>
+          </Dialog>
       </div>
       
       <div className="h-12" />

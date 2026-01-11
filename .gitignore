@@ -9,11 +9,13 @@ lerna-debug.log*
 
 node_modules
 dist
+build
 dist-ssr
 *.local
 
 # Environment Variables (CRITICAL SECURITY)
 .env
+.env.local
 .env.development
 .env.test
 .env.production
@@ -22,7 +24,7 @@ dist-ssr
 .vscode/*
 !.vscode/extensions.json
 .idea
-.DS_Store
+
 *.suo
 *.ntvs*
 *.njsproj

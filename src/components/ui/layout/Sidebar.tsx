@@ -8,7 +8,6 @@ import {
   Briefcase,
   LogOut,
   ChevronRight,
-  ChevronLeft,
   Box,
   Banknote,
   UserCog,
