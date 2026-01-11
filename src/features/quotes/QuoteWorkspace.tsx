@@ -13,7 +13,7 @@ import { QuoteComparison } from "./components/QuoteComparison";
 import { QuoteSummaryTab } from "./components/QuoteSummaryTab";
 import { QuotePDF } from './components/QuotePDF';
 import { AgentEmailDialog } from "./components/AgentEmailDialog";
-import { QuickQuoteBuilder } from "./components/QuickQuoteBuilder"; // NEW IMPORT
+import { QuickQuoteBuilder } from "./components/QuickQuoteBuilder"; 
 
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { pdf } from '@react-pdf/renderer';
@@ -43,7 +43,7 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
       reference, clientName, validityDate, pol, pod, mode, incoterm,
       totalWeight, totalVolume, exchangeRates, setExchangeRate,
       // Cargo
-      cargoRows, // IMPORTED FROM STORE
+      cargoRows, 
       // Workflow
       hasExpiredRates,
       // Options
@@ -59,7 +59,7 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
   const marginPercent = totalSellMAD > 0 ? ((totalMarginMAD / totalSellMAD) * 100).toFixed(1) : "0.0";
   const isCriticalMode = mode === 'AIR' || mode === 'SEA_LCL';
 
-  // --- PDF GENERATION (UPDATED) ---
+  // --- PDF GENERATION ---
   const handleGeneratePDF = async () => {
     const newWindow = window.open('', '_blank');
     if (!newWindow) {
@@ -215,7 +215,8 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
       {/* --- CONTENT AREA --- */}
       {editorMode === 'EXPRESS' ? (
         <div className="flex-1 overflow-y-auto bg-slate-50/50">
-            <QuickQuoteBuilder />
+            {/* Pass handlers to QuickQuoteBuilder */}
+            <QuickQuoteBuilder onGeneratePDF={handleGeneratePDF} />
         </div>
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
