@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { 
-  MapPin, Package, Container, 
-  Plane, Truck, ArrowRight, 
-  Wand2, Scale,
-  Box, X,
-  Plus, AlertCircle, FileOutput, DollarSign, Zap, MoreHorizontal, Mail, Copy, Clock, Calendar
+   MapPin, Package, Container, 
+  Plane,  Truck, ArrowRight, 
+  Wand2, Calendar, 
+  Box,  
+  Plus, Trash2, Clock, Anchor,
+  Mail, Copy, FileOutput, Zap, DollarSign, X, AlertCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea"; // Ensure this component exists or use <textarea>
+import { Textarea } from "@/components/ui/textarea";
 import { 
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from "@/components/ui/select";
@@ -22,7 +23,7 @@ import { useQuoteStore } from "@/store/useQuoteStore";
 import { useClientStore } from "@/store/useClientStore"; 
 import { useTariffStore } from "@/store/useTariffStore";
 import { cn } from "@/lib/utils";
-import { TransportMode, Incoterm, Currency } from "@/types/index";
+import { TransportMode, Incoterm, PackagingType, Currency } from "@/types/index";
 import { useToast } from "@/components/ui/use-toast";
 import { format } from "date-fns";
 
@@ -67,7 +68,7 @@ const ModeButton = ({
   );
 };
 
-// Full Incoterm List per Type Definition
+// Full Incoterm List
 const INCOTERMS: Incoterm[] = [
     'EXW', 'FCA', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP', 'FAS', 'FOB', 'CFR', 'CIF'
 ];
@@ -83,10 +84,11 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
     // Route
     pol, pod, mode, incoterm, setMode, setIncoterm, setRouteLocations,
     validityDate, cargoReadyDate, requestedDepartureDate, setIdentity,
+    transitTime, freeTime, setLogisticsParam,
     // Equipment / Cargo
     equipmentList, updateEquipment, addEquipment, removeEquipment,
     cargoRows, updateCargo, goodsDescription, isHazmat, isReefer,
-    totalVolume, chargeableWeight, densityRatio, totalWeight, totalPackages,
+    totalVolume, chargeableWeight, totalWeight, totalPackages,
     // Pricing
     items, addLineItem, updateLineItem, removeLineItem, initializeSmartLines,
     totalSellTarget, totalTTCTarget, quoteCurrency, totalMarginMAD, totalSellMAD
@@ -95,13 +97,20 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
   const { clients, fetchClients } = useClientStore();
   const { fetchRates } = useTariffStore();
   const { toast } = useToast();
+  
+  // Local State for RFQ Dialog
   const [rfqText, setRfqText] = useState("");
   const [isRfqOpen, setIsRfqOpen] = useState(false);
 
   useEffect(() => {
     if (clients.length === 0) fetchClients();
-    fetchRates(); // Pre-fetch tariffs for auto-rating
+    fetchRates(); 
   }, []);
+
+  // -- LOGIC HELPERS --
+  const isFCL = mode === 'SEA_FCL' || mode === 'ROAD'; 
+  const showFreeTime = mode === 'SEA_FCL' || mode === 'SEA_LCL';
+  const marginPercent = totalSellMAD > 0 ? ((totalMarginMAD / totalSellMAD) * 100).toFixed(1) : "0.0";
 
   // -- HANDLERS --
 
@@ -123,6 +132,7 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
       });
   };
 
+  // Agent RFQ Generator (Preserved Feature)
   const generateAgentRFQ = () => {
       const equipString = equipmentList && equipmentList.length > 0
           ? equipmentList.map(e => `${e.count}x ${e.type}`).join(', ')
@@ -156,7 +166,7 @@ Please provide your best spot rate availability for the following shipment.
 
 📏 DIMENSIONS
 ------------------------------------------------
-   (See Packing List)
+${cargoRows.map(r => `   - ${r.qty}x ${r.pkgType} (${r.length}x${r.width}x${r.height}cm) - ${r.weight}kg`).join('\n')}
 
 Please advise:
 1. All-in freight charges (Air/Sea)
@@ -177,11 +187,36 @@ Best regards,`;
       toast("RFQ text copied to clipboard!", "success");
   };
 
-  // Logic to determine inputs based on mode
-  const isFCL = mode === 'SEA_FCL' || mode === 'ROAD'; 
-  
-  // Calculate Margin %
-  const marginPercent = totalSellMAD > 0 ? ((totalMarginMAD / totalSellMAD) * 100).toFixed(1) : "0.0";
+  // Cargo Row Management (Expert Mode Parity)
+  const addCargoRow = () => {
+      const newRow = {
+          id: Math.random().toString(36).substring(7),
+          qty: 1,
+          pkgType: 'PALLETS' as PackagingType,
+          length: 120,
+          width: 80,
+          height: 100,
+          weight: 100,
+          isStackable: true
+      };
+      updateCargo([...cargoRows, newRow]);
+  };
+
+  const removeCargoRow = (id: string) => {
+      if (cargoRows.length <= 1) return;
+      const newRows = cargoRows.filter(r => r.id !== id);
+      updateCargo(newRows);
+  };
+
+  const updateCargoRow = (id: string, field: string, value: any) => {
+      const newRows = cargoRows.map(r => {
+          if (r.id === id) {
+              return { ...r, [field]: value };
+          }
+          return r;
+      });
+      updateCargo(newRows);
+  };
 
   return (
     <div className="w-full max-w-[1600px] mx-auto p-6 animate-in slide-in-from-bottom-2 duration-500">
@@ -258,7 +293,7 @@ Best regards,`;
                                             taxId: c.financials.taxId,
                                             ice: c.financials.ice,
                                             salespersonId: c.salesRepId, 
-                                            salespersonName: "Assigned Rep" // Or lookup if available
+                                            salespersonName: "Assigned Rep"
                                         });
                                     }
                                 }}
@@ -356,6 +391,35 @@ Best regards,`;
                              </div>
                         </div>
                     </div>
+
+                    {/* LOGISTICS PARAMETERS (New Feature) */}
+                    <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                        <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold text-slate-500">Est. Transit (Days)</Label>
+                            <div className="relative">
+                                <Input 
+                                    type="number" className="h-9 pl-9 bg-slate-50" 
+                                    value={transitTime}
+                                    onChange={(e) => setLogisticsParam('transitTime', parseInt(e.target.value) || 0)}
+                                />
+                                <Clock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                            </div>
+                        </div>
+
+                        {showFreeTime && (
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold text-slate-500">Free Time (Days)</Label>
+                                <div className="relative">
+                                    <Input 
+                                        type="number" className="h-9 pl-9 bg-slate-50" 
+                                        value={freeTime}
+                                        onChange={(e) => setLogisticsParam('freeTime', parseInt(e.target.value) || 0)}
+                                    />
+                                    <Anchor className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
               </section>
 
@@ -370,10 +434,9 @@ Best regards,`;
                             <Plus className="h-3 w-3 mr-1" /> Add Unit
                         </Button>
                     ) : (
-                         <div className="flex items-center gap-2 text-xs text-slate-500 font-mono">
-                             <Scale className="h-3 w-3" />
-                             <span>Chargeable: {chargeableWeight} kg</span>
-                         </div>
+                         <Button variant="ghost" size="sm" onClick={addCargoRow} className="h-7 text-xs text-blue-600">
+                             <Plus className="h-3 w-3 mr-1" /> Add Line
+                         </Button>
                     )}
                 </div>
 
@@ -433,64 +496,78 @@ Best regards,`;
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {/* LCL / AIR INPUTS (Parity with Expert Mode Data) */}
-                            {cargoRows.map((row, idx) => (
-                                <div key={row.id} className="grid grid-cols-12 gap-3 items-end p-3 rounded-lg border border-slate-100 bg-slate-50/50">
-                                     <div className="col-span-2">
-                                         <Label className="text-[10px] text-slate-400 uppercase font-bold">Qty</Label>
-                                         <Input 
-                                            type="number" className="h-8 text-center bg-white" 
-                                            value={row.qty} 
-                                            onChange={(e) => {
-                                                const newRows = [...cargoRows];
-                                                newRows[idx].qty = parseInt(e.target.value) || 0;
-                                                updateCargo(newRows);
-                                            }}
-                                         />
-                                     </div>
-                                     <div className="col-span-3">
-                                         <Label className="text-[10px] text-slate-400 uppercase font-bold">Dims (cm)</Label>
-                                         <div className="flex items-center gap-1">
-                                             <Input placeholder="L" className="h-8 px-1 text-center text-xs bg-white" value={row.length} onChange={(e) => { const r = [...cargoRows]; r[idx].length = parseInt(e.target.value) || 0; updateCargo(r); }} />
-                                             <Input placeholder="W" className="h-8 px-1 text-center text-xs bg-white" value={row.width} onChange={(e) => { const r = [...cargoRows]; r[idx].width = parseInt(e.target.value) || 0; updateCargo(r); }} />
-                                             <Input placeholder="H" className="h-8 px-1 text-center text-xs bg-white" value={row.height} onChange={(e) => { const r = [...cargoRows]; r[idx].height = parseInt(e.target.value) || 0; updateCargo(r); }} />
-                                         </div>
-                                     </div>
-                                     <div className="col-span-3">
-                                          <Label className="text-[10px] text-slate-400 uppercase font-bold">Total Wgt (kg)</Label>
-                                          <Input 
-                                            type="number" className="h-8 bg-white font-mono"
-                                            value={row.weight * row.qty}
-                                            onChange={(e) => {
-                                                const totalW = parseFloat(e.target.value) || 0;
-                                                const r = [...cargoRows];
-                                                r[idx].weight = totalW / (r[idx].qty || 1);
-                                                updateCargo(r);
-                                            }}
-                                          />
-                                     </div>
-                                     <div className="col-span-3">
-                                          <Label className="text-[10px] text-slate-400 uppercase font-bold">Pkg Type</Label>
-                                          <Select value={row.pkgType} onValueChange={(v: any) => { const r = [...cargoRows]; r[idx].pkgType = v; updateCargo(r); }}>
-                                              <SelectTrigger className="h-8 bg-white text-xs"><SelectValue /></SelectTrigger>
-                                              <SelectContent>
-                                                  <SelectItem value="PALLETS">Pallets</SelectItem>
-                                                  <SelectItem value="CARTONS">Cartons</SelectItem>
-                                                  <SelectItem value="CRATES">Crates</SelectItem>
-                                              </SelectContent>
-                                          </Select>
-                                     </div>
-                                     <div className="col-span-1">
-                                         {/* Only 1 row supported in Quick Mode UI for simplicity, but backend supports multiple */}
-                                          <Button disabled variant="ghost" size="icon" className="h-8 w-8 text-slate-300">
-                                              <MoreHorizontal className="h-4 w-4" />
-                                          </Button>
-                                     </div>
+                            {/* MULTI-ROW CARGO INPUTS (Expert Mode Parity) */}
+                            <div className="grid grid-cols-12 gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide px-2">
+                                <div className="col-span-1">Qty</div>
+                                <div className="col-span-2">Type</div>
+                                <div className="col-span-3 text-center">Dims (LxWxH cm)</div>
+                                <div className="col-span-2">Unit Wgt (kg)</div>
+                                <div className="col-span-2">Total Wgt</div>
+                                <div className="col-span-2"></div>
+                            </div>
+
+                            <div className="space-y-2">
+                                {cargoRows.map((row) => (
+                                    <div key={row.id} className="grid grid-cols-12 gap-2 items-center bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                        <div className="col-span-1">
+                                            <Input 
+                                                className="h-8 text-center px-0 font-bold" 
+                                                value={row.qty}
+                                                onChange={(e) => updateCargoRow(row.id, 'qty', parseFloat(e.target.value) || 0)}
+                                            />
+                                        </div>
+                                        <div className="col-span-2">
+                                            <Select value={row.pkgType} onValueChange={(v) => updateCargoRow(row.id, 'pkgType', v)}>
+                                                <SelectTrigger className="h-8 text-xs px-2"><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="PALLETS">Pallets</SelectItem>
+                                                    <SelectItem value="CARTONS">Cartons</SelectItem>
+                                                    <SelectItem value="CRATES">Crates</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="col-span-3 flex gap-1">
+                                            <Input placeholder="L" className="h-8 text-center px-0 text-xs" value={row.length} onChange={(e) => updateCargoRow(row.id, 'length', parseFloat(e.target.value) || 0)} />
+                                            <Input placeholder="W" className="h-8 text-center px-0 text-xs" value={row.width} onChange={(e) => updateCargoRow(row.id, 'width', parseFloat(e.target.value) || 0)} />
+                                            <Input placeholder="H" className="h-8 text-center px-0 text-xs" value={row.height} onChange={(e) => updateCargoRow(row.id, 'height', parseFloat(e.target.value) || 0)} />
+                                        </div>
+                                        <div className="col-span-2">
+                                            <Input 
+                                                className="h-8 text-center px-0 text-xs" 
+                                                value={row.weight}
+                                                onChange={(e) => updateCargoRow(row.id, 'weight', parseFloat(e.target.value) || 0)}
+                                            />
+                                        </div>
+                                        <div className="col-span-2 flex items-center justify-between pl-2">
+                                            <span className="text-xs font-mono font-bold text-slate-600">
+                                                {(row.weight * row.qty).toLocaleString()}
+                                            </span>
+                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-red-500" onClick={() => removeCargoRow(row.id)}>
+                                                <Trash2 className="h-3 w-3" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* TOTALS FOOTER */}
+                            <div className="grid grid-cols-4 gap-4 pt-4 border-t border-slate-100">
+                                <div className="bg-blue-50 p-2 rounded-lg text-center">
+                                    <div className="text-[10px] uppercase text-blue-500 font-bold">Total Pkgs</div>
+                                    <div className="text-lg font-bold text-blue-700">{totalPackages}</div>
                                 </div>
-                            ))}
-                            <div className="flex justify-between items-center text-xs text-slate-500 px-2">
-                                <span>Total Volume: <strong>{totalVolume} m³</strong></span>
-                                <span>Density: <strong>1:{densityRatio}</strong></span>
+                                <div className="bg-blue-50 p-2 rounded-lg text-center">
+                                    <div className="text-[10px] uppercase text-blue-500 font-bold">Gross Wgt</div>
+                                    <div className="text-lg font-bold text-blue-700">{totalWeight} <span className="text-xs">kg</span></div>
+                                </div>
+                                <div className="bg-blue-50 p-2 rounded-lg text-center">
+                                    <div className="text-[10px] uppercase text-blue-500 font-bold">Volume</div>
+                                    <div className="text-lg font-bold text-blue-700">{totalVolume} <span className="text-xs">m³</span></div>
+                                </div>
+                                <div className="bg-emerald-50 p-2 rounded-lg text-center border border-emerald-100">
+                                    <div className="text-[10px] uppercase text-emerald-600 font-bold">Chargeable</div>
+                                    <div className="text-lg font-bold text-emerald-700">{chargeableWeight} <span className="text-xs">kg</span></div>
+                                </div>
                             </div>
                         </div>
                     )}
