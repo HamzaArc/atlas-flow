@@ -12,10 +12,11 @@ import RateDashboard from "@/features/tariffs/pages/RateDashboard";
 import RateWorkspace from "@/features/tariffs/pages/RateWorkspace";
 import UserDirectoryPage from "@/features/users/pages/UserDirectoryPage"; 
 import LandingPage from "@/features/landing/LandingPage";
-import LoginPage from "@/features/auth/LoginPage"; // Ensure you created this file
+import LoginPage from "@/features/auth/LoginPage"; 
 
 import { Toaster } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 function App() {
   const [session, setSession] = useState<any>(null);
@@ -27,6 +28,9 @@ function App() {
   const [crmView, setCrmView] = useState<'list' | 'details'>('list');
   const [dossierView, setDossierView] = useState<'dashboard' | 'dossier'>('dashboard'); 
   const [tariffView, setTariffView] = useState<'dashboard' | 'workspace'>('dashboard');
+
+  // Layout State
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     // 1. Get initial session
@@ -75,8 +79,6 @@ function App() {
   }
 
   // 2. Landing Page (Public)
-  // If user is logged in, clicking "Enter App" skips login.
-  // If user is NOT logged in, clicking "Enter App" goes to Login Page.
   if (showLanding) {
     return (
         <LandingPage 
@@ -84,7 +86,6 @@ function App() {
                 if (session) {
                     setShowLanding(false);
                 } else {
-                    // Trigger switch to login view by hiding landing but not having session
                     setShowLanding(false);
                 }
             }} 
@@ -100,15 +101,22 @@ function App() {
   // 4. Main Application (Authenticated)
   return (
     <div className="flex min-h-screen w-full bg-slate-50 text-slate-900 font-sans">
-      <aside className="w-64 flex-none hidden md:block z-30 shadow-sm">
+      <aside 
+        className={cn(
+          "flex-none hidden md:block z-30 shadow-sm transition-all duration-300 ease-in-out bg-white border-r border-slate-200",
+          isSidebarCollapsed ? "w-[70px]" : "w-64"
+        )}
+      >
           <Sidebar 
             currentView={currentPage} 
             onNavigate={handleSidebarNav} 
             onLogout={handleLogout}
+            collapsed={isSidebarCollapsed}
+            onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           /> 
       </aside>
 
-      <main className="flex-1 h-screen overflow-hidden flex flex-col relative">
+      <main className="flex-1 h-screen overflow-hidden flex flex-col relative transition-all duration-300">
         
         {currentPage === 'dashboard' && <QuoteDashboard onNavigate={setCurrentPage} />}
         {currentPage === 'create' && (
