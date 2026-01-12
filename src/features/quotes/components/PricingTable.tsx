@@ -7,15 +7,12 @@ import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from "@/components/ui/select";
 import { 
-    Popover, PopoverContent, PopoverTrigger 
-} from "@/components/ui/popover";
-import { 
-    Command, CommandEmpty, CommandGroup, CommandInput, CommandItem 
-} from "@/components/ui/command";
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger 
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-    Trash2, Plus, MapPin, Ship, Anchor, Zap, AlertCircle, RefreshCw, Link2, Sparkles, Wand2
+    Trash2, Plus, MapPin, Ship, Anchor, Zap, AlertCircle, RefreshCw, Link2, Sparkles, Wand2, Save, Timer, TrendingDown, ShieldCheck
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { useClientStore } from "@/store/useClientStore"; 
@@ -52,8 +49,8 @@ const mapVatRule = (tariffVat: string): 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' 
     return 'STD_20'; 
 };
 
-// --- SUB-COMPONENT: SMART RATE LOOKUP ---
-const SmartRateLookup = ({ 
+// --- SUB-COMPONENT: RATE COMPARISON DIALOG ---
+const RateComparisonDialog = ({ 
     onSelect 
 }: { 
     onSelect: (rate: SupplierRate) => void 
@@ -63,59 +60,124 @@ const SmartRateLookup = ({
     const [open, setOpen] = useState(false);
 
     useEffect(() => {
-        if (rates.length === 0) fetchRates();
-    }, []);
+        if (rates.length === 0 && open) fetchRates();
+    }, [open]);
 
+    // Match Logic
     const matches = rates.filter(r => 
         (r.pol.includes(pol) || pol.includes(r.pol) || r.mode === mode) && r.status === 'ACTIVE'
     );
 
+    // Strategy Logic
+    const cheapest = [...matches].sort((a, b) => {
+        const costA = (a.freightCharges?.[0]?.unitPrice || 0);
+        const costB = (b.freightCharges?.[0]?.unitPrice || 0);
+        return costA - costB;
+    })[0];
+
+    const fastest = [...matches].sort((a, b) => (a.transitTime || 99) - (b.transitTime || 99))[0];
+    
+    // Fallback logic for reliable if no score present
+    const reliable = [...matches].sort((a, b) => (b.reliabilityScore || 0) - (a.reliabilityScore || 0))[0];
+
+    const strategies = [
+        { title: "Cheapest", icon: TrendingDown, data: cheapest, color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
+        { title: "Fastest", icon: Timer, data: fastest, color: "text-blue-600 bg-blue-50 border-blue-200" },
+        { title: "Reliable", icon: ShieldCheck, data: reliable, color: "text-purple-600 bg-purple-50 border-purple-200" },
+    ].filter(s => !!s.data); // Remove empty strategies
+
+    // Deduplication for display: if only 1 match, show full list instead of strategies
+    const showStrategies = matches.length > 1;
+
     return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
                 <Button 
                     variant="ghost" 
                     size="sm" 
                     className="h-6 w-6 p-0 text-blue-400 hover:text-blue-600 hover:bg-blue-50"
-                    title="Smart Rate Lookup"
+                    title="Compare Rates"
                 >
                     <Link2 className="h-3.5 w-3.5" />
                 </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[400px] p-0" align="start">
-                <Command>
-                    <CommandInput placeholder="Search tariff database..." className="h-8 text-xs" />
-                    <CommandEmpty>
-                        <div className="p-4 text-center text-xs text-slate-500">
-                            No matching rates found for {pol} to {pod}.
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <Sparkles className="h-5 w-5 text-blue-500" />
+                        Smart Rate Comparison
+                    </DialogTitle>
+                </DialogHeader>
+
+                <div className="py-4">
+                     <div className="text-sm text-slate-500 mb-4">
+                        Found {matches.length} rates for <strong>{pol}</strong> to <strong>{pod}</strong>
+                     </div>
+
+                     {showStrategies ? (
+                        <div className="grid grid-cols-3 gap-4 mb-6">
+                            {strategies.map((strat, idx) => (
+                                <div key={`${strat.title}-${idx}`} 
+                                     className={cn("border rounded-xl p-4 cursor-pointer hover:shadow-md transition-all relative overflow-hidden", strat.color)}
+                                     onClick={() => { onSelect(strat.data); setOpen(false); }}
+                                >
+                                    <div className="absolute top-0 right-0 p-3 opacity-10">
+                                        <strat.icon className="h-16 w-16" />
+                                    </div>
+                                    <div className="relative z-10">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <strat.icon className="h-4 w-4" />
+                                            <span className="font-bold uppercase text-xs tracking-wider">{strat.title}</span>
+                                        </div>
+                                        <div className="text-xl font-bold mb-1">{strat.data.carrierName}</div>
+                                        <div className="text-sm opacity-80 mb-3">{strat.data.reference}</div>
+                                        
+                                        <div className="flex flex-col gap-1 text-xs font-medium">
+                                            <div className="flex justify-between">
+                                                <span>Price:</span>
+                                                <span className="font-mono">{strat.data.freightCharges?.[0]?.unitPrice || 'N/A'} {strat.data.currency}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Transit:</span>
+                                                <span>{strat.data.transitTime} Days</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Valid:</span>
+                                                <span>{formatDateCompact(strat.data.validTo)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                    </CommandEmpty>
-                    <CommandGroup heading="Matching Tariffs">
+                     ) : (
+                        <div className="text-center p-8 bg-slate-50 rounded-lg border border-dashed border-slate-200 mb-4">
+                            {matches.length === 0 ? "No exact matches found." : "Single match available below."}
+                        </div>
+                     )}
+
+                     <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">All Matches</h4>
                         {matches.map(rate => (
-                             <CommandItem 
-                                key={rate.id} 
-                                onSelect={() => {
-                                    onSelect(rate);
-                                    setOpen(false);
-                                }}
-                                className="flex flex-col items-start py-2 cursor-pointer"
-                             >
-                                <div className="flex w-full justify-between items-center mb-1">
-                                    <span className="font-bold text-xs">{rate.carrierName}</span>
-                                    <Badge variant="outline" className="text-[10px] h-4 border-blue-200 bg-blue-50 text-blue-700">
-                                        {rate.currency} {rate.reference}
-                                    </Badge>
+                            <div key={rate.id} 
+                                 onClick={() => { onSelect(rate); setOpen(false); }}
+                                 className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:bg-slate-50 cursor-pointer group"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <Badge variant="outline">{rate.mode}</Badge>
+                                    <span className="font-medium text-sm text-slate-700">{rate.carrierName}</span>
+                                    <span className="text-xs text-slate-400">{rate.reference}</span>
                                 </div>
-                                <div className="text-[10px] text-slate-500 w-full flex justify-between">
-                                    <span>{rate.pol.split('(')[0]} ➔ {rate.pod.split('(')[0]}</span>
-                                    <span>Valid: {formatDateCompact(rate.validTo)}</span>
+                                <div className="flex items-center gap-4">
+                                    <span className="text-xs font-bold text-slate-600">{rate.freightCharges?.[0]?.unitPrice} {rate.currency}</span>
+                                    <Button size="sm" variant="ghost" className="h-6 text-xs text-blue-600">Select</Button>
                                 </div>
-                             </CommandItem>
+                            </div>
                         ))}
-                    </CommandGroup>
-                </Command>
-            </PopoverContent>
-        </Popover>
+                     </div>
+                </div>
+            </DialogContent>
+        </Dialog>
     );
 };
 
@@ -190,7 +252,7 @@ export function PricingTable() {
   } = useQuoteStore();
 
   const { activeClient } = useClientStore();
-  const { findBestMatch, fetchRates, rates } = useTariffStore();
+  const { findBestMatch, fetchRates, rates, addSpotRateFromQuote } = useTariffStore();
   const { toast } = useToast();
   const [matchingRate, setMatchingRate] = useState<SupplierRate | undefined>(undefined);
 
@@ -198,9 +260,7 @@ export function PricingTable() {
 
   // --- AUTOMATIC SMART INITIALIZATION ---
   useEffect(() => {
-    // If the items list is empty, automatically populate it based on the current mode and client defaults.
     if (items.length === 0) {
-        // Pass client financials if available, otherwise pass empty object to use standard defaults
         const financials = activeClient?.financials || {};
         initializeSmartLines(financials);
     }
@@ -390,7 +450,7 @@ export function PricingTable() {
                     )}
                     
                     {!isTariff && !isSmart && !isReadOnly && (
-                         <SmartRateLookup onSelect={(t) => handleTariffSelect(item.id, t)} />
+                         <RateComparisonDialog onSelect={(t) => handleTariffSelect(item.id, t)} />
                     )}
                     
                     <Input 
@@ -409,14 +469,25 @@ export function PricingTable() {
 
             {/* 2. VENDOR */}
             <TableCell className="w-[15%] py-0.5">
-                <input 
-                    list="vendors" 
-                    disabled={isReadOnly}
-                    className="h-7 w-full rounded-sm border-transparent bg-transparent px-2 hover:bg-slate-50 focus:bg-white focus:border-blue-300 focus:ring-1 focus:ring-blue-200 text-[10px] text-slate-600 shadow-none placeholder:text-slate-300 focus:outline-none transition-all truncate" 
-                    value={item.vendorName || ''}
-                    placeholder="Vendor"
-                    onChange={(e) => updateLineItem(item.id, { vendorName: e.target.value })}
-                />
+                <div className="relative group/vendor">
+                    <input 
+                        list="vendors" 
+                        disabled={isReadOnly}
+                        className="h-7 w-full rounded-sm border-transparent bg-transparent px-2 hover:bg-slate-50 focus:bg-white focus:border-blue-300 focus:ring-1 focus:ring-blue-200 text-[10px] text-slate-600 shadow-none placeholder:text-slate-300 focus:outline-none transition-all truncate pr-6" 
+                        value={item.vendorName || ''}
+                        placeholder="Vendor"
+                        onChange={(e) => updateLineItem(item.id, { vendorName: e.target.value })}
+                    />
+                    {!isTariff && item.vendorName && item.buyPrice > 0 && (
+                        <button 
+                            onClick={() => addSpotRateFromQuote({ item, pol, pod, mode })}
+                            className="absolute right-0 top-1.5 opacity-0 group-hover/vendor:opacity-100 transition-opacity text-slate-300 hover:text-emerald-600"
+                            title="Save as Spot Rate to Library"
+                        >
+                            <Save className="h-3.5 w-3.5" />
+                        </button>
+                    )}
+                </div>
             </TableCell>
 
             {/* 3. COST */}

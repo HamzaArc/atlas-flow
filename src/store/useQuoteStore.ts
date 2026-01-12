@@ -34,7 +34,7 @@ interface QuoteState {
   isLoading: boolean;
 
   // --- EDITOR STATE ---
-  editorMode: 'EXPRESS' | 'EXPERT'; // NEW: Toggle between quick and detailed views
+  editorMode: 'EXPRESS' | 'EXPERT';
   id: string;
   reference: string;
   masterReference: string; 
@@ -88,7 +88,6 @@ interface QuoteState {
   // Equipment
   equipmentType: string;
   containerCount: number;
-  // NEW: Multi-row Equipment List
   equipmentList: { id: string; type: string; count: number }[]; 
 
   transitTime: number; 
@@ -123,7 +122,7 @@ interface QuoteState {
   hasExpiredRates: boolean;
 
   // --- ACTIONS ---
-  setEditorMode: (mode: 'EXPRESS' | 'EXPERT') => void; // NEW Action
+  setEditorMode: (mode: 'EXPRESS' | 'EXPERT') => void;
   setIdentity: (field: string, value: any) => void;
   setClientSnapshot: (data: ClientSnapshotData) => void;
   setStatus: (status: QuoteState['status']) => void;
@@ -198,7 +197,43 @@ const checkStrictExpiry = (items: QuoteLineItem[]): boolean => {
     });
 };
 
-// HELPER: Create default equipment based on mode
+// HELPER: Auto-detect VAT Rule based on description keywords
+const detectSmartVatRule = (desc: string): 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | null => {
+    const d = desc.toLowerCase().trim();
+    if (!d) return null;
+
+    // RULE 1: International Freight (Export/Import) -> 0%
+    if (
+        d.includes('freight') || d.includes('fret') || 
+        d.includes('ocean') || d.includes('sea') || 
+        d.includes('air') || d.includes('bunker') ||
+        d.includes('thc') || d.includes('isps') || d.includes('seal')
+    ) {
+        return 'EXPORT_0_ART92';
+    }
+
+    // RULE 2: Inland Transport / Trucking -> 14%
+    if (
+        d.includes('truck') || d.includes('transport') || 
+        d.includes('camion') || d.includes('haulage') || 
+        d.includes('livraison') || d.includes('delivery')
+    ) {
+        return 'ROAD_14';
+    }
+
+    // RULE 3: Services / Customs -> 20%
+    if (
+        d.includes('custom') || d.includes('douane') || 
+        d.includes('admin') || d.includes('dossier') || 
+        d.includes('handl') || d.includes('manutention') ||
+        d.includes('storage') || d.includes('magasin')
+    ) {
+        return 'STD_20';
+    }
+
+    return null;
+};
+
 const getDefaultEquipmentForMode = (mode: TransportMode) => {
     if (mode === 'SEA_FCL') return [{ id: 'init-1', type: '40HC', count: 1 }];
     if (mode === 'ROAD') return [{ id: 'init-1', type: 'FTL Mega', count: 1 }];
@@ -210,7 +245,7 @@ const createDefaultOption = (quoteId: string, mode: TransportMode = 'SEA_LCL'): 
     return {
         id: Math.random().toString(36).substring(7),
         quoteId,
-        name: 'Option', // Default generic name as requested
+        name: 'Option', 
         isRecommended: true,
         mode,
         incoterm: mode === 'AIR' ? 'FCA' : 'FOB',
@@ -233,7 +268,7 @@ const createDefaultOption = (quoteId: string, mode: TransportMode = 'SEA_LCL'): 
 };
 
 const DEFAULT_STATE = {
-  editorMode: 'EXPRESS' as const, // Default to Express mode for new quotes
+  editorMode: 'EXPRESS' as const,
   id: 'new',
   reference: 'Q-24-DRAFT',
   masterReference: 'Q-24-DRAFT',
@@ -451,7 +486,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
   setMode: (mode) => {
       const { options, activeOptionId } = get();
-      // Ensure if switching to FCL/Road we have a default equipment if list is empty
       let defaultEquipmentList = [] as any[];
       if ((mode === 'SEA_FCL' || mode === 'ROAD')) {
          defaultEquipmentList = getDefaultEquipmentForMode(mode);
@@ -472,7 +506,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
              return { 
                  ...o, 
                  mode,
-                 name: modeNameMap[mode] || 'Option', // Dynamic Name Update
+                 name: modeNameMap[mode] || 'Option',
                  equipmentList: existingList,
                  equipmentType: primary.type,
                  containerCount: primary.count
@@ -481,7 +515,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           return o;
       });
 
-      // Update state
       const activeOpt = updatedOptions.find(o => o.id === activeOptionId);
       set({ 
           mode, 
@@ -512,7 +545,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       if (newList.length === 0) {
           newList = [{ id: Math.random().toString(36).substr(2, 5), type, count }];
       } else {
-          // Update the first one to stay in sync with legacy calls
           newList[0] = { ...newList[0], type, count };
       }
 
@@ -683,8 +715,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
     const { customsRebatePercent = 0, adminFee, tollFee, fraisNDL } = clientFinancials || {};
     
-    // --- TARIFF LOOKUP FOR FALLBACKS ---
-    // If client specific charges are missing, try to find them in tariff manager
     let bestMatch: any = null;
     try {
         bestMatch = useTariffStore.getState().findBestMatch({ 
@@ -694,26 +724,22 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         console.warn('Tariff store not ready or match failed', e);
     }
 
-    // Helper: Priority = Client Profile -> Tariff -> Default
     const resolveCharge = (
         clientValue: number | undefined, 
         chargeHeadKeywords: string[], 
         defaultVal: number
     ): { price: number; source: 'SMART_INIT' | 'TARIFF'; tariffId?: string } => {
         
-        // 1. Client Profile
         if (clientValue !== undefined && clientValue !== null && clientValue > 0) {
             return { price: clientValue, source: 'SMART_INIT' };
         }
 
-        // 2. Tariff Manager
         if (bestMatch && bestMatch.destCharges && bestMatch.destCharges.length > 0) {
              const matchedCharge = bestMatch.destCharges.find((c: any) => 
                 chargeHeadKeywords.some(keyword => c.chargeHead.toLowerCase().includes(keyword.toLowerCase()))
              );
 
              if (matchedCharge) {
-                 // Simplified logic: Use unitPrice directly (ignoring basis for now unless simple)
                  return { 
                      price: matchedCharge.unitPrice || 0, 
                      source: 'TARIFF', 
@@ -722,7 +748,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
              }
         }
 
-        // 3. Default
         return { price: defaultVal, source: 'SMART_INIT' };
     };
 
@@ -753,8 +778,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         calculationFactor: calcFactor
     });
 
-    // --- LOGIC PER MODE ---
-
     if (mode === 'AIR') {
         newItems.push(createSmartItem('FREIGHT', 'Main Freight (Vol AF)', { price: 0, source: 'SMART_INIT' }, 'EXPORT_0_ART92', 'MAIN_FRET', true));
         newItems.push(createSmartItem('DESTINATION', 'Retour de fond', { price: 0, source: 'SMART_INIT' }, 'STD_20', 'RET_FOND', false, customsRebatePercent));
@@ -769,9 +792,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         newItems.push(createSmartItem('FREIGHT', 'Main Freight (LCL)', { price: 0, source: 'SMART_INIT' }, 'EXPORT_0_ART92', 'MAIN_FRET', true));
         newItems.push(createSmartItem('DESTINATION', 'Retour de fond', { price: 0, source: 'SMART_INIT' }, 'STD_20', 'RET_FOND', false, customsRebatePercent));
         
-        // Auto-calculated logic takes precedence for LCL Toll usually, but if client has specific override we might consider it. 
-        // For now sticking to weight based calculation as standard for LCL, unless overridden? 
-        // Logic: Standard LCL toll is calc based. 
         const autoToll = 250 * (chargeableWeight / 1000);
         newItems.push(createSmartItem('DESTINATION', 'Péage (Portuaire)', { price: autoToll, source: 'SMART_INIT' }, 'STD_20', 'PEAGE_LCL'));
         
@@ -823,6 +843,15 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
   updateLineItem: (id, updates) => {
     const { items, exchangeRates, quoteCurrency, options, activeOptionId, paymentTerms } = get();
+    
+    // 0. AUTO-DETECT VAT RULE (Feature C: VAT Intelligence)
+    // Only apply if description changed and VAT wasn't explicitly provided in this update
+    if (updates.description && !updates.vatRule) {
+        const smartVat = detectSmartVatRule(updates.description);
+        if (smartVat) {
+            updates.vatRule = smartVat;
+        }
+    }
     
     // 1. UPDATE THE TARGET ITEM
     let updatedItems = items.map(item => {
@@ -1192,7 +1221,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               
               equipmentList: activeOpt?.equipmentList || [],
               
-              // NEW: Default loaded quotes to EXPERT view if they are complex, otherwise EXPRESS
               editorMode: 'EXPERT'
           });
 

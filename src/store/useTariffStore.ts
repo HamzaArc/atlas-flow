@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { SupplierRate, RateCharge } from '@/types/tariff';
+import { QuoteLineItem } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 import { TariffService } from '@/services/tariff.service';
 
@@ -26,8 +27,14 @@ interface TariffState {
     ) => void;
     removeChargeRow: (section: 'freightCharges' | 'originCharges' | 'destCharges', id: string) => void;
 
-    // Smart Pricing Selector
+    // Smart Pricing & Injection
     findBestMatch: (params: { pol: string; pod: string; mode: string; incoterm: string; date: Date }) => SupplierRate | undefined;
+    addSpotRateFromQuote: (params: { 
+        item: QuoteLineItem; 
+        pol: string; 
+        pod: string; 
+        mode: string; 
+    }) => void;
 }
 
 const EMPTY_RATE: SupplierRate = {
@@ -178,5 +185,53 @@ export const useTariffStore = create<TariffState>((set, get) => ({
             if (a.type !== b.type) return a.type === 'CONTRACT' ? -1 : 1;
             return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
         })[0];
+    },
+
+    // Feature: Create Spot Rate from Quote
+    addSpotRateFromQuote: async ({ item, pol, pod, mode }) => {
+        if (!item.vendorName || !item.buyPrice) {
+            useToast.getState().toast("Cannot save: Missing Vendor or Price", "error");
+            return;
+        }
+
+        const newCharge: RateCharge = {
+            id: Math.random().toString(36).substr(2, 9),
+            chargeHead: item.description,
+            isSurcharge: false,
+            basis: 'CONTAINER', // Default assumption, user can edit later
+            price20DV: item.buyPrice,
+            price40DV: item.buyPrice,
+            price40HC: item.buyPrice,
+            price40RF: item.buyPrice,
+            unitPrice: item.buyPrice,
+            minPrice: 0,
+            percentage: 0,
+            currency: item.buyCurrency,
+            vatRule: item.vatRule as any
+        };
+
+        const newRate: SupplierRate = {
+            ...EMPTY_RATE,
+            id: `spot-${Date.now()}`,
+            reference: `SPOT-${item.vendorName.toUpperCase().substring(0,3)}-${Date.now().toString().substring(8)}`,
+            carrierName: item.vendorName,
+            mode: mode as any,
+            type: 'SPOT',
+            status: 'ACTIVE',
+            pol,
+            pod,
+            validFrom: new Date(),
+            validTo: new Date(new Date().setDate(new Date().getDate() + 30)), // 30 Day Validity for Spot
+            freightCharges: item.section === 'FREIGHT' ? [newCharge] : [],
+            originCharges: item.section === 'ORIGIN' ? [newCharge] : [],
+            destCharges: item.section === 'DESTINATION' ? [newCharge] : [],
+            updatedAt: new Date()
+        };
+
+        // Save to DB (mocked via Service) and State
+        await TariffService.save(newRate);
+        
+        set(state => ({ rates: [newRate, ...state.rates] }));
+        useToast.getState().toast("Spot Rate saved to Library!", "success");
     }
 }));
