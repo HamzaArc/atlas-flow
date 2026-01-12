@@ -2,51 +2,65 @@ import { supabase } from '@/lib/supabase';
 import { SupplierRate, RateCharge } from '@/types/tariff';
 
 export const TariffService = {
-    // 1. Fetch all rates - STRICTLY DB ONLY
     fetchAll: async (): Promise<SupplierRate[]> => {
         const { data: tariffs, error } = await supabase
             .from('tariffs')
-            .select(`
-                *,
-                tariff_charges (*)
-            `)
-            .order('updated_at', { ascending: false });
+            .select(`*, tariff_charges (*)`)
+            .order('valid_from', { ascending: false }); // Newest first
 
         if (error) throw error;
-
-        // If no data, return empty array immediately (No Mocks!)
         if (!tariffs || tariffs.length === 0) return [];
 
-        return tariffs.map((t: any) => ({
-            id: t.id,
-            reference: t.reference,
-            carrierId: t.carrier_id,
-            carrierName: t.carrier_name,
-            mode: t.mode,
-            type: t.type,
-            status: t.status,
-            validFrom: new Date(t.valid_from),
-            validTo: new Date(t.valid_to),
-            pol: t.pol,
-            pod: t.pod,
-            transitTime: t.transit_time,
-            serviceLoop: t.service_loop,
-            currency: t.currency,
-            incoterm: t.incoterm || 'CY/CY', // Default if missing
-            freeTime: t.free_time,
-            paymentTerms: t.payment_terms,
-            remarks: t.remarks,
-            updatedAt: new Date(t.updated_at),
-            
-            freightCharges: mapCharges(t.tariff_charges, 'FREIGHT'),
-            originCharges: mapCharges(t.tariff_charges, 'ORIGIN'),
-            destCharges: mapCharges(t.tariff_charges, 'DESTINATION'),
-        }));
+        // 1. Raw Map
+        const mappedRates = tariffs.map((t: any) => mapToModel(t));
+
+        // 2. "Real" Volatility & Intelligence Calculation
+        // Group by Unique Lane + Carrier Key
+        const historyMap = new Map<string, SupplierRate[]>();
+        
+        mappedRates.forEach(rate => {
+            const key = `${rate.pol}-${rate.pod}-${rate.carrierName}-${rate.mode}`;
+            if (!historyMap.has(key)) historyMap.set(key, []);
+            historyMap.get(key)?.push(rate);
+        });
+
+        // Analyze history to flag volatility
+        historyMap.forEach((history) => {
+            // Sort by Date (Oldest to Newest)
+            history.sort((a, b) => new Date(a.validFrom).getTime() - new Date(b.validFrom).getTime());
+
+            for (let i = 1; i < history.length; i++) {
+                const current = history[i];
+                const prev = history[i - 1];
+
+                // Calculate Base Freight (40HC)
+                const currPrice = getBaseFreight(current);
+                const prevPrice = getBaseFreight(prev);
+
+                if (prevPrice > 0 && currPrice > 0) {
+                    const diff = currPrice - prevPrice;
+                    const percent = (diff / prevPrice) * 100;
+                    
+                    // Mark as Volatile if Jump > 10%
+                    if (percent > 10) {
+                        current.volatilityFlag = true;
+                        current.previousRateRef = prev.reference;
+                    }
+                }
+                
+                // Reliability Score: Based on Data Completeness (0-5)
+                let score = 3; // Base score
+                if (current.transitTime > 0) score += 1;
+                if (current.freeTime > 0) score += 1;
+                if (current.originCharges.length === 0 && current.incoterm !== 'FOB') score -= 1; 
+                current.reliabilityScore = Math.max(1, Math.min(5, score));
+            }
+        });
+
+        return mappedRates;
     },
 
-    // 2. Save Rate
     save: async (rate: SupplierRate): Promise<void> => {
-        // A. Upsert Parent
         const payload: any = {
             reference: rate.reference,
             carrier_name: rate.carrierName,
@@ -59,7 +73,7 @@ export const TariffService = {
             valid_to: rate.validTo,
             transit_time: rate.transitTime,
             currency: rate.currency,
-            incoterm: rate.incoterm, // Saving the new field
+            incoterm: rate.incoterm,
             updated_at: new Date()
         };
 
@@ -77,7 +91,6 @@ export const TariffService = {
 
         const tariffId = savedTariff.id;
 
-        // B. Replace Charges
         const allCharges = [
             ...rate.freightCharges.map(c => ({ ...c, section: 'FREIGHT' })),
             ...rate.originCharges.map(c => ({ ...c, section: 'ORIGIN' })),
@@ -124,6 +137,42 @@ export const TariffService = {
         vatRule: 'STD_20'
     })
 };
+
+// --- Helpers ---
+
+function getBaseFreight(rate: SupplierRate): number {
+    return rate.freightCharges.reduce((acc, c) => acc + (c.price40HC || c.unitPrice || 0), 0);
+}
+
+function mapToModel(t: any): SupplierRate {
+    return {
+        id: t.id,
+        reference: t.reference,
+        carrierId: t.carrier_id,
+        carrierName: t.carrier_name,
+        mode: t.mode,
+        type: t.type,
+        status: t.status,
+        validFrom: new Date(t.valid_from),
+        validTo: new Date(t.valid_to),
+        pol: t.pol,
+        pod: t.pod,
+        transitTime: t.transit_time,
+        serviceLoop: t.service_loop,
+        currency: t.currency,
+        incoterm: t.incoterm || 'CY/CY',
+        freeTime: t.free_time,
+        paymentTerms: t.payment_terms,
+        remarks: t.remarks,
+        updatedAt: new Date(t.updated_at),
+        volatilityFlag: false, // Calculated later
+        reliabilityScore: 0, // Calculated later
+        
+        freightCharges: mapCharges(t.tariff_charges, 'FREIGHT'),
+        originCharges: mapCharges(t.tariff_charges, 'ORIGIN'),
+        destCharges: mapCharges(t.tariff_charges, 'DESTINATION'),
+    };
+}
 
 function mapCharges(dbRows: any[], section: string): RateCharge[] {
     if (!dbRows) return [];

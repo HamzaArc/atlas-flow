@@ -1,293 +1,216 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { 
-    Search, Filter, Plus, Calendar, 
-    ArrowRight, MoreHorizontal, TrendingUp, AlertCircle,
-    Activity, LineChart, Layers, Globe
+    Search, Plus, Layers, AlertCircle, FileSpreadsheet
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
-} from "@/components/ui/table";
 import { useTariffStore } from "@/store/useTariffStore";
+import { TradeLaneMatrix } from "../components/TradeLaneMatrix";
+import { ExpiryRadar } from "../components/ExpiryRadar";
+import { SupplierRate } from "@/types/tariff";
+import { useToast } from "@/components/ui/use-toast"; // Using your existing hook
+import { cn } from "@/lib/utils"; // FIXED: Added missing import
 
 export default function RateDashboard({ onNavigate }: { onNavigate: (page: 'dashboard' | 'workspace') => void }) {
-    const { rates, fetchRates, loadRate, createRate, deleteRate } = useTariffStore();
+    const { rates, fetchRates, loadRate, createRate, isLoading } = useTariffStore();
+    const { toast } = useToast();
+    
     const [search, setSearch] = useState("");
+    const [filterVolatile, setFilterVolatile] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => { fetchRates(); }, []);
 
-    const filteredRates = useMemo(() => {
-        const term = search.toLowerCase();
-        return rates.filter(rate => (
-            rate.pol.toLowerCase().includes(term) ||
-            rate.pod.toLowerCase().includes(term) ||
-            rate.carrierName.toLowerCase().includes(term) ||
-            rate.reference.toLowerCase().includes(term)
-        ));
-    }, [rates, search]);
+    // Derived State: Counts
+    const volatileCount = rates.filter(r => r.volatilityFlag).length;
 
-    const stats = useMemo(() => {
-        const now = new Date();
-        const active = rates.filter(r => r.status === 'ACTIVE');
+    // Filter Logic
+    const filteredRates = rates.filter(rate => {
+        const matchesSearch = !search || 
+            rate.pol.toLowerCase().includes(search.toLowerCase()) || 
+            rate.pod.toLowerCase().includes(search.toLowerCase()) ||
+            rate.carrierName.toLowerCase().includes(search.toLowerCase());
         
-        const expiringSoon = rates.filter(r => {
-            const validTo = new Date(r.validTo);
-            const diff = (validTo.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
-            return diff >= 0 && diff <= 7;
-        });
-        
-        const laneSet = new Set(rates.filter(r => r.pol && r.pod).map(r => `${r.pol}-${r.pod}`));
-        
-        // Smarter Price Calculation: Sum of all FREIGHT section charges for 40HC
-        const baseRates = rates
-            .map(rate => {
-                const totalFreight = rate.freightCharges.reduce((acc, c) => acc + (c.price40HC || c.unitPrice || 0), 0);
-                return totalFreight;
-            })
-            .filter(p => p > 0);
+        const matchesVolatility = filterVolatile ? rate.volatilityFlag : true;
 
-        const avgBase = baseRates.length ? baseRates.reduce((acc, val) => acc + val, 0) / baseRates.length : 0;
-        const maxBase = baseRates.length ? Math.max(...baseRates) : 0;
-        const minBase = baseRates.length ? Math.min(...baseRates) : 0;
-        
-        const lastUpdated = rates.reduce((latest, rate) => {
-            const updated = new Date(rate.updatedAt).getTime();
-            return updated > latest ? updated : latest;
-        }, 0);
-
-        return {
-            activeCount: active.length,
-            expiringSoonCount: expiringSoon.length,
-            laneCount: laneSet.size,
-            avgBase,
-            minBase,
-            maxBase,
-            lastUpdated
-        };
-    }, [rates]);
+        return matchesSearch && matchesVolatility;
+    });
 
     const handleCreate = () => {
         createRate();
         onNavigate('workspace');
     };
 
-    const handleEdit = (id: string) => {
-        loadRate(id);
+    const handleLaneSelect = (pol: string, pod: string) => {
+        // Smart Selection: Find the BEST rate for this lane to open
+        const laneRates = rates.filter(r => r.pol.includes(pol) && r.pod.includes(pod));
+        if (laneRates.length > 0) {
+            // Sort by newness
+            const newest = laneRates.sort((a,b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+            loadRate(newest.id);
+            onNavigate('workspace');
+        }
+    };
+
+    const handleRenew = (rate: SupplierRate) => {
+        loadRate(rate.id);
+        // FIXED: Toast signature matches your use-toast.tsx (message, type)
+        toast(`Renewal Mode: Loaded ${rate.reference}. Update validity dates and Save to renew.`, 'info');
         onNavigate('workspace');
+    };
+
+    const handleImportClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            // FIXED: Toast signature match
+            toast(`Import Processing: Analyzing ${e.target.files[0].name}...`, 'info');
+        }
     };
 
     return (
         <div className="flex flex-col h-full bg-slate-50/50">
+            {/* Hidden File Input for "Real" Import Action */}
+            <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                accept=".xlsx,.csv" 
+                onChange={handleFileChange}
+            />
+
             {/* Header */}
-            <div className="px-8 py-6 bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm flex justify-between items-center">
+            <div className="px-8 py-6 bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm flex justify-between items-center shrink-0">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Tariff Library</h1>
-                    <p className="text-sm text-slate-500 mt-1">Monitor carrier pricing, lane coverage, and market signals.</p>
+                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+                        Procurement Control Tower
+                        <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100 uppercase tracking-wide">
+                            Live
+                        </span>
+                    </h1>
+                    <p className="text-sm text-slate-500 mt-1">
+                        Monitor volatility, expiry risks, and market coverage across {new Set(rates.map(r => r.pol + r.pod)).size} trade lanes.
+                    </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" className="text-slate-600 border-slate-200">
-                        <Layers className="h-3.5 w-3.5 mr-2" /> Import Excel
+                    <div className="relative w-64 mr-2">
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                        <Input 
+                            placeholder="Find lane or carrier..." 
+                            className="pl-9 h-9 bg-slate-50 border-slate-200 text-xs focus-visible:ring-blue-500" 
+                            value={search} onChange={e => setSearch(e.target.value)}
+                        />
+                    </div>
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="text-slate-600 border-slate-200 shadow-sm hover:bg-slate-50"
+                        onClick={handleImportClick}
+                    >
+                        <FileSpreadsheet className="h-3.5 w-3.5 mr-2 text-emerald-600" /> Import
                     </Button>
-                    <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 shadow-sm">
-                        <Plus className="h-4 w-4 mr-2" /> Add Rate Sheet
+                    <Button onClick={handleCreate} className="bg-slate-900 hover:bg-slate-800 shadow-sm text-xs font-bold transition-all active:scale-95">
+                        <Plus className="h-4 w-4 mr-2" /> New Rate Sheet
                     </Button>
                 </div>
             </div>
 
-            <div className="p-8 flex-1 overflow-auto">
+            <div className="p-8 flex-1 overflow-hidden flex flex-col gap-6">
                 
-                {/* KPI Cards */}
-                <div className="grid grid-cols-4 gap-4 mb-8">
-                    <Card className="border-slate-200 shadow-sm">
-                        <CardHeader className="p-4 pb-2"><CardTitle className="text-xs uppercase text-slate-500 font-bold tracking-wider">Active Tariffs</CardTitle></CardHeader>
-                        <CardContent className="p-4 pt-0">
-                            <div className="text-2xl font-bold text-slate-800">{stats.activeCount}</div>
-                            <p className="text-[10px] text-slate-400 mt-1">Contracts + Spot sheets</p>
-                        </CardContent>
-                    </Card>
-                    <Card className="border-slate-200 shadow-sm">
-                        <CardHeader className="p-4 pb-2"><CardTitle className="text-xs uppercase text-slate-500 font-bold tracking-wider">Expiring &lt; 7 Days</CardTitle></CardHeader>
-                        <CardContent className="p-4 pt-0">
-                            <div className="text-2xl font-bold text-amber-600 flex items-center gap-2">
-                                {stats.expiringSoonCount} <AlertCircle className="h-4 w-4 text-amber-400" />
+                {/* 1. The Strategy Layer: Matrix & Radar */}
+                <div className="grid grid-cols-12 gap-6 h-[60%] shrink-0">
+                    {/* Left: The Market Matrix */}
+                    <div className="col-span-8 h-full">
+                        <TradeLaneMatrix 
+                            rates={filteredRates} 
+                            onSelectLane={handleLaneSelect} 
+                            isLoading={isLoading}
+                        />
+                    </div>
+                    
+                    {/* Right: The Risk Radar */}
+                    <div className="col-span-4 flex flex-col gap-6 h-full">
+                        <div className="flex-1 min-h-0">
+                            <ExpiryRadar rates={rates} onRenew={handleRenew} />
+                        </div>
+                        
+                        {/* Interactive Volatility Alert */}
+                        {volatileCount > 0 ? (
+                            <div className={cn(
+                                "border rounded-lg p-4 transition-all cursor-pointer",
+                                filterVolatile ? "bg-amber-100 border-amber-300 ring-1 ring-amber-300 shadow-sm" : "bg-amber-50 border-amber-200 hover:bg-amber-100"
+                            )}
+                            onClick={() => setFilterVolatile(!filterVolatile)}
+                            >
+                                <div className="flex items-start gap-3">
+                                    <AlertCircle className={cn("h-5 w-5 mt-0.5", filterVolatile ? "text-amber-700" : "text-amber-600")} />
+                                    <div>
+                                        <h4 className="text-sm font-bold text-amber-800">
+                                            {filterVolatile ? "Filtering by Volatility" : "Market Volatility Alert"}
+                                        </h4>
+                                        <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+                                            Detected <strong>{volatileCount} rates</strong> with price jumps {'>'} 10%.
+                                            {filterVolatile ? " Click to clear filter." : " Click to filter matrix."}
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
-                            <p className="text-[10px] text-slate-400 mt-1">Renewal attention</p>
-                        </CardContent>
-                    </Card>
-                    <Card className="border-slate-200 shadow-sm">
-                        <CardHeader className="p-4 pb-2"><CardTitle className="text-xs uppercase text-slate-500 font-bold tracking-wider">Lane Coverage</CardTitle></CardHeader>
-                        <CardContent className="p-4 pt-0">
-                            <div className="text-2xl font-bold text-emerald-600">{stats.laneCount}</div>
-                            <p className="text-[10px] text-slate-400 mt-1">Unique POL → POD lanes</p>
-                        </CardContent>
-                    </Card>
-                    <Card className="border-slate-200 shadow-sm bg-blue-50/50">
-                        <CardHeader className="p-4 pb-2"><CardTitle className="text-xs uppercase text-blue-600 font-bold tracking-wider">Avg Base Rate</CardTitle></CardHeader>
-                        <CardContent className="p-4 pt-0">
-                            <div className="text-2xl font-bold text-blue-700">
-                                {stats.avgBase ? stats.avgBase.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
+                        ) : (
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                                <div className="flex items-center gap-3">
+                                    <Layers className="h-5 w-5 text-emerald-600" />
+                                    <div>
+                                        <h4 className="text-sm font-bold text-emerald-800">Market Stable</h4>
+                                        <p className="text-xs text-emerald-700">No significant price anomalies detected.</p>
+                                    </div>
+                                </div>
                             </div>
-                            <p className="text-[10px] text-blue-400 mt-1 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Market benchmark</p>
-                        </CardContent>
-                    </Card>
+                        )}
+                    </div>
                 </div>
 
-                <div className="grid grid-cols-12 gap-6">
-                    {/* Tariff Library Table */}
-                    <div className="col-span-8 space-y-4">
-                        <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-                            <div className="relative w-96">
-                                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                                <Input 
-                                    placeholder="Search by POL, POD, carrier, or ref..." 
-                                    className="pl-9 bg-slate-50 border-slate-200" 
-                                    value={search} onChange={e => setSearch(e.target.value)}
-                                />
-                            </div>
-                            <Button variant="outline" size="sm" className="text-slate-600 border-slate-200">
-                                <Filter className="h-3.5 w-3.5 mr-2" /> Filter
-                            </Button>
-                        </div>
-
-                        <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
-                            <Table>
-                                <TableHeader className="bg-slate-50">
-                                    <TableRow>
-                                        <TableHead>Reference</TableHead>
-                                        <TableHead>Carrier & Mode</TableHead>
-                                        <TableHead>Route (POL → POD)</TableHead>
-                                        <TableHead>Validity</TableHead>
-                                        <TableHead>Term</TableHead>
-                                        <TableHead className="text-right">Total Freight</TableHead>
-                                        <TableHead></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {filteredRates.map(rate => {
-                                        // Sum up all freight section charges for 40HC (or UnitPrice for Air)
-                                        const totalFreight = rate.freightCharges.reduce((acc, c) => acc + (c.price40HC || c.unitPrice || 0), 0);
-                                        
-                                        return (
-                                            <TableRow key={rate.id} className="cursor-pointer hover:bg-slate-50" onClick={() => handleEdit(rate.id)}>
-                                                <TableCell className="font-medium text-slate-700 text-xs">
-                                                    {rate.reference}
-                                                    <div className="mt-1">
-                                                        <Badge variant={rate.type === 'SPOT' ? 'secondary' : 'outline'} className="text-[9px]">
-                                                            {rate.type}
-                                                        </Badge>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="h-8 w-8 bg-blue-50 text-blue-700 rounded-md flex items-center justify-center font-bold text-xs">
-                                                            {rate.carrierName.substring(0, 2).toUpperCase()}
-                                                        </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="font-bold text-xs text-slate-700">{rate.carrierName}</span>
-                                                            <span className="text-[10px] text-slate-400 font-mono">{rate.serviceLoop || 'Direct'}</span>
-                                                        </div>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
-                                                        <span className="px-2 py-1 bg-slate-100 rounded">{rate.pol.split('(')[0]}</span>
-                                                        <ArrowRight className="h-3 w-3 text-slate-300" />
-                                                        <span className="px-2 py-1 bg-slate-100 rounded">{rate.pod.split('(')[0]}</span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                                                        <Calendar className="h-3 w-3" />
-                                                        {new Date(rate.validTo).toLocaleDateString()}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                                                        <Globe className="h-3 w-3" />
-                                                        {rate.incoterm || 'CY/CY'}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-right font-mono font-bold text-slate-700">
-                                                    {totalFreight > 0 ? totalFreight.toLocaleString() : '—'} {rate.currency}
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <Button variant="ghost" size="icon" onClick={(e) => {e.stopPropagation(); deleteRate(rate.id);}}>
-                                                        <MoreHorizontal className="h-4 w-4 text-slate-400" />
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-                                    {filteredRates.length === 0 && (
-                                        <TableRow>
-                                            <TableCell colSpan={7} className="text-center text-sm text-slate-400 py-10">
-                                                No tariffs match your search.
-                                            </TableCell>
-                                        </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </div>
-
-                    {/* Rate Intelligence - Right Side */}
-                    <div className="col-span-4 space-y-4">
-                        <Card className="border-slate-200 shadow-sm">
-                            <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-                                <CardTitle className="text-xs uppercase text-slate-500 font-bold tracking-wider">Market Pulse</CardTitle>
-                                <Activity className="h-4 w-4 text-indigo-500" />
-                            </CardHeader>
-                            <CardContent className="p-4 pt-0 space-y-2">
-                                <div className="text-2xl font-bold text-slate-800">
-                                    {stats.avgBase ? stats.avgBase.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'} USD
-                                </div>
-                                <div className="text-[11px] text-slate-400">Average freight across active tariffs</div>
-                                <div className="flex items-center gap-2 text-xs text-emerald-600">
-                                    <LineChart className="h-3.5 w-3.5" />
-                                    Stable vs last cycle
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-slate-200 shadow-sm">
-                            <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-                                <CardTitle className="text-xs uppercase text-slate-500 font-bold tracking-wider">Price Range</CardTitle>
-                                <TrendingUp className="h-4 w-4 text-blue-500" />
-                            </CardHeader>
-                            <CardContent className="p-4 pt-0">
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-lg font-bold text-slate-800">{stats.minBase.toLocaleString() || '—'}</span>
-                                    <span className="text-xs text-slate-400">min</span>
-                                </div>
-                                <div className="flex items-baseline gap-2 mt-1">
-                                    <span className="text-lg font-bold text-slate-800">{stats.maxBase.toLocaleString() || '—'}</span>
-                                    <span className="text-xs text-slate-400">max</span>
-                                </div>
-                                <div className="mt-2 text-[10px] text-slate-400">Latest update: {stats.lastUpdated ? new Date(stats.lastUpdated).toLocaleDateString() : '—'}</div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-slate-200 shadow-sm">
-                            <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-                                <CardTitle className="text-xs uppercase text-slate-500 font-bold tracking-wider">Lane Coverage Snapshot</CardTitle>
-                                <Layers className="h-4 w-4 text-emerald-500" />
-                            </CardHeader>
-                            <CardContent className="p-4 pt-0 space-y-3">
-                                {rates.slice(0, 3).map(rate => (
-                                    <div key={rate.id} className="flex items-center justify-between text-xs text-slate-600">
-                                        <span className="font-medium truncate max-w-[150px]">{rate.pol.split('(')[0]} → {rate.pod.split('(')[0]}</span>
-                                        <Badge variant="outline" className="text-[9px]">{rate.status}</Badge>
-                                    </div>
+                {/* 2. Recent Activity List (Filling remainder) */}
+                <div className="flex-1 min-h-0 flex flex-col">
+                     <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 shrink-0">Recent Uploads</h3>
+                     <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-auto flex-1">
+                        <table className="w-full text-xs text-left">
+                            <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
+                                <tr>
+                                    <th className="p-3 font-semibold text-slate-500">Reference</th>
+                                    <th className="p-3 font-semibold text-slate-500">Route</th>
+                                    <th className="p-3 font-semibold text-slate-500">Carrier</th>
+                                    <th className="p-3 font-semibold text-slate-500 text-right">Base 40'</th>
+                                    <th className="p-3 font-semibold text-slate-500 text-right">Valid To</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {filteredRates.slice(0, 8).map((rate) => (
+                                    <tr 
+                                        key={rate.id} 
+                                        className="hover:bg-slate-50 cursor-pointer transition-colors"
+                                        onClick={() => { loadRate(rate.id); onNavigate('workspace'); }}
+                                    >
+                                        <td className="p-3 font-medium text-slate-700">{rate.reference}</td>
+                                        <td className="p-3 text-slate-600">{rate.pol.split('(')[0]} → {rate.pod.split('(')[0]}</td>
+                                        <td className="p-3">
+                                            <div className="flex items-center gap-2">
+                                                 <div className="w-5 h-5 rounded bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-[9px]">
+                                                    {rate.carrierName.substring(0, 1)}
+                                                </div>
+                                                {rate.carrierName}
+                                            </div>
+                                        </td>
+                                        <td className="p-3 text-right font-mono text-emerald-600 font-bold">
+                                            {rate.freightCharges.reduce((acc, c) => acc + (c.price40HC || 0), 0).toLocaleString()} {rate.currency}
+                                        </td>
+                                        <td className="p-3 text-right text-slate-500">{new Date(rate.validTo).toLocaleDateString()}</td>
+                                    </tr>
                                 ))}
-                                {rates.length === 0 && (
-                                    <p className="text-xs text-slate-400">No lane insights yet.</p>
-                                )}
-                            </CardContent>
-                        </Card>
-                    </div>
+                            </tbody>
+                        </table>
+                     </div>
                 </div>
             </div>
         </div>

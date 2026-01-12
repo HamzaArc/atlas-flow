@@ -3,15 +3,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Save, Ship, Calendar, Anchor, Clock, Calculator, Plane, Truck, MapPin, Handshake, Timer } from "lucide-react";
+import { ArrowLeft, Save, Ship, Calendar, Anchor, Clock, Calculator, Plane, Truck, MapPin, Handshake, Timer, AlertTriangle } from "lucide-react";
 import { useTariffStore } from "@/store/useTariffStore";
 import { RateGrid } from "../components/RateGrid";
 import { SmartPortSelector } from "@/features/quotes/components/RouteSelector"; 
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-const INCOTERMS = [
-    "CY/CY", "CY/FO", "FO/CY", "FO/FO", // Port-to-Port variants
-    "EXW", "FCA", "FOB", "DAP", "DDP" // Door variants
+const INCOTERMS = [ 
+    "EXW", "FCA", "FAS","FOB", "CPT","CFR", "CIF" , "CIP", "DAP", "DPU", "DDP"
 ];
 
 interface RateWorkspaceProps {
@@ -29,6 +29,20 @@ export default function RateWorkspace({ onBack }: RateWorkspaceProps) {
         const dest = activeRate.destCharges.reduce((acc, curr) => acc + (curr[key] || 0), 0);
         return freight + origin + dest;
     };
+
+    // --- GUARDRAIL LOGIC ---
+    // Rule 1: Disable Origin if FOB/FCA (Buyer pays freight + dest, Seller pays Origin) 
+    const isOriginDisabled = ['FOB', 'FCA'].includes(activeRate.incoterm);
+    
+    // Rule 2: Disable Freight if it's purely a local handling tariff (Rare, but possible)
+    const isFreightDisabled = false; 
+
+    // Rule 3: Disable Dest if CFR/CIF/CPT (Prepaid to port, Buyer pays Dest locals)
+    const isDestDisabled = ['CFR', 'CIF', 'CPT', 'CIP'].includes(activeRate.incoterm);
+
+    // --- RISK MONITOR ---
+    const estimatedCycle = (activeRate.transitTime || 0) + 7;
+    const isDemurrageRisk = activeRate.freeTime > 0 && estimatedCycle > activeRate.freeTime;
 
     const ModeIcon = activeRate.mode === 'AIR' ? Plane : activeRate.mode === 'ROAD' ? Truck : Ship;
 
@@ -105,7 +119,7 @@ export default function RateWorkspace({ onBack }: RateWorkspaceProps) {
                             </div>
                         </div>
 
-                        {/* 2. Route Definition & Scope (RESTORED INCOTERM) */}
+                        {/* 2. Route Definition & Scope */}
                         <div className="space-y-4 pt-2 border-t border-slate-200 border-dashed">
                             <div className="flex items-center justify-between">
                                 <Label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Route Logic</Label>
@@ -132,8 +146,8 @@ export default function RateWorkspace({ onBack }: RateWorkspaceProps) {
                                     />
                                 </div>
 
-                                {/* CRITICAL RESTORATION: Service Scope / Incoterm */}
-                                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                                {/* CRITICAL: Service Scope / Incoterm */}
+                                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2 relative overflow-hidden">
                                     <div className="flex items-center gap-2 text-slate-700">
                                         <Handshake className="h-3.5 w-3.5" />
                                         <span className="text-xs font-bold uppercase">Service Scope (Incoterm)</span>
@@ -144,9 +158,22 @@ export default function RateWorkspace({ onBack }: RateWorkspaceProps) {
                                             {INCOTERMS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
-                                    <p className="text-[10px] text-slate-400">
-                                        Defines the responsibility boundaries (e.g. CY/CY does not include trucking).
-                                    </p>
+                                    
+                                    {/* Guardrail Warnings */}
+                                    <div className="space-y-1 mt-2">
+                                        {isOriginDisabled && (
+                                            <div className="flex items-start gap-2 text-[10px] text-amber-600 bg-amber-50 p-1.5 rounded border border-amber-100">
+                                                <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                                                <span>Origin charges disabled (FOB/FCA).</span>
+                                            </div>
+                                        )}
+                                        {isDestDisabled && (
+                                            <div className="flex items-start gap-2 text-[10px] text-blue-600 bg-blue-50 p-1.5 rounded border border-blue-100">
+                                                <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                                                <span>Dest charges disabled (CFR/CIF).</span>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -174,7 +201,7 @@ export default function RateWorkspace({ onBack }: RateWorkspaceProps) {
                             </div>
                         </div>
 
-                        {/* 4. Carrier & Service (UPDATED: Replaced Service Loop with Free Time) */}
+                        {/* 4. Carrier & Operational Risk */}
                         <div className="space-y-4 border-t border-slate-100 pt-6">
                             <div className="space-y-1.5">
                                 <Label className="text-xs font-bold text-slate-700">Primary Carrier / Vendor</Label>
@@ -191,11 +218,25 @@ export default function RateWorkspace({ onBack }: RateWorkspaceProps) {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
-                                    <Label className="text-xs font-bold text-slate-700">Free Time (Days)</Label>
+                                    <div className="flex items-center justify-between">
+                                        <Label className="text-xs font-bold text-slate-700">Free Time</Label>
+                                        {isDemurrageRisk && (
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger>
+                                                        <AlertTriangle className="h-3.5 w-3.5 text-red-500 animate-pulse" />
+                                                    </TooltipTrigger>
+                                                    <TooltipContent className="bg-red-50 text-red-700 border-red-200 max-w-[200px] text-xs">
+                                                        Risk! Transit ({activeRate.transitTime}d) + Clearance (7d) {'>'} Free Time ({activeRate.freeTime}d).
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
+                                        )}
+                                    </div>
                                     <div className="relative">
                                         <Input 
                                             type="number" 
-                                            className="h-9 pl-8" 
+                                            className={cn("h-9 pl-8", isDemurrageRisk ? "border-red-300 text-red-700 bg-red-50" : "")}
                                             placeholder="e.g. 7" 
                                             value={activeRate.freeTime || ''} 
                                             onChange={(e) => updateRateField('freeTime', parseInt(e.target.value))} 
@@ -215,19 +256,45 @@ export default function RateWorkspace({ onBack }: RateWorkspaceProps) {
                     </div>
                 </div>
 
-                {/* RIGHT: Pricing Engine (CONTAINED) */}
+                {/* RIGHT: Pricing Engine (Tabs) */}
                 <div className="flex-1 flex flex-col bg-slate-50/30 overflow-hidden relative">
                     <Tabs defaultValue="freight" className="flex-1 flex flex-col h-full">
                         <div className="bg-white border-b border-slate-200 px-8 shrink-0">
                             <TabsList className="h-14 bg-transparent p-0 gap-8">
-                                <TabsTrigger value="freight" className="h-full rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:text-blue-700 font-bold text-sm px-2">
+                                <TabsTrigger 
+                                    value="freight" 
+                                    disabled={isFreightDisabled}
+                                    className={cn(
+                                        "h-full rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 font-bold text-sm px-2",
+                                        isFreightDisabled ? "opacity-50 cursor-not-allowed text-slate-300" : "data-[state=active]:text-blue-700"
+                                    )}
+                                >
                                     Main Freight
+                                    {isFreightDisabled && <span className="ml-2 text-[10px] uppercase border border-slate-200 px-1 rounded bg-slate-50">N/A</span>}
                                 </TabsTrigger>
-                                <TabsTrigger value="local_origin" className="h-full rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:text-blue-700 font-bold text-sm px-2">
+                                
+                                <TabsTrigger 
+                                    value="local_origin" 
+                                    disabled={isOriginDisabled}
+                                    className={cn(
+                                        "h-full rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 font-bold text-sm px-2",
+                                        isOriginDisabled ? "opacity-50 cursor-not-allowed text-slate-300" : "data-[state=active]:text-blue-700"
+                                    )}
+                                >
                                     Origin Locals (POL)
+                                    {isOriginDisabled && <span className="ml-2 text-[10px] uppercase border border-slate-200 px-1 rounded bg-slate-50">N/A</span>}
                                 </TabsTrigger>
-                                <TabsTrigger value="local_dest" className="h-full rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:text-blue-700 font-bold text-sm px-2">
+                                
+                                <TabsTrigger 
+                                    value="local_dest" 
+                                    disabled={isDestDisabled}
+                                    className={cn(
+                                        "h-full rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 font-bold text-sm px-2",
+                                        isDestDisabled ? "opacity-50 cursor-not-allowed text-slate-300" : "data-[state=active]:text-blue-700"
+                                    )}
+                                >
                                     Destination Locals (POD)
+                                    {isDestDisabled && <span className="ml-2 text-[10px] uppercase border border-slate-200 px-1 rounded bg-slate-50">N/A</span>}
                                 </TabsTrigger>
                             </TabsList>
                         </div>
@@ -247,13 +314,13 @@ export default function RateWorkspace({ onBack }: RateWorkspaceProps) {
                                 </div>
 
                                 <TabsContent value="freight" className="m-0 focus-visible:ring-0">
-                                    <RateGrid section="freightCharges" title="Base Freight & Surcharges" />
+                                    <RateGrid section="freightCharges" title="Base Freight & Surcharges" readOnly={isFreightDisabled} />
                                 </TabsContent>
                                 <TabsContent value="local_origin" className="m-0 focus-visible:ring-0">
-                                    <RateGrid section="originCharges" title="Origin Handling & Customs" />
+                                    <RateGrid section="originCharges" title="Origin Handling & Customs" readOnly={isOriginDisabled} />
                                 </TabsContent>
                                 <TabsContent value="local_dest" className="m-0 focus-visible:ring-0">
-                                    <RateGrid section="destCharges" title="Destination Handling & Delivery" />
+                                    <RateGrid section="destCharges" title="Destination Handling & Delivery" readOnly={isDestDisabled} />
                                 </TabsContent>
                             </div>
                         </div>
