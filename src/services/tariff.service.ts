@@ -64,6 +64,7 @@ export const TariffService = {
         const payload: any = {
             reference: rate.reference,
             carrier_name: rate.carrierName,
+            carrier_id: rate.carrierId || null, // Ensure explicit null if missing
             mode: rate.mode,
             type: rate.type,
             status: rate.status,
@@ -71,13 +72,16 @@ export const TariffService = {
             pod: rate.pod,
             valid_from: rate.validFrom,
             valid_to: rate.validTo,
-            transit_time: rate.transitTime,
+            transit_time: rate.transitTime || 0,
             currency: rate.currency,
             incoterm: rate.incoterm,
             updated_at: new Date()
         };
 
-        if (!rate.id.startsWith('new')) {
+        // FIXED: Treat 'spot-' prefix as a new record (let DB generate UUID)
+        const isNewRecord = rate.id.startsWith('new') || rate.id.startsWith('spot-');
+
+        if (!isNewRecord) {
             payload.id = rate.id;
         }
 
@@ -111,6 +115,7 @@ export const TariffService = {
             section: c.section
         }));
 
+        // Clean up old charges and insert new ones
         await supabase.from('tariff_charges').delete().eq('tariff_id', tariffId);
         
         if (allCharges.length > 0) {
@@ -165,8 +170,8 @@ function mapToModel(t: any): SupplierRate {
         paymentTerms: t.payment_terms,
         remarks: t.remarks,
         updatedAt: new Date(t.updated_at),
-        volatilityFlag: false, // Calculated later
-        reliabilityScore: 0, // Calculated later
+        volatilityFlag: false, 
+        reliabilityScore: 0, 
         
         freightCharges: mapCharges(t.tariff_charges, 'FREIGHT'),
         originCharges: mapCharges(t.tariff_charges, 'ORIGIN'),

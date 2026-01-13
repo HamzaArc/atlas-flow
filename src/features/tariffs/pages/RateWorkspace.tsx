@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +24,37 @@ export default function RateWorkspace({ onBack }: RateWorkspaceProps) {
 
     if (!activeRate) return <div>Loading...</div>;
 
+    // --- AUTO-REFERENCE GENERATOR ---
+    useEffect(() => {
+        // Condition: Only auto-generate if it's a "New" rate or explicitly generic
+        // This prevents overwriting a custom reference on an existing valid rate
+        const isGenericRef = !activeRate.reference || activeRate.reference === 'NEW-RATE' || activeRate.reference.startsWith('AUTO-');
+        
+        if (isGenericRef) {
+            const carrierCode = activeRate.carrierName 
+                ? activeRate.carrierName.split(' ')[0].substring(0, 4).toUpperCase() 
+                : 'GEN'; // GEN = Generic if no carrier
+            
+            // Extract UN/LOCODE from "Shanghai (CNSHA)" -> "CNSHA"
+            const extractCode = (val: string) => {
+                const match = val.match(/\((.*?)\)/);
+                return match ? match[1] : val.substring(0, 3).toUpperCase();
+            };
+
+            const polCode = activeRate.pol ? extractCode(activeRate.pol) : 'POL';
+            const podCode = activeRate.pod ? extractCode(activeRate.pod) : 'POD';
+            
+            // Format: MAER-CNSHA-MAP-NOV24
+            const dateCode = new Date().toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).replace(' ', '').toUpperCase();
+            const autoRef = `${carrierCode}-${polCode}-${podCode}-${dateCode}`;
+
+            if (activeRate.reference !== autoRef) {
+                updateRateField('reference', autoRef);
+            }
+        }
+    }, [activeRate.carrierName, activeRate.pol, activeRate.pod]);
+
+
     const calcTotal = (key: 'price20DV' | 'price40HC') => {
         const freight = activeRate.freightCharges.reduce((acc, curr) => acc + (curr[key] || 0), 0);
         const origin = activeRate.originCharges.reduce((acc, curr) => acc + (curr[key] || 0), 0);
@@ -31,13 +63,8 @@ export default function RateWorkspace({ onBack }: RateWorkspaceProps) {
     };
 
     // --- GUARDRAIL LOGIC ---
-    // Rule 1: Disable Origin if FOB/FCA (Buyer pays freight + dest, Seller pays Origin) 
     const isOriginDisabled = ['FOB', 'FCA'].includes(activeRate.incoterm);
-    
-    // Rule 2: Disable Freight if it's purely a local handling tariff (Rare, but possible)
     const isFreightDisabled = false; 
-
-    // Rule 3: Disable Dest if CFR/CIF/CPT (Prepaid to port, Buyer pays Dest locals)
     const isDestDisabled = ['CFR', 'CIF', 'CPT', 'CIP'].includes(activeRate.incoterm);
 
     // --- RISK MONITOR ---
@@ -54,7 +81,14 @@ export default function RateWorkspace({ onBack }: RateWorkspaceProps) {
                     <Button variant="ghost" size="icon" onClick={onBack}><ArrowLeft className="h-5 w-5 text-slate-500" /></Button>
                     <div>
                         <div className="flex items-center gap-2">
-                            <h1 className="text-xl font-bold text-slate-900 tracking-tight">{activeRate.reference || 'New Rate Sheet'}</h1>
+                            {/* CHANGED: Editable Input instead of static H1 */}
+                            <Input 
+                                value={activeRate.reference} 
+                                onChange={(e) => updateRateField('reference', e.target.value)}
+                                className="text-xl font-bold text-slate-900 tracking-tight border-transparent hover:border-slate-200 focus:border-blue-300 px-0 h-auto w-[400px] bg-transparent shadow-none"
+                                placeholder="Rate Reference"
+                            />
+                            
                             <div className={cn("px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border", 
                                 activeRate.status === 'ACTIVE' ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-200")}>
                                 {activeRate.status}

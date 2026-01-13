@@ -153,52 +153,60 @@ export const useTariffStore = create<TariffState>((set, get) => ({
         });
     },
 
-    // --- INTELLIGENCE LAYER (UPDATED) ---
     findBestMatch: ({ pol, pod, mode, incoterm, date }) => {
         const { rates } = get();
         
-        // 1. Strict Match: Route + Mode + Status
+        const searchPol = pol?.trim().toLowerCase();
+        const searchPod = pod?.trim().toLowerCase();
+        const searchMode = mode?.trim();
+        const searchIncoterm = incoterm?.trim();
+
         const candidates = rates.filter(r => 
             r.status === 'ACTIVE' &&
-            r.mode === mode &&
-            r.pol === pol && 
-            r.pod === pod
+            r.mode === searchMode &&
+            r.pol.trim().toLowerCase() === searchPol && 
+            r.pod.trim().toLowerCase() === searchPod
         );
 
         if (candidates.length === 0) return undefined;
 
-        // 2. Filter by Validity
         const validCandidates = candidates.filter(r => {
             const from = new Date(r.validFrom);
             const to = new Date(r.validTo);
             return date >= from && date <= to;
         });
 
-        // 3. Filter by Incoterm (Service Scope)
         const scopeMatches = validCandidates.filter(r => 
-            r.incoterm === incoterm || 
-            (incoterm === 'CY/CY' && !r.incoterm) // Fallback for legacy data
+            (r.incoterm?.trim() === searchIncoterm) || 
+            (searchIncoterm === 'CY/CY' && !r.incoterm)
         );
 
-        // 4. Selection Strategy: Prioritize Contracts over Spot, then newest
         return scopeMatches.sort((a, b) => {
             if (a.type !== b.type) return a.type === 'CONTRACT' ? -1 : 1;
             return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
         })[0];
     },
 
-    // Feature: Create Spot Rate from Quote
     addSpotRateFromQuote: async ({ item, pol, pod, mode }) => {
-        if (!item.vendorName || !item.buyPrice) {
-            useToast.getState().toast("Cannot save: Missing Vendor or Price", "error");
+        // VALIDATION
+        if (!item.vendorName) {
+            useToast.getState().toast("Cannot save: Vendor Name is required.", "error");
+            return;
+        }
+        if (!item.buyPrice || item.buyPrice <= 0) {
+            useToast.getState().toast("Cannot save: Price must be greater than 0.", "error");
+            return;
+        }
+        if (!pol || !pod) {
+            useToast.getState().toast("Cannot save: Route (POL/POD) is missing in Quote.", "error");
             return;
         }
 
         const newCharge: RateCharge = {
             id: Math.random().toString(36).substr(2, 9),
-            chargeHead: item.description,
+            chargeHead: item.description || 'Spot Charge',
             isSurcharge: false,
-            basis: 'CONTAINER', // Default assumption, user can edit later
+            basis: 'CONTAINER', 
             price20DV: item.buyPrice,
             price40DV: item.buyPrice,
             price40HC: item.buyPrice,
@@ -212,7 +220,8 @@ export const useTariffStore = create<TariffState>((set, get) => ({
 
         const newRate: SupplierRate = {
             ...EMPTY_RATE,
-            id: `spot-${Date.now()}`,
+            // ID must contain 'spot-' so the service recognizes it as new
+            id: `spot-${Date.now()}`, 
             reference: `SPOT-${item.vendorName.toUpperCase().substring(0,3)}-${Date.now().toString().substring(8)}`,
             carrierName: item.vendorName,
             mode: mode as any,
@@ -221,17 +230,20 @@ export const useTariffStore = create<TariffState>((set, get) => ({
             pol,
             pod,
             validFrom: new Date(),
-            validTo: new Date(new Date().setDate(new Date().getDate() + 30)), // 30 Day Validity for Spot
+            validTo: new Date(new Date().setDate(new Date().getDate() + 30)), 
             freightCharges: item.section === 'FREIGHT' ? [newCharge] : [],
             originCharges: item.section === 'ORIGIN' ? [newCharge] : [],
             destCharges: item.section === 'DESTINATION' ? [newCharge] : [],
             updatedAt: new Date()
         };
 
-        // Save to DB (mocked via Service) and State
-        await TariffService.save(newRate);
-        
-        set(state => ({ rates: [newRate, ...state.rates] }));
-        useToast.getState().toast("Spot Rate saved to Library!", "success");
+        try {
+            await TariffService.save(newRate);
+            set(state => ({ rates: [newRate, ...state.rates] }));
+            useToast.getState().toast(`Spot Rate saved! Ref: ${newRate.reference}`, "success");
+        } catch (e) {
+            console.error(e);
+            useToast.getState().toast("Failed to save Spot Rate to Database.", "error");
+        }
     }
 }));

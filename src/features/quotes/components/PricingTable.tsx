@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-    Trash2, Plus, MapPin, Ship, Anchor, Zap, AlertCircle, RefreshCw, Link2, Sparkles, Wand2, Save, Timer, TrendingDown, ShieldCheck
+    Trash2, Plus, MapPin, Ship, Anchor, Zap, AlertCircle, RefreshCw, Link2, Sparkles, Wand2, Save, Timer, TrendingDown, ShieldCheck, X
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { useClientStore } from "@/store/useClientStore"; 
@@ -63,12 +63,10 @@ const RateComparisonDialog = ({
         if (rates.length === 0 && open) fetchRates();
     }, [open]);
 
-    // Match Logic
     const matches = rates.filter(r => 
         (r.pol.includes(pol) || pol.includes(r.pol) || r.mode === mode) && r.status === 'ACTIVE'
     );
 
-    // Strategy Logic
     const cheapest = [...matches].sort((a, b) => {
         const costA = (a.freightCharges?.[0]?.unitPrice || 0);
         const costB = (b.freightCharges?.[0]?.unitPrice || 0);
@@ -77,16 +75,14 @@ const RateComparisonDialog = ({
 
     const fastest = [...matches].sort((a, b) => (a.transitTime || 99) - (b.transitTime || 99))[0];
     
-    // Fallback logic for reliable if no score present
     const reliable = [...matches].sort((a, b) => (b.reliabilityScore || 0) - (a.reliabilityScore || 0))[0];
 
     const strategies = [
         { title: "Cheapest", icon: TrendingDown, data: cheapest, color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
         { title: "Fastest", icon: Timer, data: fastest, color: "text-blue-600 bg-blue-50 border-blue-200" },
         { title: "Reliable", icon: ShieldCheck, data: reliable, color: "text-purple-600 bg-purple-50 border-purple-200" },
-    ].filter(s => !!s.data); // Remove empty strategies
+    ].filter(s => !!s.data); 
 
-    // Deduplication for display: if only 1 match, show full list instead of strategies
     const showStrategies = matches.length > 1;
 
     return (
@@ -255,6 +251,7 @@ export function PricingTable() {
   const { findBestMatch, fetchRates, rates, addSpotRateFromQuote } = useTariffStore();
   const { toast } = useToast();
   const [matchingRate, setMatchingRate] = useState<SupplierRate | undefined>(undefined);
+  const [showSaveHelp, setShowSaveHelp] = useState(true);
 
   const isReadOnly = status !== 'DRAFT';
 
@@ -268,6 +265,9 @@ export function PricingTable() {
 
   useEffect(() => {
       if (rates.length === 0) fetchRates();
+      
+      const timer = setTimeout(() => setShowSaveHelp(false), 10000);
+      return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -290,7 +290,7 @@ export function PricingTable() {
           else if (equipmentType.includes('40') && equipmentType.includes('HC')) cost = charge.price40HC;
           else if (equipmentType.includes('40')) cost = charge.price40DV;
           else if (equipmentType.includes('RF')) cost = charge.price40RF;
-          else cost = charge.price40HC; // Fallback
+          else cost = charge.price40HC; 
       } 
       else if (charge.basis === 'TAXABLE_WEIGHT' || charge.basis === 'WEIGHT') {
           cost = (charge.unitPrice * chargeableWeight);
@@ -308,19 +308,42 @@ export function PricingTable() {
 
   const handleAutoApply = (section: 'FREIGHT' | 'ORIGIN' | 'DESTINATION') => {
       if (!matchingRate) {
-          const possibleMatches = rates.filter(r => r.pol === pol && r.pod === pod && r.mode === mode);
-          if (possibleMatches.length > 0) {
-              const actualScopes = possibleMatches.map(r => r.incoterm).join(', ');
-              toast(
-                  `Match Failed on Scope: Found tariffs for this route, but Incoterm didn't match. (Quote: ${incoterm} vs Tariff: ${actualScopes})`, 
-                  "error"
-              );
-          } else {
-              toast(
-                  `Auto-Rate Failed. No Active ${mode} Rate found for ${pol} -> ${pod}. Check Tariff Library.`, 
-                  "error"
-              );
+          // --- UPDATED DIAGNOSTIC LOGIC ---
+          const routeMatches = rates.filter(r => 
+              r.pol.trim() === pol.trim() && 
+              r.pod.trim() === pod.trim() && 
+              r.mode === mode
+          );
+
+          if (routeMatches.length === 0) {
+             toast(`No tariff found for ${mode} from ${pol} to ${pod}.`, "error");
+             return;
           }
+
+          const incotermMatches = routeMatches.filter(r => r.incoterm?.trim() === incoterm?.trim());
+          if (incotermMatches.length === 0) {
+              const available = [...new Set(routeMatches.map(r => r.incoterm))].join(', ');
+              toast(`Route found, but Incoterm mismatch. (Quote: ${incoterm} vs Available: ${available})`, "error");
+              return;
+          }
+
+          const activeMatches = incotermMatches.filter(r => r.status === 'ACTIVE');
+          if (activeMatches.length === 0) {
+              toast(`Rate found for ${incoterm}, but it is NOT ACTIVE (Draft or Archived).`, "warning");
+              return;
+          }
+
+          const validMatches = activeMatches.filter(r => {
+              const now = new Date();
+              return new Date(r.validTo) >= now;
+          });
+
+          if (validMatches.length === 0) {
+               toast(`Rate found for ${incoterm}, but it has EXPIRED.`, "error");
+               return;
+          }
+          
+          toast("Rate exists but could not be applied. Check Start Date.", "error");
           return;
       }
 
@@ -418,7 +441,9 @@ export function PricingTable() {
         const isTariff = item.source === 'TARIFF';
         const isSmart = item.source === 'SMART_INIT';
         
-        // Highlight logic for required empty fields
+        // Validation check for Save button state
+        const isValidForSave = !!item.vendorName && item.buyPrice > 0;
+        
         const isMissingRequired = item.isRequired && (item.buyPrice === 0 || item.buyPrice === undefined);
 
         let marginColor = "text-slate-600";
@@ -478,14 +503,41 @@ export function PricingTable() {
                         placeholder="Vendor"
                         onChange={(e) => updateLineItem(item.id, { vendorName: e.target.value })}
                     />
-                    {!isTariff && item.vendorName && item.buyPrice > 0 && (
-                        <button 
-                            onClick={() => addSpotRateFromQuote({ item, pol, pod, mode })}
-                            className="absolute right-0 top-1.5 opacity-0 group-hover/vendor:opacity-100 transition-opacity text-slate-300 hover:text-emerald-600"
-                            title="Save as Spot Rate to Library"
-                        >
-                            <Save className="h-3.5 w-3.5" />
-                        </button>
+                    
+                    {!isTariff && (
+                        <div className="absolute right-0 top-1.5 flex items-center">
+                            {showSaveHelp && isValidForSave && (
+                                <div className="absolute right-6 top-[-5px] whitespace-nowrap bg-blue-600 text-white text-[9px] py-0.5 px-2 rounded-full animate-pulse shadow-sm z-50 flex items-center gap-1">
+                                    Click disk to save rate <X className="h-2 w-2 cursor-pointer" onClick={(e) => { e.stopPropagation(); setShowSaveHelp(false); }} />
+                                </div>
+                            )}
+                            <button 
+                                onMouseDown={(e) => {
+                                    e.preventDefault(); 
+                                    e.stopPropagation();
+                                    
+                                    if (!item.vendorName) {
+                                        toast("Missing Vendor: Enter a vendor name to save.", "error");
+                                        return;
+                                    }
+                                    if (!item.buyPrice || item.buyPrice <= 0) {
+                                        toast("Invalid Price: Price must be greater than 0.", "error");
+                                        return;
+                                    }
+                                    
+                                    addSpotRateFromQuote({ item, pol, pod, mode });
+                                }}
+                                className={cn(
+                                    "transition-colors",
+                                    isValidForSave 
+                                        ? "text-blue-300 hover:text-emerald-600" 
+                                        : "text-slate-200 hover:text-red-400 cursor-not-allowed"
+                                )}
+                                title={isValidForSave ? "Save as Spot Rate" : "Cannot Save: Missing Data"}
+                            >
+                                <Save className="h-3.5 w-3.5" />
+                            </button>
+                        </div>
                     )}
                 </div>
             </TableCell>

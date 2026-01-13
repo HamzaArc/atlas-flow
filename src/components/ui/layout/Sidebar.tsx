@@ -67,7 +67,7 @@ export function Sidebar({
           className={cn(
               "relative group w-full flex items-center justify-start p-0 overflow-hidden", 
               // Shared Transition Physics
-              "transition-all duration-400 ease-[cubic-bezier(0.19,1,0.22,1)]",
+              "transition-all duration-400 ease-fluid",
               
               // Height
               "h-12", 
@@ -85,20 +85,20 @@ export function Sidebar({
              
              {/* Active Indicator */}
              <div className={cn(
-               "absolute left-0 top-1/2 -translate-y-1/2 w-1 bg-blue-600 rounded-r-full transition-all duration-400 ease-[cubic-bezier(0.19,1,0.22,1)]",
+               "absolute left-0 top-1/2 -translate-y-1/2 w-1 bg-blue-600 rounded-r-full transition-all duration-400 ease-fluid",
                active ? "h-8 opacity-100" : "h-0 opacity-0"
              )} />
 
              <Icon className={cn(
-               "h-5 w-5 transition-all duration-400 ease-[cubic-bezier(0.19,1,0.22,1)]",
+               "h-5 w-5 transition-all duration-400 ease-fluid",
                active ? "text-blue-600 scale-105" : "text-slate-400 group-hover:text-slate-600"
              )} />
           </div>
           
           {/* TEXT CONTAINER - Liquid Reveal */}
           <div className={cn(
-            "flex items-center flex-1 overflow-hidden whitespace-nowrap pl-2", // Added pl-2 for alignment spacing
-            "transition-all duration-400 ease-[cubic-bezier(0.19,1,0.22,1)]",
+            "flex items-center flex-1 overflow-hidden whitespace-nowrap pl-2", 
+            "transition-all duration-400 ease-fluid",
             expanded ? "opacity-100 translate-x-0 pr-4" : "opacity-0 -translate-x-2 pr-0"
           )}>
             <span className={cn("text-sm", active ? "font-semibold" : "font-medium")}>
@@ -120,7 +120,7 @@ export function Sidebar({
             {/* Chevron */}
             {!isSoon && (
               <ChevronRight className={cn(
-                "h-3 w-3 ml-2 text-slate-300 transition-all duration-400 ease-[cubic-bezier(0.19,1,0.22,1)]",
+                "h-3 w-3 ml-2 text-slate-300 transition-all duration-400 ease-fluid",
                 expanded ? "opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0" : "opacity-0"
               )} />
             )}
@@ -159,7 +159,7 @@ export function Sidebar({
     return (
       <div className={cn(
         "flex items-center overflow-hidden whitespace-nowrap",
-        "transition-all duration-400 ease-[cubic-bezier(0.19,1,0.22,1)]",
+        "transition-all duration-400 ease-fluid",
         expanded ? "h-10 opacity-100 mt-2 mb-1" : "h-0 opacity-0 mt-0 mb-0"
       )}>
         {/* EXACT ALIGNMENT SPACER: Matches the 72px Icon Column */}
@@ -183,7 +183,7 @@ export function Sidebar({
         className={cn(
           "fixed left-0 top-0 z-50 h-screen bg-white border-r border-slate-200/60",
           "flex flex-col shadow-sm will-change-[width,box-shadow]",
-          "transition-all duration-400 ease-[cubic-bezier(0.19,1,0.22,1)]", 
+          "transition-all duration-400 ease-fluid", 
           expanded ? "w-[280px] shadow-2xl shadow-slate-200/50" : "w-[72px]",
           className
         )}
@@ -197,7 +197,7 @@ export function Sidebar({
                 {/* Fixed Logo Container */}
                 <div className="min-w-[72px] w-[72px] flex items-center justify-center z-20 bg-white">
                    <div className={cn(
-                    "h-9 w-9 rounded-xl flex items-center justify-center transition-colors duration-400 ease-[cubic-bezier(0.19,1,0.22,1)]",
+                    "h-9 w-9 rounded-xl flex items-center justify-center transition-colors duration-400 ease-fluid",
                     expanded ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" : "bg-slate-900 text-white"
                    )}>
                       <Box className="h-5 w-5" />
@@ -207,7 +207,7 @@ export function Sidebar({
                 {/* Title Reveal */}
                 <div className={cn(
                   "flex flex-col justify-center whitespace-nowrap pl-1",
-                  "transition-all duration-400 ease-[cubic-bezier(0.19,1,0.22,1)]",
+                  "transition-all duration-400 ease-fluid",
                   expanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-8"
                 )}>
                   <h1 className="font-bold text-xl tracking-tight text-slate-900 leading-none">Atlas Flow</h1>
@@ -218,7 +218,7 @@ export function Sidebar({
 
         {/* SEPARATOR (Visible only when collapsed) */}
         <div className={cn(
-          "w-10 mx-auto h-px bg-slate-100 my-2 transition-all duration-400 ease-[cubic-bezier(0.19,1,0.22,1)]",
+          "w-10 mx-auto h-px bg-slate-100 my-2 transition-all duration-400 ease-fluid",
           expanded ? "opacity-0 h-0 my-0" : "opacity-100"
         )} />
 
@@ -296,13 +296,13 @@ export function Sidebar({
               onClick={onLogout}
               className={cn(
                 "flex items-center rounded-xl cursor-pointer group hover:bg-slate-50 border border-transparent",
-                "transition-all duration-400 ease-[cubic-bezier(0.19,1,0.22,1)]",
+                "transition-all duration-400 ease-fluid",
                 expanded ? "p-3 bg-slate-50/50 hover:border-slate-200" : "p-0 justify-center h-12 w-full hover:border-transparent"
               )}
             >
                 <div className="min-w-[48px] flex justify-center items-center">
                   <Avatar className={cn(
-                    "border-2 border-white shadow-sm transition-all duration-400 ease-[cubic-bezier(0.19,1,0.22,1)]",
+                    "border-2 border-white shadow-sm transition-all duration-400 ease-fluid",
                     expanded ? "h-9 w-9" : "h-8 w-8"
                   )}>
                       <AvatarImage src="" />
@@ -312,7 +312,7 @@ export function Sidebar({
                 
                 <div className={cn(
                   "flex flex-col whitespace-nowrap overflow-hidden",
-                  "transition-all duration-400 ease-[cubic-bezier(0.19,1,0.22,1)]",
+                  "transition-all duration-400 ease-fluid",
                   expanded ? "opacity-100 w-auto translate-x-0" : "opacity-0 w-0 -translate-x-4"
                 )}>
                     <span className="text-sm font-bold text-slate-800">Test User</span>

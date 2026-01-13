@@ -14,6 +14,10 @@ export default {
         },
       },
       extend: {
+        // ADDED THIS SECTION
+        transitionTimingFunction: {
+          'fluid': 'cubic-bezier(0.19, 1, 0.22, 1)',
+        },
         colors: {
           border: "hsl(var(--border))",
           input: "hsl(var(--input))",

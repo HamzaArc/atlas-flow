@@ -850,6 +850,11 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         const smartVat = detectSmartVatRule(updates.description);
         if (smartVat) {
             updates.vatRule = smartVat;
+            // NEW: Explicit Notification for Transparency
+            useToast.getState().toast(
+                `VAT auto-adjusted to ${smartVat === 'EXPORT_0_ART92' ? '0% (Export)' : smartVat === 'ROAD_14' ? '14% (Transport)' : '20%'} based on description.`, 
+                "info"
+            );
         }
     }
     
