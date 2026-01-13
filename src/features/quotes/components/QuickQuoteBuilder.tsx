@@ -5,8 +5,8 @@ import {
   Wand2, Calendar, 
   Box,  
   Plus, Trash2, Clock, Anchor,
-  Mail, Copy, FileOutput, Zap, DollarSign, X, AlertCircle,
-  Loader2, AlertTriangle, Globe
+  Mail, FileOutput, Zap, DollarSign, X, AlertCircle,
+  Loader2, AlertTriangle, Globe, MessageCircle, Copy // <--- Added Copy here
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,9 +27,10 @@ import { cn } from "@/lib/utils";
 import { TransportMode, Incoterm, PackagingType, Currency } from "@/types/index";
 import { useToast } from "@/components/ui/use-toast";
 import { format } from "date-fns";
+import { WhatsAppOfferDialog, QuoteOfferData } from "./WhatsAppOfferDialog";
 
 // -----------------------------------------------------------------------------
-// GOOGLE MAPS & ADDRESS UTILS (Ported from RouteSelector)
+// GOOGLE MAPS & ADDRESS UTILS
 // -----------------------------------------------------------------------------
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ""; 
@@ -221,7 +222,6 @@ const AddressWithMap = ({
 // MAIN COMPONENT
 // -----------------------------------------------------------------------------
 
-// Helper for Mode Buttons
 const ModeButton = ({ 
   mode, current, onClick 
 }: { 
@@ -262,7 +262,6 @@ const ModeButton = ({
   );
 };
 
-// Full Incoterm List
 const INCOTERMS: Incoterm[] = [
     'EXW', 'FCA', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP', 'FAS', 'FOB', 'CFR', 'CIF'
 ];
@@ -277,7 +276,7 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
     reference, clientName, setClientSnapshot,
     // Route
     pol, pod, mode, incoterm, setMode, setIncoterm, setRouteLocations,
-    placeOfLoading, placeOfDelivery, // Added these destructures
+    placeOfLoading, placeOfDelivery, 
     validityDate, requestedDepartureDate, estimatedArrivalDate, setIdentity,
     transitTime, freeTime, setLogisticsParam,
     // Equipment / Cargo
@@ -293,9 +292,10 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
   const { fetchRates } = useTariffStore();
   const { toast } = useToast();
   
-  // Local State for RFQ Dialog
+  // Local State for Dialogs
   const [rfqText, setRfqText] = useState("");
   const [isRfqOpen, setIsRfqOpen] = useState(false);
+  const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(false); // NEW STATE
 
   useEffect(() => {
     if (clients.length === 0) fetchClients();
@@ -306,13 +306,10 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
   const isFCL = mode === 'SEA_FCL' || mode === 'ROAD'; 
   const showFreeTime = mode === 'SEA_FCL' || mode === 'SEA_LCL';
   const marginPercent = totalSellMAD > 0 ? ((totalMarginMAD / totalSellMAD) * 100).toFixed(1) : "0.0";
-
-  // Address Logic (Copied from RouteSelector logic)
   const showPlaceOfLoading = incoterm === 'EXW';
   const showPlaceOfDelivery = ['DAP', 'DPU', 'DDP'].includes(incoterm);
 
   // -- HANDLERS --
-
   const handleRequestRates = () => {
     if (!pol || !pod) {
         toast("Missing Route Information", "error");
@@ -335,7 +332,7 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
       });
   };
 
-  // Agent RFQ Generator (Preserved Feature)
+  // Agent RFQ Generator (Buying Side)
   const generateAgentRFQ = () => {
       const equipString = equipmentList && equipmentList.length > 0
           ? equipmentList.map(e => `${e.count}x ${e.type}`).join(', ')
@@ -390,7 +387,7 @@ Best regards,`;
       toast("RFQ text copied to clipboard!", "success");
   };
 
-  // Cargo Row Management (Expert Mode Parity)
+  // Cargo Row Management
   const addCargoRow = () => {
       const newRow = {
           id: Math.random().toString(36).substring(7),
@@ -419,6 +416,22 @@ Best regards,`;
           return r;
       });
       updateCargo(newRows);
+  };
+
+  // PREPARE DATA FOR WHATSAPP (Selling Side)
+  const whatsAppData: QuoteOfferData = {
+      reference,
+      pol,
+      pod,
+      mode,
+      commodity: goodsDescription || 'General Cargo',
+      equipment: isFCL 
+        ? equipmentList.map(e => `${e.count}x ${e.type}`).join(', ') 
+        : `${totalPackages} Pkgs / ${chargeableWeight}kg`,
+      totalPrice: totalTTCTarget,
+      currency: quoteCurrency,
+      validityDate,
+      transitTime
   };
 
   return (
@@ -454,16 +467,25 @@ Best regards,`;
                  Auto-Rate
              </Button>
              
+             {/* NEW BUTTON: WHATSAPP SHARE */}
+             <Button 
+                onClick={() => setIsWhatsAppOpen(true)}
+                className="bg-[#25D366] hover:bg-[#128C7E] text-white"
+             >
+                 <MessageCircle className="h-4 w-4 mr-2" />
+                 Share Offer
+             </Button>
+
              <Button onClick={onGeneratePDF} className="bg-slate-900 text-white hover:bg-slate-800">
                  <FileOutput className="h-4 w-4 mr-2" />
-                 Preview Quote
+                 PDF
              </Button>
           </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
           
-          {/* ================= LEFT COLUMN: LOGISTICS (Client, Route, Cargo) ================= */}
+          {/* ================= LEFT COLUMN: LOGISTICS ================= */}
           <div className="xl:col-span-7 space-y-6">
               
               {/* SECTION 1: IDENTITY & ROUTE */}
@@ -728,7 +750,7 @@ Best regards,`;
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {/* MULTI-ROW CARGO INPUTS (Expert Mode Parity) */}
+                            {/* MULTI-ROW CARGO INPUTS */}
                             <div className="grid grid-cols-12 gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide px-2">
                                 <div className="col-span-1">Qty</div>
                                 <div className="col-span-2">Type</div>
@@ -937,7 +959,7 @@ Best regards,`;
 
           </div>
 
-          {/* AGENT RFQ DIALOG */}
+          {/* AGENT RFQ DIALOG (Original) */}
           <Dialog open={isRfqOpen} onOpenChange={setIsRfqOpen}>
               <DialogContent className="max-w-2xl">
                   <DialogHeader>
@@ -965,6 +987,13 @@ Best regards,`;
                   </div>
               </DialogContent>
           </Dialog>
+
+          {/* NEW WHATSAPP OFFER DIALOG */}
+          <WhatsAppOfferDialog 
+            open={isWhatsAppOpen} 
+            onOpenChange={setIsWhatsAppOpen} 
+            data={whatsAppData} 
+          />
       </div>
       
       <div className="h-12" />

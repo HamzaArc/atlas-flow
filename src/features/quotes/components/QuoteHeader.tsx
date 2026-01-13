@@ -18,11 +18,12 @@ import {
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { useClientStore } from "@/store/useClientStore"; 
-import { useUserStore } from "@/store/useUserStore"; // Import User Store
+import { useUserStore } from "@/store/useUserStore"; 
 import { Currency } from "@/types/index";
 import { cn } from "@/lib/utils";
 import { ApprovalAction } from "./ApprovalAction";
-import { useToast } from "@/components/ui/use-toast";
+// Removed unused useToast import
+import { WhatsAppOfferDialog, QuoteOfferData } from "./WhatsAppOfferDialog"; 
 
 interface QuoteHeaderProps {
     onBack: () => void;
@@ -45,7 +46,9 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
     quoteCurrency, exchangeRates, paymentTerms,
     setIdentity, setClientSnapshot, setStatus, saveQuote, duplicateQuote, createRevision,
     setQuoteCurrency, setExchangeRate,
-    totalTTCTarget, mode, incoterm, pol, pod
+    totalTTCTarget, mode, pol, pod,
+    // Extract additional fields for WhatsApp Message
+    goodsDescription, equipmentList, totalPackages, chargeableWeight, transitTime
   } = useQuoteStore();
 
   // Client Store Integration
@@ -53,10 +56,9 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
   // User Store Integration
   const { users, fetchUsers } = useUserStore();
   
-  const { toast } = useToast();
-  
-  // Local State for Combobox
+  // Local State
   const [openClient, setOpenClient] = useState(false);
+  const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(false);
 
   // Initialize Data
   useEffect(() => {
@@ -71,7 +73,6 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
   const salesReps = users.filter(u => ['SALES', 'MANAGER', 'DIRECTOR', 'ADMIN'].includes(u.role));
 
   // --- DYNAMIC PAYMENT TERMS ---
-  // Ensure we display the current payment term even if it's not in the standard list
   const displayPaymentTerms = useMemo(() => {
       const current = paymentTerms || '30 Days';
       const termsSet = new Set([...STANDARD_PAYMENT_TERMS, current]);
@@ -83,11 +84,9 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
     const client = clients.find(c => c.id === selectedId);
     if (!client) return;
 
-    // Resolve Sales Rep from Client
     let assignedRepId = undefined;
     let assignedRepName = undefined;
 
-    // Mission 2: Auto-pull sales representative from customer
     if (client.salesRepId) {
         const rep = users.find(u => u.id === client.salesRepId);
         if (rep) {
@@ -96,7 +95,6 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
         }
     }
 
-    // Use Centralized Snapshot Setter
     setClientSnapshot({
         id: client.id,
         name: client.entityName,
@@ -146,27 +144,22 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
       return dateVal.toISOString().split('T')[0];
   };
 
-  // --- ACTION: WHATSAPP DIRECT LINK ---
-  const handleWhatsAppShare = () => {
-    try {
-        const totalDisplay = totalTTCTarget 
-            ? totalTTCTarget.toLocaleString('en-US', { maximumFractionDigits: 2 }) 
-            : '0.00';
-
-        const text = 
-`🚢 *Quote Ref: ${reference}*
-📍 ${pol || 'POL'} ➡️ ${pod || 'POD'}
-📦 ${mode} | ${incoterm}
-💰 *Total: ${totalDisplay} ${quoteCurrency}* (All In)
-⏳ Valid until: ${formatDateForInput(validityDate)}`;
-
-        const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-        window.open(url, '_blank');
-        toast("WhatsApp opened in new tab", "success");
-    } catch (error) {
-        console.error("WhatsApp Error:", error);
-        toast("Could not open WhatsApp window", "error");
-    }
+  // --- PREPARE DATA FOR WHATSAPP ---
+  const isFCL = mode === 'SEA_FCL' || mode === 'ROAD'; 
+  
+  const whatsAppData: QuoteOfferData = {
+      reference,
+      pol: pol || 'POL',
+      pod: pod || 'POD',
+      mode: mode || 'SEA_FCL',
+      commodity: goodsDescription || 'General Cargo',
+      equipment: isFCL && equipmentList
+        ? equipmentList.map(e => `${e.count}x ${e.type}`).join(', ') 
+        : `${totalPackages || 0} Pkgs / ${chargeableWeight || 0}kg`,
+      totalPrice: totalTTCTarget,
+      currency: quoteCurrency,
+      validityDate: validityDate || new Date(),
+      transitTime: transitTime || 0
   };
 
   const handleRevision = async () => {
@@ -261,7 +254,7 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                <Button 
                     variant="outline" 
                     size="sm" 
-                    onClick={handleWhatsAppShare} 
+                    onClick={() => setIsWhatsAppOpen(true)} 
                     className="h-8 text-xs border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
                     title="Open in WhatsApp"
                >
@@ -417,6 +410,13 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
               </div>
           </div>
       </div>
+
+      {/* 3. MODALS */}
+      <WhatsAppOfferDialog 
+        open={isWhatsAppOpen} 
+        onOpenChange={setIsWhatsAppOpen} 
+        data={whatsAppData} 
+      />
     </div>
   );
 }
