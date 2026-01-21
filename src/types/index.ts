@@ -47,8 +47,10 @@ export interface QuoteLineItem {
   optionId?: string;
   section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION';
   description: string;
+  // quantity removed as requested
   buyPrice: number;
-  buyCurrency: Currency;
+  sellPrice: number; 
+  buyCurrency: Currency; // Restored/Confirmed for the column
   vendorId?: string; 
   vendorName?: string; 
   validityDate?: Date; 
@@ -127,7 +129,8 @@ export interface Quote {
   totalTTCTarget?: number;
   probability: Probability;
   competitorInfo?: string;
-  internalNotes: string;
+  internalNotes: string; 
+  internalRemarks?: string;
   activities: ActivityItem[];
   approval: QuoteApproval;
   options: QuoteOption[];

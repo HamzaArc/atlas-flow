@@ -2,11 +2,11 @@ import { useEffect, useState, useMemo } from "react";
 import { 
   Search, Filter, MoreHorizontal, 
   FileText, Clock, CheckCircle2, 
-  LayoutGrid, Zap, Gauge,
+  LayoutGrid, Zap,
   ArrowUpDown, Trash2, X, Loader2,
   Calendar, ArrowUpRight, User,
   MapPin, Plane, Ship, Truck, AlertCircle,
-  Layers
+  Layers, Briefcase
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -437,31 +437,25 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
             </div>
             
             <div className="flex items-center gap-3">
-                 <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="bg-white text-slate-700 border-slate-200 shadow-sm">
-                            <Gauge className="h-4 w-4 mr-2 text-slate-500" />
-                            Advanced
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
-                        <DropdownMenuLabel>Create Options</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={handleExpertEntry}>
-                            <Gauge className="h-4 w-4 mr-2" /> Expert Mode (Full)
-                        </DropdownMenuItem>
-                        <DropdownMenuItem disabled>
-                            <FileText className="h-4 w-4 mr-2" /> From Template (Soon)
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                 {/* REFACTORED ACTIONS: Express is MAIN, Expert is secondary/side */}
+                 <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={handleExpertEntry}
+                    className="text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                >
+                    <Briefcase className="h-4 w-4 mr-2 text-slate-400" />
+                    Expert Mode
+                </Button>
+
+                <div className="h-6 w-px bg-slate-300 mx-1" />
 
                 <Button 
                     onClick={handleQuickEntry} 
-                    className="bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-200/50 transition-all h-10 px-6"
+                    className="bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-200/50 transition-all h-10 px-6 font-semibold"
                 >
                     <Zap className="h-4 w-4 mr-2 fill-current" />
-                    New Quote
+                    Create Express Quote
                 </Button>
             </div>
         </div>

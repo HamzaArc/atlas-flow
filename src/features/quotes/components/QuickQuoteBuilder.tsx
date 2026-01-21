@@ -6,7 +6,7 @@ import {
   Box,  
   Plus, Trash2, Clock, Anchor,
   Mail, FileOutput, Zap, DollarSign, X, AlertCircle,
-  Loader2, AlertTriangle, Globe, MessageCircle, Copy // <--- Added Copy here
+  Loader2, AlertTriangle, Globe, MessageCircle, Copy, FileInput
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,10 +24,20 @@ import { useQuoteStore } from "@/store/useQuoteStore";
 import { useClientStore } from "@/store/useClientStore"; 
 import { useTariffStore } from "@/store/useTariffStore";
 import { cn } from "@/lib/utils";
-import { TransportMode, Incoterm, PackagingType, Currency } from "@/types/index";
+import { TransportMode, Incoterm, PackagingType, QuoteLineItem } from "@/types/index";
 import { useToast } from "@/components/ui/use-toast";
 import { format } from "date-fns";
 import { WhatsAppOfferDialog, QuoteOfferData } from "./WhatsAppOfferDialog";
+
+// -----------------------------------------------------------------------------
+// HELPER: VAT RATES
+// -----------------------------------------------------------------------------
+const VAT_RATES: Record<string, number> = {
+  'STD_20': 0.20,
+  'ROAD_14': 0.14,
+  'EXPORT_0_ART92': 0,
+  'DISBURSEMENT': 0
+};
 
 // -----------------------------------------------------------------------------
 // GOOGLE MAPS & ADDRESS UTILS
@@ -248,14 +258,14 @@ const ModeButton = ({
       className={cn(
         "cursor-pointer flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all duration-200 h-24",
         isActive 
-          ? "border-blue-600 bg-blue-50/50 shadow-sm ring-1 ring-blue-100" 
+          ? "border-indigo-600 bg-indigo-50/50 shadow-sm ring-1 ring-indigo-100" 
           : "border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50"
       )}
     >
-      <div className={cn("transition-colors", isActive ? "text-blue-600" : "text-slate-400")}>
+      <div className={cn("transition-colors", isActive ? "text-indigo-600" : "text-slate-400")}>
         {icons[mode]}
       </div>
-      <span className={cn("text-[10px] font-bold uppercase tracking-wide", isActive ? "text-blue-700" : "text-slate-500")}>
+      <span className={cn("text-[10px] font-bold uppercase tracking-wide", isActive ? "text-indigo-700" : "text-slate-500")}>
         {labels[mode]}
       </span>
     </div>
@@ -285,7 +295,7 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
     totalVolume, chargeableWeight, totalWeight, totalPackages,
     // Pricing
     items, addLineItem, updateLineItem, removeLineItem, initializeSmartLines,
-    totalSellTarget, totalTTCTarget, quoteCurrency, totalMarginMAD, totalSellMAD
+    quoteCurrency, internalNotes
   } = useQuoteStore();
 
   const { clients, fetchClients } = useClientStore();
@@ -295,17 +305,58 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
   // Local State for Dialogs
   const [rfqText, setRfqText] = useState("");
   const [isRfqOpen, setIsRfqOpen] = useState(false);
-  const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(false); // NEW STATE
+  const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(false);
+  
+  // Local Derived Totals State
+  const [localTotals, setLocalTotals] = useState({
+      totalBuy: 0,
+      totalSell: 0,
+      totalVat: 0,
+      grandTotal: 0,
+      margin: 0,
+      marginPercent: 0
+  });
 
   useEffect(() => {
     if (clients.length === 0) fetchClients();
     fetchRates(); 
   }, []);
 
+  // Update totals whenever items change
+  useEffect(() => {
+    let totalBuy = 0;
+    let totalSell = 0;
+    let totalVat = 0;
+
+    // Recalculate totals based on the "Formula": Sell = Cost * (1 + Markup/100) * (1 + Vat)
+    // Actually, Sell (Ex VAT) = Cost * (1 + Markup/100).
+    // VAT = Sell (Ex VAT) * VatRate.
+    // Total (Incl VAT) = Sell (Ex VAT) + VAT.
+
+    items.forEach(item => {
+        // Quantity removed, assume 1 unit logic or purely global line amounts
+        const buy = item.buyPrice || 0;
+        const markup = item.markupValue || 0;
+        const vatRate = VAT_RATES[item.vatRule] || 0;
+
+        const sellExVat = buy * (1 + markup / 100);
+        const lineVat = sellExVat * vatRate;
+        
+        totalBuy += buy;
+        totalSell += sellExVat;
+        totalVat += lineVat;
+    });
+    
+    const margin = totalSell - totalBuy;
+    const marginPercent = totalSell > 0 ? (margin / totalSell) * 100 : 0;
+    const grandTotal = totalSell + totalVat;
+
+    setLocalTotals({ totalBuy, totalSell, totalVat, grandTotal, margin, marginPercent });
+  }, [items]);
+
   // -- LOGIC HELPERS --
   const isFCL = mode === 'SEA_FCL' || mode === 'ROAD'; 
   const showFreeTime = mode === 'SEA_FCL' || mode === 'SEA_LCL';
-  const marginPercent = totalSellMAD > 0 ? ((totalMarginMAD / totalSellMAD) * 100).toFixed(1) : "0.0";
   const showPlaceOfLoading = incoterm === 'EXW';
   const showPlaceOfDelivery = ['DAP', 'DPU', 'DDP'].includes(incoterm);
 
@@ -326,9 +377,12 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
   const handleAddQuickLine = (section: 'FREIGHT' | 'ORIGIN' | 'DESTINATION') => {
       addLineItem(section, { 
           description: '', 
-          buyPrice: 0, 
-          markupValue: 20,
-          source: 'MANUAL'
+          buyPrice: 0,
+          sellPrice: 0,
+          vatRule: 'STD_20', 
+          markupValue: 20, // Default markup
+          source: 'MANUAL',
+          buyCurrency: 'MAD' // Default Currency
       });
   };
 
@@ -417,6 +471,11 @@ Best regards,`;
       });
       updateCargo(newRows);
   };
+  
+  // Custom update wrapper 
+  const handleLineItemUpdate = (id: string, updates: Partial<QuoteLineItem>) => {
+      updateLineItem(id, updates);
+  };
 
   // PREPARE DATA FOR WHATSAPP (Selling Side)
   const whatsAppData: QuoteOfferData = {
@@ -428,7 +487,7 @@ Best regards,`;
       equipment: isFCL 
         ? equipmentList.map(e => `${e.count}x ${e.type}`).join(', ') 
         : `${totalPackages} Pkgs / ${chargeableWeight}kg`,
-      totalPrice: totalTTCTarget,
+      totalPrice: localTotals.grandTotal,
       currency: quoteCurrency,
       validityDate,
       transitTime
@@ -441,7 +500,7 @@ Best regards,`;
       <div className="flex justify-between items-end mb-6">
           <div>
               <h1 className="text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-3">
-                  <Wand2 className="h-6 w-6 text-purple-600" />
+                  <Wand2 className="h-6 w-6 text-indigo-600" />
                   Quick Quote Builder
               </h1>
               <p className="text-slate-500 text-sm mt-1">
@@ -485,11 +544,11 @@ Best regards,`;
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
           
-          {/* ================= LEFT COLUMN: LOGISTICS ================= */}
-          <div className="xl:col-span-7 space-y-6">
-              
-              {/* SECTION 1: IDENTITY & ROUTE */}
-              <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* ================= TOP ROW: LOGISTICS & CARGO (STACKED ON MOBILE, 6/6 ON DESKTOP) ================= */}
+          
+          {/* SECTION 1: IDENTITY & ROUTE */}
+          <div className="xl:col-span-6 space-y-6">
+              <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-full">
                 <div className="bg-slate-50/50 px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                     <h2 className="text-sm font-bold text-slate-700 uppercase tracking-widest flex items-center gap-2">
                         <MapPin className="h-4 w-4 text-blue-500" /> Logistics Profile
@@ -646,7 +705,7 @@ Best regards,`;
                         </div>
                     </div>
 
-                    {/* LOGISTICS PARAMETERS (New Feature) */}
+                    {/* LOGISTICS PARAMETERS */}
                     <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
                         <div className="space-y-1.5">
                             <Label className="text-xs font-semibold text-slate-500">Est. Transit (Days)</Label>
@@ -676,9 +735,11 @@ Best regards,`;
                     </div>
                 </div>
               </section>
+          </div>
 
-              {/* SECTION 2: CARGO & EQUIPMENT */}
-              <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* SECTION 2: CARGO & EQUIPMENT */}
+          <div className="xl:col-span-6 space-y-6">
+              <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-full">
                 <div className="bg-slate-50/50 px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                     <h2 className="text-sm font-bold text-slate-700 uppercase tracking-widest flex items-center gap-2">
                         <Package className="h-4 w-4 text-amber-500" /> Cargo Specification
@@ -827,14 +888,13 @@ Best regards,`;
                     )}
                 </div>
               </section>
-
           </div>
 
-          {/* ================= RIGHT COLUMN: COMMERCIAL (Pricing) ================= */}
-          <div className="xl:col-span-5 space-y-6">
+          {/* ================= MIDDLE ROW: COMMERCIAL (Pricing) FULL WIDTH ================= */}
+          <div className="xl:col-span-12 space-y-6">
               
               {/* PRICING BUILDER CARD */}
-              <section className="bg-white rounded-xl border border-slate-200 shadow-lg relative overflow-hidden flex flex-col h-full min-h-[500px]">
+              <section className="bg-white rounded-xl border border-slate-200 shadow-lg relative overflow-hidden flex flex-col h-full min-h-[400px]">
                   <div className="bg-slate-900 text-white px-6 py-5 flex items-center justify-between">
                       <div>
                           <h2 className="text-sm font-bold uppercase tracking-widest flex items-center gap-2">
@@ -844,9 +904,9 @@ Best regards,`;
                       </div>
                       <div className="text-right">
                           <div className="text-2xl font-black tracking-tight text-emerald-400">
-                              {totalTTCTarget.toLocaleString()} <span className="text-sm text-emerald-600">{quoteCurrency}</span>
+                              {(localTotals.grandTotal).toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-sm text-emerald-600">{quoteCurrency}</span>
                           </div>
-                          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Payable</div>
+                          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total (Inc. VAT)</div>
                       </div>
                   </div>
 
@@ -864,11 +924,28 @@ Best regards,`;
                       )}
 
                       <div className="divide-y divide-slate-100">
-                          {items.map((item) => (
-                              <div key={item.id} className="bg-white p-3 hover:bg-slate-50 group transition-colors">
-                                  <div className="flex items-center gap-2 mb-2">
+                          {/* Header for Table */}
+                          <div className="bg-slate-100 px-3 py-2 grid grid-cols-12 gap-2 text-[9px] font-bold text-slate-400 uppercase tracking-wide">
+                             <div className="col-span-4 pl-8">Item Description</div>
+                             <div className="col-span-2 text-center">Currency</div>
+                             <div className="col-span-2">Cost (Buy)</div>
+                             <div className="col-span-1 text-center">Markup %</div>
+                             <div className="col-span-1 text-center">VAT Rule</div>
+                             <div className="col-span-2">Sell Price (TTC)</div>
+                          </div>
+
+                          {items.map((item) => {
+                              // Calculations for display
+                              const vatRate = VAT_RATES[item.vatRule] || 0;
+                              const sellExVat = (item.buyPrice || 0) * (1 + (item.markupValue || 0) / 100);
+                              const totalIncVat = sellExVat * (1 + vatRate);
+                              
+                              return (
+                              <div key={item.id} className="bg-white p-3 hover:bg-slate-50 group transition-colors grid grid-cols-12 gap-3 items-center">
+                                  {/* Description Column */}
+                                  <div className="col-span-4 flex items-center gap-2">
                                       <Badge variant="outline" className={cn(
-                                          "text-[9px] h-4 px-1 rounded-sm border-0 font-bold",
+                                          "text-[9px] h-4 px-1 rounded-sm border-0 font-bold shrink-0",
                                           item.section === 'FREIGHT' ? "bg-blue-100 text-blue-700" :
                                           item.section === 'ORIGIN' ? "bg-amber-100 text-amber-700" : "bg-purple-100 text-purple-700"
                                       )}>
@@ -877,41 +954,78 @@ Best regards,`;
                                       <Input 
                                         value={item.description} 
                                         onChange={(e) => updateLineItem(item.id, { description: e.target.value })}
-                                        className="h-6 text-xs border-transparent focus:border-blue-300 px-1 font-medium bg-transparent" 
+                                        className="h-7 text-xs border-transparent focus:border-blue-300 px-1 font-medium bg-transparent w-full" 
                                         placeholder="Description..."
                                       />
-                                      <Button onClick={() => removeLineItem(item.id)} size="icon" variant="ghost" className="h-5 w-5 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500">
+                                      <Button onClick={() => removeLineItem(item.id)} size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 shrink-0">
                                           <X className="h-3 w-3" />
                                       </Button>
                                   </div>
-                                  <div className="flex items-center gap-2 pl-6">
-                                      <div className="flex-1">
-                                          <Label className="text-[9px] text-slate-400 uppercase">Cost</Label>
-                                          <div className="flex items-center gap-1">
-                                              <Input 
-                                                type="number"
-                                                value={item.buyPrice}
-                                                onChange={(e) => updateLineItem(item.id, { buyPrice: parseFloat(e.target.value) || 0 })}
-                                                className="h-7 text-xs bg-slate-50 border-slate-200" 
-                                              />
-                                              <Select value={item.buyCurrency} onValueChange={(v) => updateLineItem(item.id, { buyCurrency: v as Currency })}>
-                                                  <SelectTrigger className="h-7 w-16 text-[10px]"><SelectValue /></SelectTrigger>
-                                                  <SelectContent><SelectItem value="MAD">MAD</SelectItem><SelectItem value="USD">USD</SelectItem><SelectItem value="EUR">EUR</SelectItem></SelectContent>
-                                              </Select>
-                                          </div>
-                                      </div>
-                                      <div className="w-20">
-                                          <Label className="text-[9px] text-slate-400 uppercase">Markup %</Label>
-                                          <Input 
-                                            type="number"
-                                            value={item.markupValue}
-                                            onChange={(e) => updateLineItem(item.id, { markupValue: parseFloat(e.target.value) || 0 })}
-                                            className="h-7 text-xs text-right font-mono text-emerald-600 bg-emerald-50/30 border-emerald-100" 
-                                          />
+                                  
+                                  {/* Currency Column (Restored) */}
+                                  <div className="col-span-2">
+                                      <Select 
+                                        value={item.buyCurrency || 'MAD'} 
+                                        onValueChange={(val: any) => handleLineItemUpdate(item.id, { buyCurrency: val })}
+                                      >
+                                        <SelectTrigger className="h-7 text-xs border-slate-200">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="MAD">MAD</SelectItem>
+                                            <SelectItem value="USD">USD</SelectItem>
+                                            <SelectItem value="EUR">EUR</SelectItem>
+                                            <SelectItem value="GBP">GBP</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                  </div>
+
+                                  {/* Buy Price (Cost) */}
+                                  <div className="col-span-2 relative">
+                                      <Input 
+                                        type="number"
+                                        value={item.buyPrice}
+                                        onChange={(e) => handleLineItemUpdate(item.id, { buyPrice: parseFloat(e.target.value) || 0 })}
+                                        className="h-7 text-xs pl-2 bg-slate-50 border-slate-200 text-slate-600" 
+                                      />
+                                  </div>
+
+                                  {/* Markup % */}
+                                  <div className="col-span-1 relative">
+                                      <Input 
+                                        type="number"
+                                        value={item.markupValue}
+                                        onChange={(e) => handleLineItemUpdate(item.id, { markupValue: parseFloat(e.target.value) || 0 })}
+                                        className="h-7 text-xs text-center font-medium text-emerald-600 bg-emerald-50/30 border-emerald-100" 
+                                      />
+                                  </div>
+
+                                  {/* VAT Rule */}
+                                  <div className="col-span-1">
+                                       <Select 
+                                            value={item.vatRule} 
+                                            onValueChange={(val: any) => handleLineItemUpdate(item.id, { vatRule: val })}
+                                        >
+                                            <SelectTrigger className="h-7 text-[10px] px-1">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="STD_20">20%</SelectItem>
+                                                <SelectItem value="ROAD_14">14%</SelectItem>
+                                                <SelectItem value="EXPORT_0_ART92">0%</SelectItem>
+                                                <SelectItem value="DISBURSEMENT">0%</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                  </div>
+
+                                  {/* Sell Price (Auto-Calculated) - LAST COLUMN */}
+                                  <div className="col-span-2">
+                                      <div className="h-7 flex items-center justify-end px-3 bg-indigo-50/50 border border-indigo-100 rounded-md text-xs font-bold text-indigo-700">
+                                          {totalIncVat.toFixed(2)}
                                       </div>
                                   </div>
                               </div>
-                          ))}
+                          )})}
                       </div>
                   </div>
 
@@ -928,17 +1042,49 @@ Best regards,`;
                       </Button>
                   </div>
 
-                  {/* Financial Footer */}
-                  <div className="bg-white p-4 border-t border-slate-200 space-y-2">
-                      <div className="flex justify-between items-center text-xs">
-                          <span className="text-slate-500">Subtotal (Net)</span>
-                          <span className="font-mono font-bold text-slate-700">{totalSellTarget.toLocaleString()}</span>
+                  {/* Financial Footer & Internal Remarks (Stacked) */}
+                  <div className="bg-white border-t border-slate-200 grid grid-cols-1 md:grid-cols-2">
+                      
+                      {/* Left: Internal Remarks (Moved Here) */}
+                      <div className="p-4 border-r border-slate-100">
+                          <div className="flex items-center gap-2 mb-2">
+                              <FileInput className="h-3 w-3 text-slate-400" />
+                              <span className="text-[10px] font-bold text-slate-500 uppercase">Internal Remarks</span>
+                          </div>
+                          <Textarea 
+                            placeholder="Add private notes, operational constraints, or margin justifications..." 
+                            value={internalNotes} 
+                            onChange={(e) => setIdentity('internalNotes', e.target.value)}
+                            className="h-24 resize-none border-slate-200 bg-slate-50/50 text-xs"
+                        />
                       </div>
-                      <div className="flex justify-between items-center text-xs">
-                          <span className="text-slate-500">Margin Profit</span>
-                          <span className={cn("font-mono font-bold", parseFloat(marginPercent) < 15 ? "text-amber-500" : "text-emerald-600")}>
-                              {totalMarginMAD.toLocaleString()} <span className="text-[10px] text-slate-400">({marginPercent}%)</span>
-                          </span>
+
+                      {/* Right: Summary */}
+                      <div className="p-4 space-y-3">
+                          <div className="space-y-1 pb-3 border-b border-slate-100">
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-500">Subtotal (Net)</span>
+                                <span className="font-mono font-medium text-slate-700">{localTotals.totalSell.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-500">Total VAT</span>
+                                <span className="font-mono font-medium text-slate-500">+ {localTotals.totalVat.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 pt-1">
+                              <div>
+                                  <div className="text-[10px] text-slate-400 uppercase font-bold">Total Cost</div>
+                                  <div className="text-xs font-mono text-slate-600">{localTotals.totalBuy.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                              </div>
+                              <div className="text-right">
+                                  <div className="text-[10px] text-slate-400 uppercase font-bold">Profit Margin</div>
+                                  <div className={cn("text-sm font-mono font-bold", localTotals.margin >= 0 ? "text-emerald-600" : "text-red-600")}>
+                                      {localTotals.margin.toLocaleString(undefined, { minimumFractionDigits: 2 })} 
+                                      <span className="text-[10px] font-normal text-slate-400 ml-1">({localTotals.marginPercent.toFixed(1)}%)</span>
+                                  </div>
+                              </div>
+                          </div>
                       </div>
                   </div>
               </section>
