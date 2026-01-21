@@ -295,7 +295,9 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
     totalVolume, chargeableWeight, totalWeight, totalPackages,
     // Pricing
     items, addLineItem, updateLineItem, removeLineItem, initializeSmartLines,
-    quoteCurrency, internalNotes
+    quoteCurrency, internalNotes,
+    // Dynamic Exchange Rates
+    exchangeRates
   } = useQuoteStore();
 
   const { clients, fetchClients } = useClientStore();
@@ -322,27 +324,29 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
     fetchRates(); 
   }, []);
 
-  // Update totals whenever items change
+  // Update totals whenever items change or Exchange Rates change
   useEffect(() => {
     let totalBuy = 0;
     let totalSell = 0;
     let totalVat = 0;
 
-    // Recalculate totals based on the "Formula": Sell = Cost * (1 + Markup/100) * (1 + Vat)
-    // Actually, Sell (Ex VAT) = Cost * (1 + Markup/100).
-    // VAT = Sell (Ex VAT) * VatRate.
-    // Total (Incl VAT) = Sell (Ex VAT) + VAT.
-
     items.forEach(item => {
-        // Quantity removed, assume 1 unit logic or purely global line amounts
-        const buy = item.buyPrice || 0;
-        const markup = item.markupValue || 0;
-        const vatRate = VAT_RATES[item.vatRule] || 0;
+        // 1. Get Exchange Rate dynamically from store
+        // If undefined, default to 1 (MAD)
+        const rate = exchangeRates?.[item.buyCurrency || 'MAD'] || 1;
 
-        const sellExVat = buy * (1 + markup / 100);
+        // 2. Convert Cost to Base Currency (MAD)
+        const buyInBase = (item.buyPrice || 0) * rate;
+
+        // 3. Apply Markup
+        const markup = item.markupValue || 0;
+        const sellExVat = buyInBase * (1 + markup / 100);
+        
+        // 4. Calculate VAT
+        const vatRate = VAT_RATES[item.vatRule] || 0;
         const lineVat = sellExVat * vatRate;
         
-        totalBuy += buy;
+        totalBuy += buyInBase;
         totalSell += sellExVat;
         totalVat += lineVat;
     });
@@ -352,7 +356,7 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
     const grandTotal = totalSell + totalVat;
 
     setLocalTotals({ totalBuy, totalSell, totalVat, grandTotal, margin, marginPercent });
-  }, [items]);
+  }, [items, exchangeRates]);
 
   // -- LOGIC HELPERS --
   const isFCL = mode === 'SEA_FCL' || mode === 'ROAD'; 
@@ -935,9 +939,12 @@ Best regards,`;
                           </div>
 
                           {items.map((item) => {
-                              // Calculations for display
+                              // Calculations for display - uses same logic as useEffect
+                              // Dynamically retrieve rate from store
+                              const rate = exchangeRates?.[item.buyCurrency || 'MAD'] || 1;
+                              const buyInBase = (item.buyPrice || 0) * rate;
                               const vatRate = VAT_RATES[item.vatRule] || 0;
-                              const sellExVat = (item.buyPrice || 0) * (1 + (item.markupValue || 0) / 100);
+                              const sellExVat = buyInBase * (1 + (item.markupValue || 0) / 100);
                               const totalIncVat = sellExVat * (1 + vatRate);
                               
                               return (
@@ -962,7 +969,7 @@ Best regards,`;
                                       </Button>
                                   </div>
                                   
-                                  {/* Currency Column (Restored) */}
+                                  {/* Currency Column (Restored, GBP removed) */}
                                   <div className="col-span-2">
                                       <Select 
                                         value={item.buyCurrency || 'MAD'} 
@@ -975,7 +982,6 @@ Best regards,`;
                                             <SelectItem value="MAD">MAD</SelectItem>
                                             <SelectItem value="USD">USD</SelectItem>
                                             <SelectItem value="EUR">EUR</SelectItem>
-                                            <SelectItem value="GBP">GBP</SelectItem>
                                         </SelectContent>
                                       </Select>
                                   </div>
