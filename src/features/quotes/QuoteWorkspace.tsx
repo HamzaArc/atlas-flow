@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Ship, Plane, Truck, Copy, Trash2, 
   Plus, MoreHorizontal, AlertCircle, FileOutput, 
@@ -55,6 +55,11 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
   const [viewMode, setViewMode] = useState<'EDITOR' | 'COMPARE'>('EDITOR');
   const [activeTab, setActiveTab] = useState("logistics");
   const { toast } = useToast();
+
+  // Force Express Mode on Mount
+  useEffect(() => {
+      setEditorMode('EXPRESS');
+  }, []);
 
   const marginPercent = totalSellMAD > 0 ? ((totalMarginMAD / totalSellMAD) * 100).toFixed(1) : "0.0";
   const isCriticalMode = mode === 'AIR' || mode === 'SEA_LCL';

@@ -548,9 +548,7 @@ Best regards,`;
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
           
-          {/* ================= TOP ROW: LOGISTICS & CARGO (STACKED ON MOBILE, 6/6 ON DESKTOP) ================= */}
-          
-          {/* SECTION 1: IDENTITY & ROUTE */}
+          {/* ================= TOP LEFT: LOGISTICS PROFILE ================= */}
           <div className="xl:col-span-6 space-y-6">
               <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-full">
                 <div className="bg-slate-50/50 px-6 py-4 border-b border-slate-100 flex items-center justify-between">
@@ -741,8 +739,225 @@ Best regards,`;
               </section>
           </div>
 
-          {/* SECTION 2: CARGO & EQUIPMENT */}
+          {/* ================= TOP RIGHT: COMMERCIAL (Pricing) & TIPS ================= */}
           <div className="xl:col-span-6 space-y-6">
+              
+              {/* PRICING BUILDER CARD */}
+              <section className="bg-white rounded-xl border border-slate-200 shadow-lg relative overflow-hidden flex flex-col h-full min-h-[400px]">
+                  <div className="bg-slate-900 text-white px-6 py-5 flex items-center justify-between">
+                      <div>
+                          <h2 className="text-sm font-bold uppercase tracking-widest flex items-center gap-2">
+                              <DollarSign className="h-4 w-4 text-emerald-400" /> Commercial Offer
+                          </h2>
+                          <p className="text-xs text-slate-400 mt-1">Build your pricing structure</p>
+                      </div>
+                      <div className="text-right">
+                          <div className="text-2xl font-black tracking-tight text-emerald-400">
+                              {(localTotals.grandTotal).toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-sm text-emerald-600">{quoteCurrency}</span>
+                          </div>
+                          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total (Inc. VAT)</div>
+                      </div>
+                  </div>
+
+                  {/* Pricing Lines - Scrollable */}
+                  <div className="flex-1 overflow-y-auto p-0 bg-slate-50/50">
+                      
+                      {items.length === 0 && (
+                          <div className="flex flex-col items-center justify-center h-48 text-slate-400">
+                              <Wand2 className="h-8 w-8 mb-2 opacity-20" />
+                              <p className="text-xs">No lines added.</p>
+                              <Button variant="link" size="sm" onClick={handleRequestRates}>
+                                  Auto-Populate Defaults
+                              </Button>
+                          </div>
+                      )}
+
+                      <div className="divide-y divide-slate-100">
+                          {/* Header for Table */}
+                          <div className="bg-slate-100 px-3 py-2 grid grid-cols-12 gap-2 text-[9px] font-bold text-slate-400 uppercase tracking-wide">
+                             <div className="col-span-4 pl-8">Item Description</div>
+                             <div className="col-span-2 text-center">Currency</div>
+                             <div className="col-span-2">Cost (Buy)</div>
+                             <div className="col-span-1 text-center">Markup %</div>
+                             <div className="col-span-1 text-center">VAT Rule</div>
+                             <div className="col-span-2">Sell Price (TTC)</div>
+                          </div>
+
+                          {items.map((item) => {
+                              // Calculations for display - uses same logic as useEffect
+                              // Dynamically retrieve rate from store
+                              const rate = exchangeRates?.[item.buyCurrency || 'MAD'] || 1;
+                              const buyInBase = (item.buyPrice || 0) * rate;
+                              const vatRate = VAT_RATES[item.vatRule] || 0;
+                              const sellExVat = buyInBase * (1 + (item.markupValue || 0) / 100);
+                              const totalIncVat = sellExVat * (1 + vatRate);
+                              
+                              return (
+                              <div key={item.id} className="bg-white p-3 hover:bg-slate-50 group transition-colors grid grid-cols-12 gap-3 items-center">
+                                  {/* Description Column */}
+                                  <div className="col-span-4 flex items-center gap-2">
+                                      <Badge variant="outline" className={cn(
+                                          "text-[9px] h-4 px-1 rounded-sm border-0 font-bold shrink-0",
+                                          item.section === 'FREIGHT' ? "bg-blue-100 text-blue-700" :
+                                          item.section === 'ORIGIN' ? "bg-amber-100 text-amber-700" : "bg-purple-100 text-purple-700"
+                                      )}>
+                                          {item.section.substring(0,3)}
+                                      </Badge>
+                                      <Input 
+                                        value={item.description} 
+                                        onChange={(e) => updateLineItem(item.id, { description: e.target.value })}
+                                        className="h-7 text-xs border-transparent focus:border-blue-300 px-1 font-medium bg-transparent w-full" 
+                                        placeholder="Description..."
+                                      />
+                                      <Button onClick={() => removeLineItem(item.id)} size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 shrink-0">
+                                          <X className="h-3 w-3" />
+                                      </Button>
+                                  </div>
+                                  
+                                  {/* Currency Column (Restored, GBP removed) */}
+                                  <div className="col-span-2">
+                                      <Select 
+                                        value={item.buyCurrency || 'MAD'} 
+                                        onValueChange={(val: any) => handleLineItemUpdate(item.id, { buyCurrency: val })}
+                                      >
+                                        <SelectTrigger className="h-7 text-xs border-slate-200">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="MAD">MAD</SelectItem>
+                                            <SelectItem value="USD">USD</SelectItem>
+                                            <SelectItem value="EUR">EUR</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                  </div>
+
+                                  {/* Buy Price (Cost) */}
+                                  <div className="col-span-2 relative">
+                                      <Input 
+                                        type="number"
+                                        value={item.buyPrice}
+                                        onChange={(e) => handleLineItemUpdate(item.id, { buyPrice: parseFloat(e.target.value) || 0 })}
+                                        className="h-7 text-xs pl-3 bg-slate-50 border-slate-200 text-slate-600" 
+                                      />
+                                  </div>
+
+                                  {/* Markup % */}
+                                  <div className="col-span-1 relative">
+                                      <Input 
+                                        type="number"
+                                        value={item.markupValue}
+                                        onChange={(e) => handleLineItemUpdate(item.id, { markupValue: parseFloat(e.target.value) || 0 })}
+                                        className="h-7 text-xs pl-1 font-medium text-emerald-600 bg-emerald-50/30 border-emerald-100" 
+                                      />
+                                  </div>
+
+                                  {/* VAT Rule */}
+                                  <div className="col-span-1">
+                                       <Select 
+                                            value={item.vatRule} 
+                                            onValueChange={(val: any) => handleLineItemUpdate(item.id, { vatRule: val })}
+                                        >
+                                            <SelectTrigger className="h-7 text-[10px] px-1">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="STD_20">20%</SelectItem>
+                                                <SelectItem value="ROAD_14">14%</SelectItem>
+                                                <SelectItem value="EXPORT_0_ART92">0%</SelectItem>
+                                                <SelectItem value="DISBURSEMENT">0%</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                  </div>
+
+                                  {/* Sell Price (Auto-Calculated) - LAST COLUMN */}
+                                  <div className="col-span-2">
+                                      <div className="h-7 flex items-center justify-end px-3 bg-indigo-50/50 border border-indigo-100 rounded-md text-xs font-bold text-indigo-700">
+                                          {totalIncVat.toFixed(2)}
+                                      </div>
+                                  </div>
+                              </div>
+                          )})}
+                      </div>
+                  </div>
+
+                  {/* Actions Bar */}
+                  <div className="p-3 bg-slate-100 border-t border-slate-200 grid grid-cols-3 gap-2 shrink-0">
+                      <Button variant="outline" size="sm" onClick={() => handleAddQuickLine('ORIGIN')} className="text-[10px] h-8 bg-white border-dashed text-slate-600 hover:text-amber-600 hover:border-amber-300">
+                          + Origin
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleAddQuickLine('FREIGHT')} className="text-[10px] h-8 bg-white border-dashed text-slate-600 hover:text-blue-600 hover:border-blue-300">
+                          + Freight
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleAddQuickLine('DESTINATION')} className="text-[10px] h-8 bg-white border-dashed text-slate-600 hover:text-purple-600 hover:border-purple-300">
+                          + Dest.
+                      </Button>
+                  </div>
+
+                  {/* Financial Footer & Internal Remarks (Stacked) */}
+                  <div className="bg-white border-t border-slate-200 grid grid-cols-1 md:grid-cols-2">
+                      
+                      {/* Left: Internal Remarks (Moved Here) */}
+                      <div className="p-4 border-r border-slate-100">
+                          <div className="flex items-center gap-2 mb-2">
+                              <FileInput className="h-3 w-3 text-slate-400" />
+                              <span className="text-[10px] font-bold text-slate-500 uppercase">Internal Remarks</span>
+                          </div>
+                          <Textarea 
+                            placeholder="Add private notes, operational constraints, or margin justifications..." 
+                            value={internalNotes} 
+                            onChange={(e) => setIdentity('internalNotes', e.target.value)}
+                            className="h-24 resize-none border-slate-200 bg-slate-50/50 text-xs"
+                        />
+                      </div>
+
+                      {/* Right: Summary */}
+                      <div className="p-4 space-y-3">
+                          <div className="space-y-1 pb-3 border-b border-slate-100">
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-500">Subtotal (Net)</span>
+                                <span className="font-mono font-medium text-slate-700">{localTotals.totalSell.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-500">Total VAT</span>
+                                <span className="font-mono font-medium text-slate-500">+ {localTotals.totalVat.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 pt-1">
+                              <div>
+                                  <div className="text-[10px] text-slate-400 uppercase font-bold">Total Cost</div>
+                                  <div className="text-xs font-mono text-slate-600">{localTotals.totalBuy.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                              </div>
+                              <div className="text-right">
+                                  <div className="text-[10px] text-slate-400 uppercase font-bold">Profit Margin</div>
+                                  <div className={cn("text-sm font-mono font-bold", localTotals.margin >= 0 ? "text-emerald-600" : "text-red-600")}>
+                                      {localTotals.margin.toLocaleString(undefined, { minimumFractionDigits: 2 })} 
+                                      <span className="text-[10px] font-normal text-slate-400 ml-1">({localTotals.marginPercent.toFixed(1)}%)</span>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              </section>
+
+              {/* Info Widget */}
+              {mode && (
+                  <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
+                      <div>
+                          <h4 className="text-xs font-bold text-blue-700 mb-1">Quote Tip</h4>
+                          <p className="text-[11px] text-blue-600/80 leading-relaxed">
+                              You are quoting in <strong>{mode}</strong> mode. 
+                              Make sure to include specific {mode === 'AIR' ? 'AWB and Security' : 'THC and Documentation'} charges for accurate estimation.
+                          </p>
+                      </div>
+                  </div>
+              )}
+
+          </div>
+
+          {/* ================= BOTTOM: CARGO & EQUIPMENT (Full Width) ================= */}
+          <div className="xl:col-span-12 space-y-6">
               <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-full">
                 <div className="bg-slate-50/50 px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                     <h2 className="text-sm font-bold text-slate-700 uppercase tracking-widest flex items-center gap-2">
@@ -892,223 +1107,6 @@ Best regards,`;
                     )}
                 </div>
               </section>
-          </div>
-
-          {/* ================= MIDDLE ROW: COMMERCIAL (Pricing) FULL WIDTH ================= */}
-          <div className="xl:col-span-12 space-y-6">
-              
-              {/* PRICING BUILDER CARD */}
-              <section className="bg-white rounded-xl border border-slate-200 shadow-lg relative overflow-hidden flex flex-col h-full min-h-[400px]">
-                  <div className="bg-slate-900 text-white px-6 py-5 flex items-center justify-between">
-                      <div>
-                          <h2 className="text-sm font-bold uppercase tracking-widest flex items-center gap-2">
-                              <DollarSign className="h-4 w-4 text-emerald-400" /> Commercial Offer
-                          </h2>
-                          <p className="text-xs text-slate-400 mt-1">Build your pricing structure</p>
-                      </div>
-                      <div className="text-right">
-                          <div className="text-2xl font-black tracking-tight text-emerald-400">
-                              {(localTotals.grandTotal).toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-sm text-emerald-600">{quoteCurrency}</span>
-                          </div>
-                          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total (Inc. VAT)</div>
-                      </div>
-                  </div>
-
-                  {/* Pricing Lines - Scrollable */}
-                  <div className="flex-1 overflow-y-auto p-0 bg-slate-50/50">
-                      
-                      {items.length === 0 && (
-                          <div className="flex flex-col items-center justify-center h-48 text-slate-400">
-                              <Wand2 className="h-8 w-8 mb-2 opacity-20" />
-                              <p className="text-xs">No lines added.</p>
-                              <Button variant="link" size="sm" onClick={handleRequestRates}>
-                                  Auto-Populate Defaults
-                              </Button>
-                          </div>
-                      )}
-
-                      <div className="divide-y divide-slate-100">
-                          {/* Header for Table */}
-                          <div className="bg-slate-100 px-3 py-2 grid grid-cols-12 gap-2 text-[9px] font-bold text-slate-400 uppercase tracking-wide">
-                             <div className="col-span-4 pl-8">Item Description</div>
-                             <div className="col-span-2 text-center">Currency</div>
-                             <div className="col-span-2">Cost (Buy)</div>
-                             <div className="col-span-1 text-center">Markup %</div>
-                             <div className="col-span-1 text-center">VAT Rule</div>
-                             <div className="col-span-2">Sell Price (TTC)</div>
-                          </div>
-
-                          {items.map((item) => {
-                              // Calculations for display - uses same logic as useEffect
-                              // Dynamically retrieve rate from store
-                              const rate = exchangeRates?.[item.buyCurrency || 'MAD'] || 1;
-                              const buyInBase = (item.buyPrice || 0) * rate;
-                              const vatRate = VAT_RATES[item.vatRule] || 0;
-                              const sellExVat = buyInBase * (1 + (item.markupValue || 0) / 100);
-                              const totalIncVat = sellExVat * (1 + vatRate);
-                              
-                              return (
-                              <div key={item.id} className="bg-white p-3 hover:bg-slate-50 group transition-colors grid grid-cols-12 gap-3 items-center">
-                                  {/* Description Column */}
-                                  <div className="col-span-4 flex items-center gap-2">
-                                      <Badge variant="outline" className={cn(
-                                          "text-[9px] h-4 px-1 rounded-sm border-0 font-bold shrink-0",
-                                          item.section === 'FREIGHT' ? "bg-blue-100 text-blue-700" :
-                                          item.section === 'ORIGIN' ? "bg-amber-100 text-amber-700" : "bg-purple-100 text-purple-700"
-                                      )}>
-                                          {item.section.substring(0,3)}
-                                      </Badge>
-                                      <Input 
-                                        value={item.description} 
-                                        onChange={(e) => updateLineItem(item.id, { description: e.target.value })}
-                                        className="h-7 text-xs border-transparent focus:border-blue-300 px-1 font-medium bg-transparent w-full" 
-                                        placeholder="Description..."
-                                      />
-                                      <Button onClick={() => removeLineItem(item.id)} size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 shrink-0">
-                                          <X className="h-3 w-3" />
-                                      </Button>
-                                  </div>
-                                  
-                                  {/* Currency Column (Restored, GBP removed) */}
-                                  <div className="col-span-2">
-                                      <Select 
-                                        value={item.buyCurrency || 'MAD'} 
-                                        onValueChange={(val: any) => handleLineItemUpdate(item.id, { buyCurrency: val })}
-                                      >
-                                        <SelectTrigger className="h-7 text-xs border-slate-200">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="MAD">MAD</SelectItem>
-                                            <SelectItem value="USD">USD</SelectItem>
-                                            <SelectItem value="EUR">EUR</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                  </div>
-
-                                  {/* Buy Price (Cost) */}
-                                  <div className="col-span-2 relative">
-                                      <Input 
-                                        type="number"
-                                        value={item.buyPrice}
-                                        onChange={(e) => handleLineItemUpdate(item.id, { buyPrice: parseFloat(e.target.value) || 0 })}
-                                        className="h-7 text-xs pl-2 bg-slate-50 border-slate-200 text-slate-600" 
-                                      />
-                                  </div>
-
-                                  {/* Markup % */}
-                                  <div className="col-span-1 relative">
-                                      <Input 
-                                        type="number"
-                                        value={item.markupValue}
-                                        onChange={(e) => handleLineItemUpdate(item.id, { markupValue: parseFloat(e.target.value) || 0 })}
-                                        className="h-7 text-xs text-center font-medium text-emerald-600 bg-emerald-50/30 border-emerald-100" 
-                                      />
-                                  </div>
-
-                                  {/* VAT Rule */}
-                                  <div className="col-span-1">
-                                       <Select 
-                                            value={item.vatRule} 
-                                            onValueChange={(val: any) => handleLineItemUpdate(item.id, { vatRule: val })}
-                                        >
-                                            <SelectTrigger className="h-7 text-[10px] px-1">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="STD_20">20%</SelectItem>
-                                                <SelectItem value="ROAD_14">14%</SelectItem>
-                                                <SelectItem value="EXPORT_0_ART92">0%</SelectItem>
-                                                <SelectItem value="DISBURSEMENT">0%</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                  </div>
-
-                                  {/* Sell Price (Auto-Calculated) - LAST COLUMN */}
-                                  <div className="col-span-2">
-                                      <div className="h-7 flex items-center justify-end px-3 bg-indigo-50/50 border border-indigo-100 rounded-md text-xs font-bold text-indigo-700">
-                                          {totalIncVat.toFixed(2)}
-                                      </div>
-                                  </div>
-                              </div>
-                          )})}
-                      </div>
-                  </div>
-
-                  {/* Actions Bar */}
-                  <div className="p-3 bg-slate-100 border-t border-slate-200 grid grid-cols-3 gap-2 shrink-0">
-                      <Button variant="outline" size="sm" onClick={() => handleAddQuickLine('ORIGIN')} className="text-[10px] h-8 bg-white border-dashed text-slate-600 hover:text-amber-600 hover:border-amber-300">
-                          + Origin
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleAddQuickLine('FREIGHT')} className="text-[10px] h-8 bg-white border-dashed text-slate-600 hover:text-blue-600 hover:border-blue-300">
-                          + Freight
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleAddQuickLine('DESTINATION')} className="text-[10px] h-8 bg-white border-dashed text-slate-600 hover:text-purple-600 hover:border-purple-300">
-                          + Dest.
-                      </Button>
-                  </div>
-
-                  {/* Financial Footer & Internal Remarks (Stacked) */}
-                  <div className="bg-white border-t border-slate-200 grid grid-cols-1 md:grid-cols-2">
-                      
-                      {/* Left: Internal Remarks (Moved Here) */}
-                      <div className="p-4 border-r border-slate-100">
-                          <div className="flex items-center gap-2 mb-2">
-                              <FileInput className="h-3 w-3 text-slate-400" />
-                              <span className="text-[10px] font-bold text-slate-500 uppercase">Internal Remarks</span>
-                          </div>
-                          <Textarea 
-                            placeholder="Add private notes, operational constraints, or margin justifications..." 
-                            value={internalNotes} 
-                            onChange={(e) => setIdentity('internalNotes', e.target.value)}
-                            className="h-24 resize-none border-slate-200 bg-slate-50/50 text-xs"
-                        />
-                      </div>
-
-                      {/* Right: Summary */}
-                      <div className="p-4 space-y-3">
-                          <div className="space-y-1 pb-3 border-b border-slate-100">
-                            <div className="flex justify-between items-center text-xs">
-                                <span className="text-slate-500">Subtotal (Net)</span>
-                                <span className="font-mono font-medium text-slate-700">{localTotals.totalSell.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-xs">
-                                <span className="text-slate-500">Total VAT</span>
-                                <span className="font-mono font-medium text-slate-500">+ {localTotals.totalVat.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-4 pt-1">
-                              <div>
-                                  <div className="text-[10px] text-slate-400 uppercase font-bold">Total Cost</div>
-                                  <div className="text-xs font-mono text-slate-600">{localTotals.totalBuy.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-                              </div>
-                              <div className="text-right">
-                                  <div className="text-[10px] text-slate-400 uppercase font-bold">Profit Margin</div>
-                                  <div className={cn("text-sm font-mono font-bold", localTotals.margin >= 0 ? "text-emerald-600" : "text-red-600")}>
-                                      {localTotals.margin.toLocaleString(undefined, { minimumFractionDigits: 2 })} 
-                                      <span className="text-[10px] font-normal text-slate-400 ml-1">({localTotals.marginPercent.toFixed(1)}%)</span>
-                                  </div>
-                              </div>
-                          </div>
-                      </div>
-                  </div>
-              </section>
-
-              {/* Info Widget */}
-              {mode && (
-                  <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 flex items-start gap-3">
-                      <AlertCircle className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
-                      <div>
-                          <h4 className="text-xs font-bold text-blue-700 mb-1">Quote Tip</h4>
-                          <p className="text-[11px] text-blue-600/80 leading-relaxed">
-                              You are quoting in <strong>{mode}</strong> mode. 
-                              Make sure to include specific {mode === 'AIR' ? 'AWB and Security' : 'THC and Documentation'} charges for accurate estimation.
-                          </p>
-                      </div>
-                  </div>
-              )}
-
           </div>
 
           {/* AGENT RFQ DIALOG (Original) */}
