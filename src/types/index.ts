@@ -77,7 +77,6 @@ export interface QuoteOption {
     freeTime?: number;
     equipmentType?: string;
     containerCount: number;
-    // FIXED: Added missing equipmentList
     equipmentList: { id: string; type: string; count: number }[];
     items: QuoteLineItem[];
     totalTTC: number;
@@ -270,12 +269,13 @@ export interface ClientRoute {
   id: string;
   origin: string;
   destination: string;
-  mode: 'SEA' | 'AIR' | 'ROAD';
-  incoterm: 'EXW' | 'FOB' | 'CIF' | 'DAP' | 'DDP' | 'OTHER';
+  mode: TransportMode; 
+  incoterm: Incoterm;  
   equipment: '20DV' | '40HC' | 'LCL' | 'AIR' | 'FTL' | 'LTL';
   volume: number;
   volumeUnit: 'TEU' | 'KG' | 'TRK';
   frequency: 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'ADHOC';
+  supplierId?: string;
 }
 
 export interface ClientDocument {
@@ -286,6 +286,7 @@ export interface ClientDocument {
   expiryDate?: Date;
   size: string;
   url: string;
+  description?: string;
 }
 
 export interface ClientFinancials {
@@ -300,10 +301,10 @@ export interface ClientFinancials {
   customsRebatePercent?: number; 
   adminFee?: number;             
   adminFeeCurrency?: Currency;   
-  tollFee?: number;              // CONFIRMED PRESENT
+  tollFee?: number;              
   tollFeeCurrency?: Currency; 
-  fraisNDL?: number;             // NEW: NDL Fee
-  fraisNDLCurrency?: Currency;   // NEW: NDL Currency
+  fraisNDL?: number;             
+  fraisNDLCurrency?: Currency;   
   averageDaysToPay?: number;     
   specialInstructions?: string;  
 }
@@ -316,11 +317,18 @@ export interface ClientSupplier {
   country?: string;
   city?: string;
   address?: string;
+  
+  // Enhanced Contact Info
   contactName?: string;
   email?: string;
   phone?: string;
+  socialQrCodeUrl?: string; // WeChat/WhatsApp QR
+  socialId?: string;        // Added Social ID (WeChat ID, etc.)
+  socialType?: 'WECHAT' | 'WHATSAPP' | 'OTHER';
+  
   products?: string; 
   website?: string;
+  defaultIncoterms?: Incoterm[]; // Preferred Incoterms
   notes?: string;
 }
 
@@ -357,7 +365,6 @@ export interface Client {
   city: string;
   country: string;
   creditLimit: number;
-  // FIXED: Added creditUsed
   creditUsed: number;
   unbilledWork: number; 
   unpaidInvoices: number; 

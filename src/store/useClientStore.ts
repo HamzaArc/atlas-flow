@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { toast } from "@/components/ui/use-toast"; // Now works!
+import { toast } from "@/components/ui/use-toast"; 
 import { 
     Client, 
     ClientContact, 
@@ -39,8 +39,11 @@ interface ClientState {
   
   addContact: (contact: ClientContact) => void;
   removeContact: (contactId: string) => void;
+  
   addRoute: (route: ClientRoute) => void;
+  updateRoute: (route: ClientRoute) => void; // Added
   removeRoute: (routeId: string) => void;
+  
   addDocument: (doc: ClientDocument) => void;
   removeDocument: (docId: string) => void;
 
@@ -48,7 +51,9 @@ interface ClientState {
   removeTag: (tag: string) => void;
   
   addSupplier: (supplier: ClientSupplier) => void;
+  updateSupplier: (supplier: ClientSupplier) => void; // Added
   removeSupplier: (id: string) => void;
+  
   addCommodity: (commodity: ClientCommodity) => void;
   removeCommodity: (id: string) => void;
   
@@ -191,6 +196,13 @@ export const useClientStore = create<ClientState>((set, get) => ({
       } : null
   })),
 
+  updateRoute: (route) => set(state => ({
+      activeClient: state.activeClient ? {
+          ...state.activeClient,
+          routes: state.activeClient.routes.map(r => r.id === route.id ? route : r)
+      } : null
+  })),
+
   removeRoute: (id) => set(state => ({
       activeClient: state.activeClient ? {
           ...state.activeClient,
@@ -228,6 +240,13 @@ export const useClientStore = create<ClientState>((set, get) => ({
       activeClient: state.activeClient ? {
           ...state.activeClient,
           suppliers: [...state.activeClient.suppliers, supplier]
+      } : null
+  })),
+
+  updateSupplier: (supplier) => set(state => ({
+      activeClient: state.activeClient ? {
+          ...state.activeClient,
+          suppliers: state.activeClient.suppliers.map(s => s.id === supplier.id ? supplier : s)
       } : null
   })),
 

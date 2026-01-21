@@ -26,7 +26,7 @@ const mapRowToClient = (row: any): Client => {
         billingAddress: row.billing_address || '',
         deliveryAddress: row.delivery_address || '',
         
-        // Numeric Fields (Ensure they are numbers)
+        // Numeric Fields
         creditLimit: Number(row.credit_limit) || 0,
         creditUsed: Number(row.credit_used) || 0,
         unbilledWork: Number(row.unbilled_work) || 0,

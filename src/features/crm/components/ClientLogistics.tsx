@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { 
     Truck, Ship, Plane, Box, AlertTriangle, 
-    Trash2, Anchor, UploadCloud, Clock, Plus, 
-    MapPin, Factory
+    Trash2, UploadCloud, Clock, Plus, 
+    MapPin, Factory, QrCode, Mail, ChevronDown, ChevronUp
 } from "lucide-react";
 import { useClientStore } from "@/store/useClientStore";
-import { SupplierRole, SupplierTier } from "@/types/index";
+import { SupplierRole, SupplierTier, TransportMode } from "@/types/index";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,17 +15,18 @@ import { RouteDialog } from "./RouteDialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AddressWithMap } from "@/components/ui/address-with-map";
 
 export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
   const { 
-      activeClient, addRoute, removeRoute, 
+      activeClient, addRoute, 
       updateOperationalProfile, addSupplier, removeSupplier
   } = useClientStore();
   
   const [hsInput, setHsInput] = useState('');
+  const [expandedSupplierId, setExpandedSupplierId] = useState<string | null>(null);
   
-  // Sourcing Supplier / Carrier Form State
   const [newSupplier, setNewSupplier] = useState({ 
       name: '', 
       role: 'EXPORTER' as SupplierRole, 
@@ -37,18 +38,16 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
       email: '',
       phone: '',
       products: '',
+      socialQrCodeUrl: '',
+      defaultIncoterms: [] as string[],
       notes: ''
   });
+
   const [isSupplierDialogOpen, setIsSupplierDialogOpen] = useState(false);
-  const [dialogMode, setDialogMode] = useState<'SUPPLIER' | 'CARRIER'>('SUPPLIER');
 
   if (!activeClient) return null;
 
   const { operational, routes, suppliers } = activeClient;
-
-  // Split suppliers into Logistics vs Commercial
-  const commercialSuppliers = suppliers.filter(s => s.role === 'EXPORTER');
-  const logisticsPartners = suppliers.filter(s => s.role !== 'EXPORTER');
 
   // --- HANDLERS ---
   const handleAddHS = () => {
@@ -62,25 +61,26 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
       updateOperationalProfile('hsCodes', operational.hsCodes.filter(c => c !== code));
   };
 
-  const openAddDialog = (mode: 'SUPPLIER' | 'CARRIER') => {
-      setDialogMode(mode);
-      setNewSupplier({ 
-          name: '', 
-          role: mode === 'SUPPLIER' ? 'EXPORTER' : 'SEA_LINE', 
-          tier: 'APPROVED', 
-          country: '', city: '', address: '', contactName: '', email: '', phone: '', products: '', notes: ''
-      });
-      setIsSupplierDialogOpen(true);
-  };
-
   const handleAddSupplier = () => {
       if(!newSupplier.name) return;
       addSupplier({
           id: Math.random().toString(36).substr(2, 9),
           ...newSupplier
-      });
+      } as any);
       setIsSupplierDialogOpen(false);
   };
+
+  const handleFileUpload = () => {
+      const fakeUrl = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=WeChatID_Example";
+      setNewSupplier({...newSupplier, socialQrCodeUrl: fakeUrl});
+  };
+
+  const toggleLanes = (id: string) => {
+    setExpandedSupplierId(expandedSupplierId === id ? null : id);
+  };
+
+  // --- HELPERS ---
+  const isSeaMode = (mode: TransportMode) => mode === 'SEA_FCL' || mode === 'SEA_LCL';
 
   // --- METRICS ---
   const totalTEU = routes.filter(r => r.volumeUnit === 'TEU').reduce((acc, curr) => acc + curr.volume, 0);
@@ -99,74 +99,126 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
   return (
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-10">
           
-          {/* SHARED DIALOG FOR BOTH SUPPLIERS AND CARRIERS */}
+          {/* DIALOG: ADD SUPPLIER */}
           <Dialog open={isSupplierDialogOpen} onOpenChange={setIsSupplierDialogOpen}>
-              <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                      <DialogTitle>{dialogMode === 'SUPPLIER' ? 'Add Commercial Supplier' : 'Add Logistics Partner'}</DialogTitle>
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader className="bg-slate-50 -mx-6 -mt-6 p-6 border-b border-slate-100">
+                      <DialogTitle className="flex items-center gap-2 text-slate-800">
+                          <Factory className="h-5 w-5 text-blue-600" /> 
+                          Add Supply Chain Partner
+                      </DialogTitle>
                   </DialogHeader>
-                  <div className="grid grid-cols-2 gap-4 py-4">
-                      <div className="space-y-2 col-span-2">
-                          <Label>Company Name</Label>
-                          <Input value={newSupplier.name} onChange={(e) => setNewSupplier({...newSupplier, name: e.target.value})} placeholder={dialogMode === 'SUPPLIER' ? "e.g. Shanghai Textile Co." : "e.g. Maersk Line"} />
-                      </div>
-                      <div className="space-y-2">
-                          <Label>Role</Label>
-                          <Select 
-                            value={newSupplier.role} 
-                            onValueChange={(v: any) => setNewSupplier({...newSupplier, role: v})}
-                            disabled={dialogMode === 'SUPPLIER'} 
-                          >
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                  {dialogMode === 'SUPPLIER' ? (
-                                    <SelectItem value="EXPORTER">Exporter / Factory</SelectItem>
-                                  ) : (
-                                    <>
-                                        <SelectItem value="SEA_LINE">Shipping Line</SelectItem>
-                                        <SelectItem value="AIRLINE">Airline</SelectItem>
-                                        <SelectItem value="HAULIER">Haulier</SelectItem>
-                                        <SelectItem value="FORWARDER">Freight Forwarder</SelectItem>
-                                    </>
-                                  )}
-                              </SelectContent>
-                          </Select>
-                      </div>
-                      <div className="space-y-2">
-                          <Label>Relationship Tier</Label>
-                          <Select value={newSupplier.tier} onValueChange={(v: any) => setNewSupplier({...newSupplier, tier: v})}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                  <SelectItem value="STRATEGIC">Strategic</SelectItem>
-                                  <SelectItem value="APPROVED">Approved</SelectItem>
-                                  <SelectItem value="BACKUP">Backup</SelectItem>
-                                  <SelectItem value="BLOCKED">Blocked</SelectItem>
-                              </SelectContent>
-                          </Select>
-                      </div>
-                      
-                      <div className="col-span-2 border-t border-slate-100 my-2"></div>
+                  
+                  <div className="grid grid-cols-12 gap-6 py-4">
+                      {/* Left: Identity */}
+                      <div className="col-span-12 md:col-span-6 space-y-4">
+                          <div className="space-y-2">
+                              <Label>Company Name</Label>
+                              <Input 
+                                  value={newSupplier.name} 
+                                  onChange={(e) => setNewSupplier({...newSupplier, name: e.target.value})} 
+                                  placeholder="e.g. Shanghai Textile Co." 
+                                  className="font-bold"
+                              />
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                  <Label>Role</Label>
+                                  <Select 
+                                      value={newSupplier.role} 
+                                      onValueChange={(v: string) => setNewSupplier({...newSupplier, role: v as SupplierRole})}
+                                  >
+                                      <SelectTrigger><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                          <SelectItem value="EXPORTER">Exporter / Factory</SelectItem>
+                                          <SelectItem value="SEA_LINE">Shipping Line</SelectItem>
+                                          <SelectItem value="AIRLINE">Airline</SelectItem>
+                                          <SelectItem value="FORWARDER">Freight Forwarder</SelectItem>
+                                      </SelectContent>
+                                  </Select>
+                              </div>
+                              <div className="space-y-2">
+                                  <Label>Relationship Tier</Label>
+                                  <Select value={newSupplier.tier} onValueChange={(v: string) => setNewSupplier({...newSupplier, tier: v as SupplierTier})}>
+                                      <SelectTrigger><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                          <SelectItem value="STRATEGIC">Strategic (Preferred)</SelectItem>
+                                          <SelectItem value="APPROVED">Approved</SelectItem>
+                                          <SelectItem value="BACKUP">Backup</SelectItem>
+                                          <SelectItem value="BLOCKED">Blocked</SelectItem>
+                                      </SelectContent>
+                                  </Select>
+                              </div>
+                          </div>
 
-                      <div className="space-y-2">
-                          <Label>Country</Label>
-                          <Input value={newSupplier.country} onChange={(e) => setNewSupplier({...newSupplier, country: e.target.value})} placeholder="e.g. China" />
-                      </div>
-                      <div className="space-y-2">
-                          <Label>City</Label>
-                          <Input value={newSupplier.city} onChange={(e) => setNewSupplier({...newSupplier, city: e.target.value})} placeholder="e.g. Shanghai" />
+                          <div className="space-y-2">
+                               <Label>Commodities / Products</Label>
+                               <Input value={newSupplier.products} onChange={(e) => setNewSupplier({...newSupplier, products: e.target.value})} placeholder="e.g. Cotton Fabrics, Electronics" />
+                          </div>
+
+                           <div className="space-y-2">
+                               <Label>Incoterms Preference</Label>
+                               <Input placeholder="e.g. FOB, EXW (Comma separated)" onChange={(e) => setNewSupplier({...newSupplier, defaultIncoterms: e.target.value.split(',')})} />
+                           </div>
                       </div>
 
-                      {dialogMode === 'SUPPLIER' && (
-                        <>
-                            <div className="col-span-2 border-t border-slate-100 my-2"></div>
-                            <div className="space-y-2 col-span-2">
-                                <Label>Primary Goods / Products</Label>
-                                <Input value={newSupplier.products} onChange={(e) => setNewSupplier({...newSupplier, products: e.target.value})} placeholder="e.g. Cotton Fabrics" />
-                            </div>
-                        </>
-                      )}
+                      {/* Right: Location & Contact */}
+                      <div className="col-span-12 md:col-span-6 space-y-4 pl-0 md:pl-6 border-l border-slate-100">
+                           <AddressWithMap 
+                                label="Factory / Office Location"
+                                value={newSupplier.address}
+                                onChange={(val: string) => setNewSupplier({...newSupplier, address: val})}
+                                placeholder="Search location..."
+                           />
+                           <div className="grid grid-cols-2 gap-4">
+                               <div className="space-y-2">
+                                  <Label>City</Label>
+                                  <Input value={newSupplier.city} onChange={(e) => setNewSupplier({...newSupplier, city: e.target.value})} />
+                               </div>
+                               <div className="space-y-2">
+                                  <Label>Country</Label>
+                                  <Input value={newSupplier.country} onChange={(e) => setNewSupplier({...newSupplier, country: e.target.value})} />
+                               </div>
+                           </div>
+                           
+                           <div className="bg-slate-50 p-4 rounded-lg space-y-3 border border-slate-200 mt-2">
+                                <Label className="text-blue-600 font-bold">Primary Contact Person</Label>
+                                <Input 
+                                    placeholder="Full Name" 
+                                    value={newSupplier.contactName} 
+                                    onChange={(e) => setNewSupplier({...newSupplier, contactName: e.target.value})}
+                                    className="h-8 bg-white" 
+                                />
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Input placeholder="Email" value={newSupplier.email} onChange={(e) => setNewSupplier({...newSupplier, email: e.target.value})} className="h-8 bg-white" />
+                                    <Input placeholder="Phone / Mobile" value={newSupplier.phone} onChange={(e) => setNewSupplier({...newSupplier, phone: e.target.value})} className="h-8 bg-white" />
+                                </div>
+                                <div className="pt-2">
+                                    <Label className="text-[10px] uppercase text-slate-400 font-bold mb-1 block">WeChat / Social QR</Label>
+                                    <div className="flex items-center gap-3">
+                                        {newSupplier.socialQrCodeUrl ? (
+                                            <div className="relative group">
+                                                <img src={newSupplier.socialQrCodeUrl} className="w-16 h-16 rounded border bg-white p-1" alt="QR" />
+                                                <Button size="icon" variant="destructive" className="absolute -top-2 -right-2 h-5 w-5 rounded-full" onClick={() => setNewSupplier({...newSupplier, socialQrCodeUrl: ''})}>×</Button>
+                                            </div>
+                                        ) : (
+                                            <Button variant="outline" size="sm" onClick={handleFileUpload} className="w-full h-16 border-dashed border-slate-300 text-slate-400 hover:bg-white">
+                                                <QrCode className="h-4 w-4 mr-2" /> Upload QR Image
+                                            </Button>
+                                        )}
+                                        <div className="text-[10px] text-slate-400 leading-tight flex-1">
+                                            Upload WeChat, WhatsApp or Line QR code for quick scanning by operations team.
+                                        </div>
+                                    </div>
+                                </div>
+                           </div>
+                      </div>
                   </div>
-                  <Button onClick={handleAddSupplier} className="w-full">Save Partner</Button>
+                  <DialogFooter className="bg-slate-50 -mx-6 -mb-6 p-4 border-t border-slate-100">
+                      <Button variant="ghost" onClick={() => setIsSupplierDialogOpen(false)}>Cancel</Button>
+                      <Button onClick={handleAddSupplier} className="bg-blue-600 hover:bg-blue-700">Save Partner</Button>
+                  </DialogFooter>
               </DialogContent>
           </Dialog>
 
@@ -210,123 +262,149 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
 
           <div className="grid grid-cols-12 gap-6">
               
-              {/* 2. SOURCING NETWORK */}
-              <div className="col-span-12 space-y-4">
-                  <div className="flex justify-between items-center">
-                      <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
-                          <Factory className="h-4 w-4 text-slate-500" /> Sourcing Network & Suppliers
-                      </h3>
-                      
-                      {isEditing && (
-                          <Button size="sm" className="h-8 bg-slate-900 text-white shadow-sm" onClick={() => openAddDialog('SUPPLIER')}>
-                              <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Supplier
-                          </Button>
-                      )}
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {commercialSuppliers.map((sup) => (
-                          <Card key={sup.id} className="relative overflow-hidden border-slate-200 shadow-sm hover:shadow-md transition-all hover:border-blue-200 group">
-                              <div className="absolute top-0 left-0 bottom-0 w-1 bg-indigo-500"></div>
-                              <CardContent className="p-4">
-                                  <div className="flex justify-between items-start mb-3">
-                                      <div>
-                                          <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                                              {sup.name}
-                                              <Badge variant="outline" className={`text-[8px] h-4 px-1 ${getTierColor(sup.tier)}`}>
-                                                  {sup.tier}
-                                              </Badge>
-                                          </h4>
-                                          <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
-                                              <MapPin className="h-3 w-3" />
-                                              {sup.city}, {sup.country}
-                                          </div>
-                                      </div>
-                                      {isEditing && (
-                                          <Button variant="ghost" size="icon" onClick={() => removeSupplier(sup.id)} className="h-6 w-6 text-slate-300 hover:text-red-500 -mr-2 -mt-2">
-                                              <Trash2 className="h-3.5 w-3.5" />
-                                          </Button>
-                                      )}
-                                  </div>
-                                  
-                                  <div className="bg-slate-50 rounded-md p-2.5 space-y-2 border border-slate-100">
-                                      <div className="flex items-start gap-2">
-                                          <Box className="h-3.5 w-3.5 text-slate-400 mt-0.5" />
-                                          <span className="text-xs font-medium text-slate-700 leading-tight">
-                                              {sup.products || 'General Cargo'}
-                                          </span>
-                                      </div>
-                                  </div>
-                              </CardContent>
-                          </Card>
-                      ))}
-                      {commercialSuppliers.length === 0 && (
-                          <div className="col-span-2 h-24 border-2 border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400">
-                              <Factory className="h-6 w-6 opacity-20 mb-2" />
-                              <span className="text-xs">No sourcing suppliers added.</span>
-                          </div>
-                      )}
-                  </div>
-              </div>
-
-              {/* 3. TRADE LANES */}
+              {/* 2. UNIFIED SUPPLY CHAIN MATRIX */}
               <div className="col-span-12 lg:col-span-8 space-y-4">
                   <div className="flex justify-between items-center">
                       <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
-                          <Truck className="h-4 w-4 text-slate-500" /> Active Trade Lanes
+                          <Factory className="h-4 w-4 text-slate-500" /> Supply Chain Matrix
                       </h3>
-                      {isEditing && <RouteDialog onSave={addRoute} />}
+                      
+                      <div className="flex gap-2">
+                          {isEditing && (
+                             <>
+                              <Button size="sm" variant="outline" onClick={() => setIsSupplierDialogOpen(true)}>
+                                  <Plus className="h-3.5 w-3.5 mr-1.5" /> New Partner
+                              </Button>
+                              <RouteDialog onSave={addRoute} />
+                             </>
+                          )}
+                      </div>
                   </div>
 
-                  <div className="space-y-3">
-                      {routes.map((route) => {
-                          const isImport = ['EXW', 'FCA', 'FOB'].includes(route.incoterm);
+                  <div className="space-y-4">
+                      {suppliers.length === 0 && (
+                          <div className="h-32 border-2 border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 bg-slate-50/50">
+                              <Factory className="h-8 w-8 opacity-20 mb-2" />
+                              <span className="text-sm">No supply chain partners mapped.</span>
+                              <span className="text-xs">Add exporters or carriers to visualize trade lanes.</span>
+                          </div>
+                      )}
+
+                      {suppliers.map((sup) => {
+                          const linkedRoutes = routes; 
+                          const isExpanded = expandedSupplierId === sup.id;
+
                           return (
-                            <Card key={route.id} className="group relative overflow-hidden border-slate-200 shadow-sm hover:shadow-md transition-all hover:border-blue-200">
-                                <div className={`absolute top-0 left-0 bottom-0 w-1 ${route.mode === 'SEA' ? 'bg-blue-500' : 'bg-orange-500'}`}></div>
-                                <CardContent className="p-4 flex items-center justify-between">
-                                    <div className="flex items-center gap-4 flex-1">
-                                        <div className="flex flex-col items-center w-12">
-                                            {route.mode === 'SEA' ? <Ship className="h-5 w-5 text-blue-600" /> : <Plane className="h-5 w-5 text-orange-500" />}
-                                            <span className="text-[9px] font-bold text-slate-400 mt-1">{route.mode}</span>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <div className="text-center">
-                                                <div className="text-lg font-bold text-slate-800">{route.origin}</div>
-                                                {isImport && <Badge variant="outline" className="text-[8px] bg-amber-50 text-amber-700 border-amber-200">Import</Badge>}
-                                            </div>
-                                            <div className="flex flex-col items-center px-2">
-                                                <span className="text-[9px] text-slate-400 font-mono mb-0.5">{route.incoterm}</span>
-                                                <div className="h-px w-8 bg-slate-300"></div>
-                                            </div>
-                                            <div className="text-center">
-                                                <div className="text-lg font-bold text-slate-800">{route.destination}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-6 pl-6 border-l border-slate-100">
-                                        <div className="text-right">
-                                            <div className="text-xs text-slate-400 uppercase font-bold">Vol</div>
-                                            <div className="font-mono text-sm font-semibold text-blue-700">{route.volume} {route.volumeUnit}</div>
-                                        </div>
-                                        {isEditing && (
-                                            <Button variant="ghost" size="icon" onClick={() => removeRoute(route.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50">
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        )}
-                                    </div>
-                                </CardContent>
-                            </Card>
+                              <Card key={sup.id} className="group border-slate-200 shadow-sm hover:shadow-md transition-all overflow-hidden">
+                                  <div className="bg-slate-50/50 p-4 border-b border-slate-100 flex justify-between items-start">
+                                      <div className="flex gap-4">
+                                          {/* Partner Icon */}
+                                          <div className={`h-12 w-12 rounded-lg flex items-center justify-center border shadow-sm ${sup.role === 'EXPORTER' ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-blue-50 border-blue-100 text-blue-600'}`}>
+                                              {sup.role === 'EXPORTER' ? <Factory className="h-6 w-6" /> : <Ship className="h-6 w-6" />}
+                                          </div>
+                                          
+                                          {/* Details */}
+                                          <div>
+                                              <div className="flex items-center gap-2">
+                                                  <h4 className="font-bold text-slate-800 text-base">{sup.name}</h4>
+                                                  <Badge variant="outline" className={`text-[9px] h-5 ${getTierColor(sup.tier)}`}>{sup.tier}</Badge>
+                                                  <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 rounded uppercase tracking-wider">{sup.role}</span>
+                                              </div>
+                                              
+                                              <div className="flex flex-wrap gap-4 mt-1.5">
+                                                   <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                                                       <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                                                       {sup.city}, {sup.country}
+                                                   </div>
+                                                   {sup.contactName && (
+                                                       <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                                                            <div className="w-1 h-1 rounded-full bg-slate-300"></div>
+                                                            <span className="font-medium">{sup.contactName}</span>
+                                                       </div>
+                                                   )}
+                                                   {sup.email && (
+                                                       <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                                                            <Mail className="h-3 w-3 text-slate-400" />
+                                                            <span className="hover:text-blue-600 cursor-pointer">{sup.email}</span>
+                                                       </div>
+                                                   )}
+                                              </div>
+                                          </div>
+                                      </div>
+
+                                      {/* Actions & QR */}
+                                      <div className="flex items-start gap-3">
+                                          {sup.socialQrCodeUrl && (
+                                               <TooltipProvider>
+                                                 <Tooltip>
+                                                   <TooltipTrigger>
+                                                     <div className="h-8 w-8 bg-white border border-slate-200 rounded flex items-center justify-center hover:border-blue-300 cursor-pointer">
+                                                         <QrCode className="h-4 w-4 text-slate-600" />
+                                                     </div>
+                                                   </TooltipTrigger>
+                                                   <TooltipContent>
+                                                       <img src={sup.socialQrCodeUrl} className="w-32 h-32" alt="QR" />
+                                                   </TooltipContent>
+                                                 </Tooltip>
+                                               </TooltipProvider>
+                                          )}
+                                          {isEditing && (
+                                              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-red-500" onClick={() => removeSupplier(sup.id)}>
+                                                  <Trash2 className="h-4 w-4" />
+                                              </Button>
+                                          )}
+                                      </div>
+                                  </div>
+
+                                  {/* Active Lanes (Custom Toggler) */}
+                                  <div className="bg-white">
+                                      <div 
+                                          className="px-4 py-2 border-b border-slate-100 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
+                                          onClick={() => toggleLanes(sup.id)}
+                                      >
+                                          <span className="text-xs font-bold uppercase text-slate-400 tracking-wider flex items-center gap-2">
+                                              <Truck className="h-3.5 w-3.5" /> Active Trade Lanes ({linkedRoutes.length})
+                                          </span>
+                                          {isExpanded ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                                      </div>
+                                      
+                                      {isExpanded && (
+                                          <div className="p-4 space-y-3 animate-in slide-in-from-top-1 fade-in duration-200">
+                                              {linkedRoutes.map((route) => (
+                                                  <div key={route.id} className="flex items-center justify-between p-3 rounded border border-slate-100 bg-slate-50/50 hover:border-blue-200 transition-colors">
+                                                      <div className="flex items-center gap-4">
+                                                          {isSeaMode(route.mode) ? <Ship className="h-4 w-4 text-blue-500" /> : <Plane className="h-4 w-4 text-orange-500" />}
+                                                          
+                                                          <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                                                              <span>{route.origin}</span>
+                                                              <span className="text-slate-300">→</span>
+                                                              <span>{route.destination}</span>
+                                                          </div>
+                                                          
+                                                          <Badge variant="outline" className="bg-white text-[10px] font-mono">{route.incoterm}</Badge>
+                                                      </div>
+                                                      <div className="text-xs font-mono font-medium text-slate-600">
+                                                          {route.volume} {route.volumeUnit}/yr
+                                                      </div>
+                                                  </div>
+                                              ))}
+                                              {linkedRoutes.length === 0 && (
+                                                  <div className="text-xs text-slate-400 italic pl-1">No specific lanes assigned yet.</div>
+                                              )}
+                                          </div>
+                                      )}
+                                  </div>
+                              </Card>
                           );
                       })}
                   </div>
               </div>
 
-              {/* 4. INTELLIGENCE & LOGISTICS VENDORS */}
+              {/* 3. INTELLIGENCE & SPECS */}
               <div className="col-span-12 lg:col-span-4 space-y-6">
                   
                   {/* CARD A: HANDLING SPECS */}
-                  <Card className="shadow-sm border-slate-200">
+                  <Card className="shadow-sm border-slate-200 bg-white">
                       <CardHeader className="py-3 px-4 bg-slate-50/50 border-b border-slate-100">
                           <CardTitle className="text-xs font-bold uppercase text-slate-500 flex items-center gap-2">
                               <Box className="h-3.5 w-3.5" /> Special Handling
@@ -375,41 +453,6 @@ export function ClientLogistics({ isEditing }: { isEditing: boolean }) {
                           </div>
                       </CardContent>
                   </Card>
-
-                   {/* LOGISTICS VENDORS (Carrier Management) */}
-                   <Card className="shadow-sm border-slate-200">
-                      <CardHeader className="py-3 px-4 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
-                          <CardTitle className="text-xs font-bold uppercase text-slate-500 flex items-center gap-2">
-                              <Anchor className="h-3.5 w-3.5" /> Approved Carriers
-                          </CardTitle>
-                          {isEditing && (
-                             <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openAddDialog('CARRIER')}>
-                                <Plus className="h-3.5 w-3.5 text-blue-600" />
-                             </Button>
-                          )}
-                      </CardHeader>
-                      <CardContent className="p-4">
-                          <div className="space-y-2">
-                                {logisticsPartners.map((sup) => (
-                                    <div key={sup.id} className="flex justify-between items-center text-xs p-2.5 bg-slate-50 rounded-md border border-slate-100 group">
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant="outline" className={`text-[9px] h-4 px-1 py-0 ${getTierColor(sup.tier)}`}>
-                                                {sup.tier}
-                                            </Badge>
-                                            <span className="font-semibold text-slate-700">{sup.name}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-[9px] text-slate-400">{sup.role.replace('_', ' ')}</span>
-                                            {isEditing && (
-                                                <Trash2 className="h-3 w-3 text-slate-300 hover:text-red-500 cursor-pointer" onClick={() => removeSupplier(sup.id)} />
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                                {logisticsPartners.length === 0 && <span className="text-xs text-slate-400 italic">No carriers assigned.</span>}
-                          </div>
-                      </CardContent>
-                   </Card>
               </div>
           </div>
       </div>

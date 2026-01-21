@@ -7,9 +7,8 @@ import { Coins } from "lucide-react";
 // Modular Components
 import { ClientHeader } from "../components/ClientHeader";
 import { ClientOverview } from "../components/ClientOverview";
-import { ClientContacts } from "../components/ClientContacts";
 import { ClientDocuments } from "../components/ClientDocuments";
-import { ClientLogistics } from "../components/ClientLogistics"; 
+// ClientLogistics import removed as it is now integrated into Overview
 import { ClientBillingConfig } from "../components/ClientBillingConfig"; 
 
 interface ClientDetailsPageProps {
@@ -55,13 +54,15 @@ export default function ClientDetailsPage({ onNavigate }: ClientDetailsPageProps
         <Tabs defaultValue="overview" className="h-full flex flex-col space-y-6">
           <div className="flex items-center justify-between shrink-0">
             <TabsList className="bg-white border border-slate-200 p-1 rounded-lg h-11 shadow-sm">
-              <TabsTrigger value="overview" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 text-slate-500 font-medium text-xs px-4 h-9">Overview</TabsTrigger>
-              <TabsTrigger value="logistics" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 text-slate-500 font-medium text-xs px-4 h-9">Logistics</TabsTrigger>
+              <TabsTrigger value="overview" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 text-slate-500 font-medium text-xs px-4 h-9">
+                  Overview & Supply Chain
+              </TabsTrigger>
               <TabsTrigger value="billing" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 text-slate-500 font-medium text-xs px-4 h-9 flex items-center gap-2">
                  <Coins className="h-3 w-3" /> Billing Config
               </TabsTrigger>
-              <TabsTrigger value="contacts" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 text-slate-500 font-medium text-xs px-4 h-9">Contacts ({activeClient.contacts.length})</TabsTrigger>
-              <TabsTrigger value="docs" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 text-slate-500 font-medium text-xs px-4 h-9">Documents ({activeClient.documents.length})</TabsTrigger>
+              <TabsTrigger value="docs" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 text-slate-500 font-medium text-xs px-4 h-9">
+                  Documents ({activeClient.documents.length})
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -70,16 +71,8 @@ export default function ClientDetailsPage({ onNavigate }: ClientDetailsPageProps
               <ClientOverview isEditing={isEditing} />
             </TabsContent>
             
-            <TabsContent value="logistics" className="h-full m-0 focus-visible:ring-0 outline-none">
-              <ClientLogistics isEditing={isEditing} />
-            </TabsContent>
-
             <TabsContent value="billing" className="h-full m-0 focus-visible:ring-0 outline-none">
               <ClientBillingConfig isEditing={isEditing} />
-            </TabsContent>
-
-            <TabsContent value="contacts" className="h-full m-0 focus-visible:ring-0 outline-none">
-                <ClientContacts isEditing={isEditing} />
             </TabsContent>
 
             <TabsContent value="docs" className="h-full m-0 focus-visible:ring-0 outline-none">

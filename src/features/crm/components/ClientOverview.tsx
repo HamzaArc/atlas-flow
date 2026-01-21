@@ -9,6 +9,9 @@ import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { AddressWithMap } from "@/components/ui/address-with-map";
+import { ClientContacts } from "./ClientContacts";
+import { SupplyChainMatrix } from "./SupplyChainMatrix";
 
 const FieldGroup = ({ label, children, required = false }: { label: string, children: React.ReactNode, required?: boolean }) => (
   <div className="space-y-1.5 w-full">
@@ -31,11 +34,11 @@ export function ClientOverview({ isEditing }: { isEditing: boolean }) {
     return (
         <div className="grid grid-cols-12 gap-6 animate-in fade-in duration-500 pb-6">
             
-            {/* LEFT COLUMN: IDENTITY */}
-            <div className="col-span-12 lg:col-span-4 flex flex-col gap-6">
+            {/* LEFT COLUMN: IDENTITY & CONTACTS */}
+            <div className="col-span-12 lg:col-span-5 flex flex-col gap-6">
                 
                 {/* Identity Card */}
-                <Card className="border-slate-200 shadow-md bg-white h-full">
+                <Card className="border-slate-200 shadow-md bg-white">
                     <CardHeader className="pb-3 bg-slate-50/50 border-b border-slate-100 h-14 justify-center">
                         <CardTitle className="text-sm font-bold text-slate-700 flex items-center gap-2">
                             <Building2 className="h-4 w-4 text-slate-400" /> Corporate Identity
@@ -44,7 +47,7 @@ export function ClientOverview({ isEditing }: { isEditing: boolean }) {
                     <CardContent className="p-5 space-y-5">
                         <div className="grid grid-cols-2 gap-3">
                             <FieldGroup label="Client Type">
-                                <Select disabled={!isEditing} value={activeClient.type} onValueChange={(v) => updateActiveField('type', v as ClientType)}>
+                                <Select disabled={!isEditing} value={activeClient.type} onValueChange={(v: string) => updateActiveField('type', v as ClientType)}>
                                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="SHIPPER">Shipper</SelectItem>
@@ -55,7 +58,7 @@ export function ClientOverview({ isEditing }: { isEditing: boolean }) {
                                 </Select>
                             </FieldGroup>
                             <FieldGroup label="Status">
-                                <Select disabled={!isEditing} value={activeClient.status} onValueChange={(v) => updateActiveField('status', v as ClientStatus)}>
+                                <Select disabled={!isEditing} value={activeClient.status} onValueChange={(v: string) => updateActiveField('status', v as ClientStatus)}>
                                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="PROSPECT">Prospect</SelectItem>
@@ -82,18 +85,26 @@ export function ClientOverview({ isEditing }: { isEditing: boolean }) {
 
                         <Separator />
 
-                        {/* Addresses */}
+                        {/* Addresses with Google Maps Integration */}
                         <div className="space-y-4">
-                             <FieldGroup label="Billing Address (Siège Social)" required>
-                                 <Input value={activeClient.billingAddress || ''} disabled={!isEditing} placeholder="Legal address for Invoicing" className="h-8 text-xs" onChange={(e) => updateActiveField('billingAddress', e.target.value)} />
-                             </FieldGroup>
-                             <FieldGroup label="Delivery Address (Usine/Dépôt)">
-                                 <Input value={activeClient.deliveryAddress || ''} disabled={!isEditing} placeholder="Physical delivery location" className="h-8 text-xs" onChange={(e) => updateActiveField('deliveryAddress', e.target.value)} />
-                             </FieldGroup>
-                             <div className="grid grid-cols-2 gap-2">
-                                <Input value={activeClient.city} disabled={!isEditing} placeholder="City" className="h-8 text-xs" onChange={(e) => updateActiveField('city', e.target.value)} />
-                                <Input value={activeClient.country} disabled={!isEditing} placeholder="Country" className="h-8 text-xs" onChange={(e) => updateActiveField('country', e.target.value)} />
-                             </div>
+                             <AddressWithMap 
+                                label="Billing Address (Siège Social)"
+                                placeholder="Search legal address..."
+                                value={activeClient.billingAddress || ''}
+                                onChange={(val: string) => updateActiveField('billingAddress', val)}
+                                disabled={!isEditing}
+                                required
+                                iconClassName="text-slate-400"
+                             />
+                             
+                             <AddressWithMap 
+                                label="Delivery Address (Usine/Dépôt)"
+                                placeholder="Search factory/warehouse location..."
+                                value={activeClient.deliveryAddress || ''}
+                                onChange={(val: string) => updateActiveField('deliveryAddress', val)}
+                                disabled={!isEditing}
+                                iconClassName="text-blue-500"
+                             />
                         </div>
 
                         <Separator />
@@ -114,10 +125,13 @@ export function ClientOverview({ isEditing }: { isEditing: boolean }) {
                         </div>
                     </CardContent>
                 </Card>
+
+                {/* INTEGRATED CONTACTS LIST */}
+                <ClientContacts isEditing={isEditing} />
             </div>
 
-            {/* RIGHT COLUMN: FINANCIAL & LEGAL */}
-            <div className="col-span-12 lg:col-span-8 flex flex-col gap-6">
+            {/* RIGHT COLUMN: FINANCIAL, LEGAL & SUPPLY CHAIN */}
+            <div className="col-span-12 lg:col-span-7 flex flex-col gap-6">
                 
                 {/* 1. FINANCIAL RISK & EXPOSURE */}
                 <Card className="border-slate-200 shadow-md bg-white shrink-0">
@@ -128,7 +142,7 @@ export function ClientOverview({ isEditing }: { isEditing: boolean }) {
                         {isEditing ? (
                             <Select 
                                 value={activeClient.financials.currency} 
-                                onValueChange={(v) => updateActiveFinancials('currency', v)}
+                                onValueChange={(v: string) => updateActiveFinancials('currency', v)}
                             >
                                 <SelectTrigger className="w-24 h-8 text-xs bg-white">
                                     <SelectValue />
@@ -147,10 +161,10 @@ export function ClientOverview({ isEditing }: { isEditing: boolean }) {
                         )}
                     </CardHeader>
                     <CardContent className="p-5">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             <div className="col-span-1 space-y-4">
                                 <FieldGroup label="Payment Terms">
-                                    <Select disabled={!isEditing} value={activeClient.financials.paymentTerms} onValueChange={(v) => updateActiveFinancials('paymentTerms', v)}>
+                                    <Select disabled={!isEditing} value={activeClient.financials.paymentTerms} onValueChange={(v: string) => updateActiveFinancials('paymentTerms', v)}>
                                         <SelectTrigger className="font-semibold h-9"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="PREPAID">Prepaid</SelectItem>
@@ -174,7 +188,7 @@ export function ClientOverview({ isEditing }: { isEditing: boolean }) {
                                 </FieldGroup>
                             </div>
 
-                            <div className="col-span-2 bg-slate-50 rounded-lg p-4 border border-slate-100 flex flex-col justify-center shadow-inner relative overflow-hidden">
+                            <div className="col-span-1 lg:col-span-2 bg-slate-50 rounded-lg p-4 border border-slate-100 flex flex-col justify-center shadow-inner relative overflow-hidden">
                                 {utilizationPercent > 100 && (
                                     <div className="absolute top-0 right-0 bg-red-100 text-red-600 text-[10px] px-2 py-1 font-bold rounded-bl-lg">
                                         LIMIT EXCEEDED
@@ -210,16 +224,15 @@ export function ClientOverview({ isEditing }: { isEditing: boolean }) {
                     </CardContent>
                 </Card>
 
-                {/* 2. FISCAL & LEGAL ENTITY (Moved from Left Column) */}
-                <Card className="border-slate-200 shadow-md bg-white flex-1">
+                {/* 2. FISCAL & LEGAL ENTITY */}
+                <Card className="border-slate-200 shadow-md bg-white">
                     <CardHeader className="pb-3 bg-slate-50/50 border-b border-slate-100 h-14 justify-center">
                         <CardTitle className="text-sm font-bold text-slate-700 flex items-center gap-2">
                             <FileText className="h-4 w-4 text-slate-400" /> Fiscal Identity & Legal Registration
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="p-5">
-                         {/* Grid updated to 3 cols to utilize the wider space */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             <div className="col-span-1">
                                 <FieldGroup label="ICE (15 Digits)" required>
                                     <div className="relative">
@@ -251,6 +264,9 @@ export function ClientOverview({ isEditing }: { isEditing: boolean }) {
                         </div>
                     </CardContent>
                 </Card>
+
+                {/* 3. SUPPLY CHAIN MATRIX (Moved Here) */}
+                <SupplyChainMatrix isEditing={isEditing} />
             </div>
         </div>
     );
