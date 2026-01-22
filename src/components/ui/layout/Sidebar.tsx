@@ -231,7 +231,7 @@ export function Sidebar({
           <NavItem 
               id="dashboard" 
               icon={FileText} 
-              label="Quote Engine" 
+              label="Quotes (Devis)" 
               active={currentView === 'dashboard' || currentView === 'create'}
               onClick={() => onNavigate('dashboard')} 
           />
@@ -248,14 +248,13 @@ export function Sidebar({
               label="Shipment Dossiers" 
               active={currentView === 'dossier'}
               onClick={() => onNavigate('dossier')} 
-              status="soon" statusText="In Dev"
           />
 
           <SectionHeader title="Relations" />
           <NavItem 
               id="crm" 
               icon={Users} 
-              label="CRM & Contacts" 
+              label="Customers (Clients)" 
               active={currentView === 'crm'} 
               onClick={() => onNavigate('crm')} 
           />
