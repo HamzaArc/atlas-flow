@@ -289,6 +289,7 @@ export interface ClientDocument {
   expiryDate?: Date;
   size: string;
   url: string;
+  path?: string; // Added for Supabase storage reference
   description?: string;
 }
 

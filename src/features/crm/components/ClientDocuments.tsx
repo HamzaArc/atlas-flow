@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, Trash2, UploadCloud, File, AlertTriangle} from "lucide-react";
+import { FileText, Download, Trash2, UploadCloud, File, AlertTriangle, Edit, Loader2 } from "lucide-react";
 import { useClientStore } from "@/store/useClientStore";
 import { ClientDocument } from "@/types/index";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -11,17 +11,23 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { ClientService } from "@/services/client.service";
+import { useToast } from "@/components/ui/use-toast";
 
 export function ClientDocuments({ isEditing }: { isEditing: boolean }) {
-    const { activeClient, addDocument, removeDocument } = useClientStore();
-    const [isUploadOpen, setIsUploadOpen] = useState(false);
+    const { activeClient, addDocument, removeDocument, updateDocument } = useClientStore();
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+    const { toast } = useToast();
     
-    // Upload State
-    const [newDoc, setNewDoc] = useState<{
-        file: File | null,
-        type: string,
-        expiryDate: string,
-        description: string
+    // Form State (Used for both Create and Edit)
+    const [formData, setFormData] = useState<{
+        id?: string; // If ID exists, we are editing
+        file: File | null;
+        type: string;
+        expiryDate: string;
+        description: string;
+        existingName?: string; // For display during edit
     }>({
         file: null,
         type: 'CONTRACT',
@@ -31,31 +37,89 @@ export function ClientDocuments({ isEditing }: { isEditing: boolean }) {
 
     if (!activeClient) return null;
 
+    const resetForm = () => {
+        setFormData({ 
+            file: null, 
+            type: 'CONTRACT', 
+            expiryDate: '', 
+            description: '',
+            id: undefined
+        });
+    };
+
+    const handleOpenUpload = () => {
+        resetForm();
+        setIsDialogOpen(true);
+    };
+
+    const handleOpenEdit = (doc: ClientDocument) => {
+        setFormData({
+            id: doc.id,
+            file: null, // We don't replace file in this simplified edit flow
+            type: doc.type,
+            expiryDate: doc.expiryDate ? new Date(doc.expiryDate).toISOString().split('T')[0] : '',
+            description: doc.description || '',
+            existingName: doc.name
+        });
+        setIsDialogOpen(true);
+    };
+
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            setNewDoc({ ...newDoc, file: e.target.files[0] });
+            setFormData({ ...formData, file: e.target.files[0] });
         }
     };
 
-    const handleSaveDocument = () => {
-        if (!newDoc.file) return;
+    const handleSave = async () => {
+        setIsUploading(true);
 
-        // In a real app, this is where we upload to Supabase Storage
-        // For now, we simulate the return object
-        const docEntry: ClientDocument = {
-            id: Math.random().toString(36).substr(2, 9),
-            name: newDoc.file.name,
-            type: newDoc.type as any,
-            size: `${(newDoc.file.size / 1024 / 1024).toFixed(2)} MB`,
-            uploadDate: new Date(),
-            expiryDate: newDoc.expiryDate ? new Date(newDoc.expiryDate) : undefined,
-            url: '#', // Placeholder for Storage URL
-            description: newDoc.description
-        };
+        try {
+            if (formData.id) {
+                // --- UPDATE EXISTING ---
+                // We find the existing doc to preserve its other fields (like url, path, uploadDate)
+                const existingDoc = activeClient.documents.find(d => d.id === formData.id);
+                if(!existingDoc) throw new Error("Document not found");
 
-        addDocument(docEntry);
-        setIsUploadOpen(false);
-        setNewDoc({ file: null, type: 'CONTRACT', expiryDate: '', description: '' });
+                const updatedDoc: ClientDocument = {
+                    ...existingDoc,
+                    type: formData.type as any,
+                    description: formData.description,
+                    expiryDate: formData.expiryDate ? new Date(formData.expiryDate) : undefined,
+                };
+
+                updateDocument(updatedDoc);
+                toast("Document updated. Metadata saved locally.", "success");
+
+            } else {
+                // --- UPLOAD NEW ---
+                if (!formData.file) return;
+
+                const { path, url } = await ClientService.uploadFile(formData.file, activeClient.id);
+                
+                const docEntry: ClientDocument = {
+                    id: Math.random().toString(36).substr(2, 9),
+                    name: formData.file.name,
+                    type: formData.type as any,
+                    size: `${(formData.file.size / 1024 / 1024).toFixed(2)} MB`,
+                    uploadDate: new Date(),
+                    expiryDate: formData.expiryDate ? new Date(formData.expiryDate) : undefined,
+                    url: url,
+                    path: path,
+                    description: formData.description
+                };
+
+                addDocument(docEntry);
+                toast("Document uploaded successfully.", "success");
+            }
+
+            setIsDialogOpen(false);
+            resetForm();
+
+        } catch (error: any) {
+            toast(`Operation Failed: ${error.message}`, "error");
+        } finally {
+            setIsUploading(false);
+        }
     };
 
     const isExpiringSoon = (date?: Date) => {
@@ -68,39 +132,51 @@ export function ClientDocuments({ isEditing }: { isEditing: boolean }) {
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
             
-            {/* UPLOAD DIALOG */}
-            <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
+            {/* DOCUMENT DIALOG (Create & Edit) */}
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
-                            <UploadCloud className="h-5 w-5 text-blue-600" /> Upload Document
+                            <UploadCloud className="h-5 w-5 text-blue-600" /> 
+                            {formData.id ? 'Edit Document Details' : 'Upload Document'}
                         </DialogTitle>
                     </DialogHeader>
                     
                     <div className="grid gap-4 py-4">
-                        <div className="flex items-center justify-center w-full">
-                            <label htmlFor="dropzone-file" className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
-                                {newDoc.file ? (
-                                    <div className="flex flex-col items-center gap-2">
-                                        <FileText className="h-8 w-8 text-blue-500" />
-                                        <p className="text-sm text-slate-700 font-medium">{newDoc.file.name}</p>
-                                        <Button variant="link" size="sm" className="h-auto p-0 text-red-500" onClick={(e) => { e.preventDefault(); setNewDoc({...newDoc, file: null}) }}>Remove</Button>
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                        <UploadCloud className="w-8 h-8 mb-2 text-slate-400" />
-                                        <p className="text-sm text-slate-500"><span className="font-semibold">Click to upload</span> or drag and drop</p>
-                                        <p className="text-xs text-slate-500">PDF, JPG, PNG (MAX. 10MB)</p>
-                                    </div>
-                                )}
-                                <input id="dropzone-file" type="file" className="hidden" onChange={handleFileSelect} accept=".pdf,.jpg,.png,.jpeg" />
-                            </label>
-                        </div>
+                        {/* Dropzone only for new uploads */}
+                        {!formData.id && (
+                            <div className="flex items-center justify-center w-full">
+                                <label htmlFor="dropzone-file" className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
+                                    {formData.file ? (
+                                        <div className="flex flex-col items-center gap-2">
+                                            <FileText className="h-8 w-8 text-blue-500" />
+                                            <p className="text-sm text-slate-700 font-medium">{formData.file.name}</p>
+                                            <Button variant="link" size="sm" className="h-auto p-0 text-red-500" onClick={(e) => { e.preventDefault(); setFormData({...formData, file: null}) }}>Remove</Button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                            <UploadCloud className="w-8 h-8 mb-2 text-slate-400" />
+                                            <p className="text-sm text-slate-500"><span className="font-semibold">Click to upload</span> or drag and drop</p>
+                                            <p className="text-xs text-slate-500">PDF, JPG, PNG (MAX. 10MB)</p>
+                                        </div>
+                                    )}
+                                    <input id="dropzone-file" type="file" className="hidden" onChange={handleFileSelect} accept=".pdf,.jpg,.png,.jpeg" />
+                                </label>
+                            </div>
+                        )}
+                        
+                        {/* Read-only name for Edit Mode */}
+                        {formData.id && (
+                            <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-md border text-sm text-slate-600">
+                                <FileText className="h-4 w-4" />
+                                <span className="font-medium">File:</span> {formData.existingName}
+                            </div>
+                        )}
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label>Document Type</Label>
-                                <Select value={newDoc.type} onValueChange={(v) => setNewDoc({...newDoc, type: v})}>
+                                <Select value={formData.type} onValueChange={(v) => setFormData({...formData, type: v})}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="CONTRACT">Contract / Agreement</SelectItem>
@@ -113,7 +189,7 @@ export function ClientDocuments({ isEditing }: { isEditing: boolean }) {
                             </div>
                             <div className="space-y-2">
                                 <Label>Expiry Date (Optional)</Label>
-                                <Input type="date" value={newDoc.expiryDate} onChange={(e) => setNewDoc({...newDoc, expiryDate: e.target.value})} />
+                                <Input type="date" value={formData.expiryDate} onChange={(e) => setFormData({...formData, expiryDate: e.target.value})} />
                             </div>
                         </div>
 
@@ -122,15 +198,18 @@ export function ClientDocuments({ isEditing }: { isEditing: boolean }) {
                             <Textarea 
                                 placeholder="Brief description of the document..." 
                                 className="resize-none" 
-                                value={newDoc.description}
-                                onChange={(e) => setNewDoc({...newDoc, description: e.target.value})}
+                                value={formData.description}
+                                onChange={(e) => setFormData({...formData, description: e.target.value})}
                             />
                         </div>
                     </div>
 
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsUploadOpen(false)}>Cancel</Button>
-                        <Button onClick={handleSaveDocument} disabled={!newDoc.file}>Save Document</Button>
+                        <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleSave} disabled={(!formData.id && !formData.file) || isUploading}>
+                            {isUploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {formData.id ? 'Save Changes' : 'Upload & Save'}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -142,7 +221,7 @@ export function ClientDocuments({ isEditing }: { isEditing: boolean }) {
                         <CardTitle className="text-sm font-bold text-slate-700">Legal Archive</CardTitle>
                     </div>
                     {isEditing && (
-                        <Button size="sm" onClick={() => setIsUploadOpen(true)} className="bg-slate-900 text-white hover:bg-slate-800 shadow-sm">
+                        <Button size="sm" onClick={handleOpenUpload} className="bg-slate-900 text-white hover:bg-slate-800 shadow-sm">
                             <UploadCloud className="h-4 w-4 mr-2" /> Upload New
                         </Button>
                     )}
@@ -197,13 +276,18 @@ export function ClientDocuments({ isEditing }: { isEditing: boolean }) {
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-1">
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-600">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-600" onClick={() => window.open(doc.url, '_blank')}>
                                                     <Download className="h-4 w-4" />
                                                 </Button>
                                                 {isEditing && (
-                                                    <Button variant="ghost" size="icon" onClick={() => removeDocument(doc.id)} className="h-8 w-8 text-slate-400 hover:text-red-600">
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
+                                                    <>
+                                                        <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(doc)} className="h-8 w-8 text-slate-400 hover:text-amber-600">
+                                                            <Edit className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button variant="ghost" size="icon" onClick={() => removeDocument(doc.id)} className="h-8 w-8 text-slate-400 hover:text-red-600">
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </>
                                                 )}
                                             </div>
                                         </TableCell>

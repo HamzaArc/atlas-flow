@@ -184,6 +184,35 @@ export const ClientService = {
     },
 
     /**
+     * Upload a file to Supabase Storage
+     */
+    uploadFile: async (file: File, clientId: string): Promise<{ path: string, url: string }> => {
+        // Sanitize filename
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+        const filePath = `${clientId}/${fileName}`;
+
+        // Removed 'data' from destructuring since it was unused
+        const { error } = await supabase.storage
+            .from('client-docs')
+            .upload(filePath, file);
+
+        if (error) {
+            throw new Error(error.message);
+        }
+
+        // Get Public URL
+        const { data: { publicUrl } } = supabase.storage
+            .from('client-docs')
+            .getPublicUrl(filePath);
+
+        return {
+            path: filePath,
+            url: publicUrl
+        };
+    },
+
+    /**
      * Create an empty client template (Client-side only)
      */
     createEmpty: (): Client => ({

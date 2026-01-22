@@ -41,17 +41,18 @@ interface ClientState {
   removeContact: (contactId: string) => void;
   
   addRoute: (route: ClientRoute) => void;
-  updateRoute: (route: ClientRoute) => void; // Added
+  updateRoute: (route: ClientRoute) => void; 
   removeRoute: (routeId: string) => void;
   
   addDocument: (doc: ClientDocument) => void;
+  updateDocument: (doc: ClientDocument) => void;
   removeDocument: (docId: string) => void;
 
   addTag: (tag: string) => void;
   removeTag: (tag: string) => void;
   
   addSupplier: (supplier: ClientSupplier) => void;
-  updateSupplier: (supplier: ClientSupplier) => void; // Added
+  updateSupplier: (supplier: ClientSupplier) => void; 
   removeSupplier: (id: string) => void;
   
   addCommodity: (commodity: ClientCommodity) => void;
@@ -214,6 +215,13 @@ export const useClientStore = create<ClientState>((set, get) => ({
       activeClient: state.activeClient ? {
           ...state.activeClient,
           documents: [doc, ...state.activeClient.documents]
+      } : null
+  })),
+
+  updateDocument: (doc) => set(state => ({
+      activeClient: state.activeClient ? {
+          ...state.activeClient,
+          documents: state.activeClient.documents.map(d => d.id === doc.id ? doc : d)
       } : null
   })),
 
