@@ -33,6 +33,13 @@ const SUGGESTED_VENDORS = [
     { id: 'v7', name: 'DHL Global Forwarding' },
 ];
 
+const VAT_RATES: Record<string, number> = {
+    'STD_20': 0.20,
+    'ROAD_14': 0.14,
+    'EXPORT_0_ART92': 0,
+    'DISBURSEMENT': 0
+};
+
 // --- HELPERS ---
 const formatDateCompact = (dateVal?: Date | string) => {
     if (!dateVal) return "";
@@ -421,7 +428,63 @@ export function PricingTable() {
       const marginAmt = sellInMAD - costInMAD;
       const marginPct = sellInMAD > 0 ? (marginAmt / sellInMAD) * 100 : 0;
 
-      return { finalVal: finalSell.toFixed(2), marginPct };
+      // Calculate TTC
+      const vatRate = VAT_RATES[item.vatRule] || 0;
+      const finalSellTTC = finalSell * (1 + vatRate);
+
+      return { finalVal: finalSell.toFixed(2), finalValTTC: finalSellTTC.toFixed(2), marginPct };
+  };
+
+  // --- EDIT HANDLERS ---
+  const handleCostChange = (item: QuoteLineItem, newCost: number) => {
+      const calc = calculateSellDetails(item);
+      const currentSellHT = parseFloat(calc.finalVal);
+
+      // Rule: If Sell Price exists (>0), "Lock" Sell Price and update Markup
+      // Otherwise (fresh line), keep Markup and update Sell Price.
+      if (currentSellHT > 0) {
+          // Calculate Target Markup to maintain Sell Price
+          // SellHT = Cost * (1 + M%) 
+          // M% = (SellHT / Cost) - 1
+          
+          // Need to handle currency conversion for accurate markup
+          const buyRate = exchangeRates[item.buyCurrency] || 1;
+          const targetRate = exchangeRates[quoteCurrency] || 1;
+          
+          const newCostInBase = newCost * buyRate;
+          const sellInBase = currentSellHT * targetRate;
+          
+          let newMarkup = 0;
+          if (newCostInBase > 0) {
+             newMarkup = ((sellInBase / newCostInBase) - 1) * 100;
+          }
+          
+          updateLineItem(item.id, { buyPrice: newCost, markupValue: newMarkup, markupType: 'PERCENT' });
+      } else {
+          updateLineItem(item.id, { buyPrice: newCost });
+      }
+  };
+
+  const handleSellPriceChange = (item: QuoteLineItem, newSellTTC: number) => {
+      const vatRate = VAT_RATES[item.vatRule] || 0;
+      const targetSellHT = newSellTTC / (1 + vatRate);
+      
+      // We need to reverse calculate Cost (Buy Price) to hit this Sell Target
+      // Keeping Markup Constant.
+      // SellHT = Cost * (1 + Markup)
+      // Cost = SellHT / (1 + Markup)
+      
+      const markupFactor = 1 + (item.markupValue / 100); // Assuming Percent
+      
+      // Handle Currency: Cost is in BuyCurrency, Sell is in QuoteCurrency
+      const buyRate = exchangeRates[item.buyCurrency] || 1;
+      const targetRate = exchangeRates[quoteCurrency] || 1;
+      
+      const targetSellBase = targetSellHT * targetRate;
+      const targetCostBase = targetSellBase / markupFactor;
+      const targetCostBuyCurr = targetCostBase / buyRate;
+      
+      updateLineItem(item.id, { buyPrice: targetCostBuyCurr });
   };
 
   const handleRunSmartInit = () => {
@@ -553,7 +616,7 @@ export function PricingTable() {
                             isMissingRequired && "border-red-300 bg-white"
                         )}
                         value={item.buyPrice}
-                        onChange={(e) => updateLineItem(item.id, { buyPrice: parseFloat(e.target.value) || 0 })}
+                        onChange={(e) => handleCostChange(item, parseFloat(e.target.value) || 0)}
                     />
                     {isMissingRequired && <AlertCircle className="absolute right-1 top-1.5 h-4 w-4 text-red-400 opacity-50 pointer-events-none"/>}
                 </div>
@@ -610,8 +673,43 @@ export function PricingTable() {
 
             {/* 8. SELL */}
             <TableCell className="w-[10%] py-0.5 text-right pr-4">
-                 <div className="font-mono font-bold text-slate-800 text-sm flex items-center justify-end gap-1 h-7">
-                    {calc.finalVal}
+                 <div className="flex items-center justify-end gap-1 h-7">
+                    <Input 
+                        disabled={isReadOnly}
+                        type="number"
+                        className={cn(
+                            "h-7 border-transparent bg-transparent hover:bg-slate-50 focus:bg-white focus:border-blue-300 text-right font-bold font-mono text-xs shadow-none px-2 rounded-sm text-slate-800",
+                            item.buyCurrency !== quoteCurrency && "text-blue-700"
+                        )}
+                        value={calc.finalVal}
+                        // Note: User sees Sell HT (Or TTC? Prompt said "commercial offer" which usually is HT + VAT displayed elsewhere, but here the previous code displayed finalVal which was HT. 
+                        // However, standard Quick Quote builders often show the *Client Facing* amount.
+                        // Let's stick to modifying the value displayed previously: finalVal (HT). 
+                        // If user meant TTC, they would have said "Total".
+                        // Wait, previous code showed finalVal. I will make THAT editable.
+                        // If the user meant TTC, I would need to reverse VAT.
+                        // "Sell Price field... calculated from buys mark up and vat rule"
+                        // VAT rule usually applies ON TOP of Sell Price.
+                        // So I will assume this input is SELL HT (Net).
+                        // If they edit this, I reverse calculate Cost.
+                        // But wait, the previous code displayed `calc.finalVal` which is HT. 
+                        // The user said "calculated from ... vat rule". 
+                        // This implies the field might BE the TTC one?
+                        // Let's look at `calculateSellDetails`. 
+                        // `finalSell` (HT) is calculated. 
+                        // `finalSellTTC` is usually HT * (1+VAT).
+                        // Previous code: displayed `calc.finalVal`.
+                        // I will assume editable HT for safety, as VAT is added later. 
+                        // Update: Actually, looking at the previous table columns: "Sell Price (TTC)" was the header in `QuickQuoteBuilder` but here in `PricingTable` header is "Sell".
+                        // In `PricingTable` header: `<TableHead ...>Sell</TableHead>`. 
+                        // I will treat it as Sell (HT/Net) because that is what `finalVal` represents.
+                        
+                        onChange={(e) => handleSellPriceChange(item, parseFloat(e.target.value) * (1 + (VAT_RATES[item.vatRule] || 0)))} // Pass TTC to handler? Or just handle HT?
+                        // My handler `handleSellPriceChange` expects TTC. Let's fix that to expect HT for simplicity if we are editing HT.
+                        // RE-READ HANDLER: `const targetSellHT = newSellTTC / (1 + vatRate);`
+                        // If I pass HT directly, I can skip the TTC conversion.
+                        // Let's modify the handler call to pass TTC: (Value * (1+VAT))
+                    />
                     {item.buyCurrency !== quoteCurrency && <RefreshCw className="h-2.5 w-2.5 text-blue-300" />}
                  </div>
             </TableCell>

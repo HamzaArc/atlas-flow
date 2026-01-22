@@ -6,7 +6,8 @@ import {
   Box,  
   Plus, Trash2, Clock, Anchor,
   Mail, FileOutput, Zap, DollarSign, X, AlertCircle,
-  Loader2, AlertTriangle, Globe, MessageCircle, Copy, FileInput
+  Loader2, AlertTriangle, Globe, MessageCircle, Copy, FileInput,
+  History, Send, Bell, RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,8 @@ import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SmartPortSelector } from "./RouteSelector";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { useClientStore } from "@/store/useClientStore"; 
@@ -30,8 +33,10 @@ import { format } from "date-fns";
 import { WhatsAppOfferDialog, QuoteOfferData } from "./WhatsAppOfferDialog";
 
 // -----------------------------------------------------------------------------
-// HELPER: VAT RATES
+// HELPER: UTILS & CONSTANTS
 // -----------------------------------------------------------------------------
+const round2 = (num: number) => Math.round((num + Number.EPSILON) * 100) / 100;
+
 const VAT_RATES: Record<string, number> = {
   'STD_20': 0.20,
   'ROAD_14': 0.14,
@@ -297,7 +302,9 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
     items, addLineItem, updateLineItem, removeLineItem, initializeSmartLines,
     quoteCurrency, internalNotes,
     // Dynamic Exchange Rates
-    exchangeRates
+    exchangeRates,
+    // Activity
+    activities, addActivity
   } = useQuoteStore();
 
   const { clients, fetchClients } = useClientStore();
@@ -308,6 +315,10 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
   const [rfqText, setRfqText] = useState("");
   const [isRfqOpen, setIsRfqOpen] = useState(false);
   const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(false);
+  
+  // Audit Log State
+  const [auditNote, setAuditNote] = useState("");
+  const bottomRef = useRef<HTMLDivElement>(null);
   
   // Local Derived Totals State
   const [localTotals, setLocalTotals] = useState({
@@ -323,6 +334,12 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
     if (clients.length === 0) fetchClients();
     fetchRates(); 
   }, []);
+
+  useEffect(() => {
+     if (bottomRef.current) {
+         bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+     }
+  }, [activities]);
 
   // Update totals whenever items change or Exchange Rates change
   useEffect(() => {
@@ -351,11 +368,23 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
         totalVat += lineVat;
     });
     
+    // ROUNDING
+    totalBuy = round2(totalBuy);
+    totalSell = round2(totalSell);
+    totalVat = round2(totalVat);
+
     const margin = totalSell - totalBuy;
     const marginPercent = totalSell > 0 ? (margin / totalSell) * 100 : 0;
     const grandTotal = totalSell + totalVat;
 
-    setLocalTotals({ totalBuy, totalSell, totalVat, grandTotal, margin, marginPercent });
+    setLocalTotals({ 
+        totalBuy, 
+        totalSell, 
+        totalVat, 
+        grandTotal: round2(grandTotal), 
+        margin: round2(margin), 
+        marginPercent: round2(marginPercent) 
+    });
   }, [items, exchangeRates]);
 
   // -- LOGIC HELPERS --
@@ -389,6 +418,83 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
           buyCurrency: 'MAD' // Default Currency
       });
   };
+
+  const handleSendNote = () => {
+      if (!auditNote.trim()) return;
+      addActivity(auditNote, "NOTE", "neutral");
+      setAuditNote("");
+  };
+
+  // --- SMART PRICING HANDLERS ---
+
+  // 1. EDIT SELL PRICE -> Recalculate COST (Reverse Calc)
+  const handleSellPriceChange = (id: string, newSellTTC: number) => {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+
+    // Rates
+    const buyRate = exchangeRates?.[item.buyCurrency || 'MAD'] || 1;
+    const quoteRate = exchangeRates?.[quoteCurrency || 'MAD'] || 1;
+    
+    const vatRate = VAT_RATES[item.vatRule] || 0;
+    const markupFactor = 1 + (item.markupValue || 0) / 100;
+
+    // A. Strip VAT to get Target Sell HT (in Quote Currency)
+    const newSellHT_Quote = newSellTTC / (1 + vatRate);
+
+    // B. Convert Target Sell to Base Currency (MAD)
+    const newSellHT_Base = newSellHT_Quote * quoteRate;
+
+    // C. Remove Markup to get Target Cost (Base)
+    // SellBase = CostBase * MarkupFactor
+    // CostBase = SellBase / MarkupFactor
+    if (markupFactor === 0) return; // Prevent division by zero
+    const newCost_Base = newSellHT_Base / markupFactor;
+
+    // D. Convert Cost Base -> Cost BuyCurrency
+    if (buyRate === 0) return;
+    const newBuyPrice = newCost_Base / buyRate;
+
+    updateLineItem(id, { buyPrice: round2(newBuyPrice) });
+  };
+
+  // 2. EDIT COST -> Recalculate MARKUP (Price Maintenance)
+  const handleCostChange = (id: string, newBuyPrice: number) => {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+
+    // Rates
+    const buyRate = exchangeRates?.[item.buyCurrency || 'MAD'] || 1;
+    
+    // A. Calculate CURRENT Sell HT (in Quote Currency) before the change
+    // We want to LOCK this value.
+    const currentBuyInBase = (item.buyPrice || 0) * buyRate;
+    const currentMarkupFactor = 1 + (item.markupValue || 0) / 100;
+    const currentSellBase = currentBuyInBase * currentMarkupFactor;
+
+    // B. Calculate NEW Cost in Base
+    const newBuyInBase = newBuyPrice * buyRate;
+
+    // C. Calculate REQUIRED Markup to hit the SAME Sell Price
+    // CurrentSellBase = NewBuyInBase * (1 + NewMarkup)
+    // (1 + NewMarkup) = CurrentSellBase / NewBuyInBase
+    // NewMarkup = (CurrentSellBase / NewBuyInBase) - 1
+
+    if (newBuyInBase <= 0.01) {
+         // Fallback if cost is zero/negative: just update price, standard logic will yield 0 sell
+         updateLineItem(id, { buyPrice: round2(newBuyPrice) });
+         return;
+    }
+
+    const newMarkupPercent = ((currentSellBase / newBuyInBase) - 1) * 100;
+
+    updateLineItem(id, { 
+        buyPrice: round2(newBuyPrice), 
+        markupValue: round2(newMarkupPercent),
+        markupType: 'PERCENT' 
+    });
+  };
+
 
   // Agent RFQ Generator (Buying Side)
   const generateAgentRFQ = () => {
@@ -714,7 +820,7 @@ Best regards,`;
                             <div className="relative">
                                 <Input 
                                     type="number" className="h-9 pl-9 bg-slate-50" 
-                                    value={transitTime}
+                                    value={transitTime === 0 ? '' : transitTime}
                                     onChange={(e) => setLogisticsParam('transitTime', parseInt(e.target.value) || 0)}
                                 />
                                 <Clock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -727,7 +833,7 @@ Best regards,`;
                                 <div className="relative">
                                     <Input 
                                         type="number" className="h-9 pl-9 bg-slate-50" 
-                                        value={freeTime}
+                                        value={freeTime === 0 ? '' : freeTime}
                                         onChange={(e) => setLogisticsParam('freeTime', parseInt(e.target.value) || 0)}
                                     />
                                     <Anchor className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -787,10 +893,19 @@ Best regards,`;
                               // Calculations for display - uses same logic as useEffect
                               // Dynamically retrieve rate from store
                               const rate = exchangeRates?.[item.buyCurrency || 'MAD'] || 1;
+                              const quoteRate = exchangeRates?.[quoteCurrency || 'MAD'] || 1;
+                              
                               const buyInBase = (item.buyPrice || 0) * rate;
                               const vatRate = VAT_RATES[item.vatRule] || 0;
-                              const sellExVat = buyInBase * (1 + (item.markupValue || 0) / 100);
-                              const totalIncVat = sellExVat * (1 + vatRate);
+                              const sellExVatBase = buyInBase * (1 + (item.markupValue || 0) / 100);
+                              
+                              // Convert to Quote Currency for Display
+                              const sellExVatQuote = quoteRate > 0 ? sellExVatBase / quoteRate : 0;
+                              const totalIncVatQuote = sellExVatQuote * (1 + vatRate);
+                              
+                              // Prepare Sell Price Value for Input
+                              // Ensure it handles 0 -> '' to prevent leading zeros
+                              const displaySellPrice = round2(totalIncVatQuote);
                               
                               return (
                               <div key={item.id} className="bg-white p-3 hover:bg-slate-50 group transition-colors grid grid-cols-12 gap-3 items-center">
@@ -814,7 +929,7 @@ Best regards,`;
                                       </Button>
                                   </div>
                                   
-                                  {/* Currency Column (Restored, GBP removed) */}
+                                  {/* Currency Column */}
                                   <div className="col-span-2">
                                       <Select 
                                         value={item.buyCurrency || 'MAD'} 
@@ -831,13 +946,13 @@ Best regards,`;
                                       </Select>
                                   </div>
 
-                                  {/* Buy Price (Cost) */}
+                                  {/* Buy Price (Cost) - EDITED to use handleCostChange */}
                                   <div className="col-span-2 relative">
                                       <Input 
                                         type="number"
-                                        value={item.buyPrice}
-                                        onChange={(e) => handleLineItemUpdate(item.id, { buyPrice: parseFloat(e.target.value) || 0 })}
-                                        className="h-7 text-xs pl-3 bg-slate-50 border-slate-200 text-slate-600" 
+                                        value={item.buyPrice === 0 ? '' : item.buyPrice}
+                                        onChange={(e) => handleCostChange(item.id, parseFloat(e.target.value) || 0)}
+                                        className="h-7 text-xs pl-3 bg-slate-50 border-slate-200 text-slate-600 focus:border-blue-300" 
                                       />
                                   </div>
 
@@ -845,7 +960,7 @@ Best regards,`;
                                   <div className="col-span-1 relative">
                                       <Input 
                                         type="number"
-                                        value={item.markupValue}
+                                        value={item.markupValue === 0 ? '' : item.markupValue}
                                         onChange={(e) => handleLineItemUpdate(item.id, { markupValue: parseFloat(e.target.value) || 0 })}
                                         className="h-7 text-xs pl-1 font-medium text-emerald-600 bg-emerald-50/30 border-emerald-100" 
                                       />
@@ -869,10 +984,21 @@ Best regards,`;
                                         </Select>
                                   </div>
 
-                                  {/* Sell Price (Auto-Calculated) - LAST COLUMN */}
+                                  {/* Sell Price (TTC) - EDITABLE */}
                                   <div className="col-span-2">
-                                      <div className="h-7 flex items-center justify-end px-3 bg-indigo-50/50 border border-indigo-100 rounded-md text-xs font-bold text-indigo-700">
-                                          {totalIncVat.toFixed(2)}
+                                      <div className="relative">
+                                          <Input 
+                                            type="number"
+                                            // Rounding for display to avoid ugly float decimals (e.g. 120.000004)
+                                            value={displaySellPrice === 0 ? '' : displaySellPrice} 
+                                            onChange={(e) => handleSellPriceChange(item.id, parseFloat(e.target.value) || 0)}
+                                            className="h-7 text-xs font-bold text-indigo-700 bg-indigo-50/50 border-indigo-100 focus:border-indigo-300 text-right pr-2"
+                                          />
+                                          {item.buyCurrency !== quoteCurrency && (
+                                              <div className="absolute left-1 top-1.5 pointer-events-none">
+                                                  <RefreshCw className="h-3 w-3 text-indigo-300" />
+                                              </div>
+                                          )}
                                       </div>
                                   </div>
                               </div>
@@ -1105,6 +1231,89 @@ Best regards,`;
                             </div>
                         </div>
                     )}
+                </div>
+              </section>
+          </div>
+
+          {/* ================= BOTTOM: AUDIT LOG (Full Width) ================= */}
+          <div className="xl:col-span-12 space-y-6">
+              <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-full flex flex-col">
+                <div className="bg-slate-50/50 px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+                    <h2 className="text-sm font-bold text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                        <History className="h-4 w-4 text-purple-500" /> Audit Log & Activity
+                    </h2>
+                    <Badge variant="outline" className="bg-white text-purple-600 border-purple-200 font-mono">
+                         {activities.length} Entries
+                    </Badge>
+                </div>
+
+                <div className="flex-1 min-h-[300px] flex flex-col">
+                    <ScrollArea className="flex-1 p-6 h-[300px]">
+                        <div className="space-y-6">
+                            {activities.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-2">
+                                    <Bell className="h-8 w-8 opacity-20" />
+                                    <span className="text-xs font-medium">No activity recorded yet. Start working on the quote to see logs.</span>
+                                </div>
+                            ) : (
+                                activities.map((item) => (
+                                    <div key={item.id} className="flex gap-4 group animate-in slide-in-from-left-2 fade-in duration-300">
+                                        <div className="flex flex-col items-center">
+                                            <Avatar className="h-8 w-8 border-2 border-white shadow-sm ring-1 ring-slate-100">
+                                                <AvatarImage src={`https://ui-avatars.com/api/?name=${item.meta}&background=random`} />
+                                                <AvatarFallback className="text-[10px] bg-slate-100 text-slate-500">{item.meta.substring(0,2)}</AvatarFallback>
+                                            </Avatar>
+                                            <div className="w-px h-full bg-slate-200 my-2 group-last:hidden" />
+                                        </div>
+                                        <div className="flex-1 pb-2">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-xs font-bold text-slate-700">{item.meta}</span>
+                                                <span className="text-[10px] text-slate-400 font-mono">{new Date(item.timestamp).toLocaleString()}</span>
+                                            </div>
+                                            <div className={cn(
+                                                "text-xs p-3 rounded-lg border leading-relaxed",
+                                                item.category === 'NOTE' ? "bg-white border-slate-200 text-slate-700 shadow-sm" :
+                                                item.tone === 'destructive' ? "bg-red-50 border-red-100 text-red-700" :
+                                                item.tone === 'warning' ? "bg-amber-50 border-amber-100 text-amber-700" :
+                                                item.tone === 'success' ? "bg-emerald-50 border-emerald-100 text-emerald-700" :
+                                                "bg-slate-50 border-slate-100 text-slate-500 italic"
+                                            )}>
+                                                {item.text}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                            <div ref={bottomRef} />
+                        </div>
+                    </ScrollArea>
+
+                    <div className="p-4 bg-slate-50 border-t border-slate-100 shrink-0">
+                        <div className="relative flex gap-3 items-center max-w-4xl mx-auto">
+                             <Avatar className="h-8 w-8 shrink-0">
+                                <AvatarImage src="https://ui-avatars.com/api/?name=You&background=0f172a&color=fff" />
+                                <AvatarFallback>ME</AvatarFallback>
+                             </Avatar>
+                             <div className="relative flex-1">
+                                <Input 
+                                    className="h-10 pr-12 text-xs shadow-sm border-slate-200 focus:border-purple-400 focus:ring-purple-100" 
+                                    placeholder="Type a note or mention a colleague..." 
+                                    value={auditNote}
+                                    onChange={(e) => setAuditNote(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleSendNote()}
+                                />
+                                <Button 
+                                    size="icon" 
+                                    variant="ghost" 
+                                    className="absolute right-1 top-1 h-8 w-8 text-purple-600 hover:bg-purple-50"
+                                    onClick={handleSendNote}
+                                    disabled={!auditNote.trim()}
+                                >
+                                    <Send className="h-4 w-4" />
+                                </Button>
+                             </div>
+                        </div>
+                    </div>
                 </div>
               </section>
           </div>
