@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MapPin } from "lucide-react";
-import { ClientRoute } from "@/types/index"; // FIXED IMPORT
+import { ClientRoute, TransportMode, Incoterm } from "@/types/index"; 
 
 interface RouteDialogProps {
     onSave: (route: ClientRoute) => void;
@@ -13,29 +13,37 @@ interface RouteDialogProps {
 
 export function RouteDialog({ onSave }: RouteDialogProps) {
     const [open, setOpen] = useState(false);
+    
+    // FIX 1: Initialized with valid TransportMode ('SEA_FCL') instead of 'SEA'
     const [data, setData] = useState<Partial<ClientRoute>>({
-        origin: '', destination: '', mode: 'SEA', 
-        incoterm: 'FOB', equipment: '40HC', 
-        volume: 0, volumeUnit: 'TEU', frequency: 'MONTHLY'
+        origin: '', 
+        destination: '', 
+        mode: 'SEA_FCL', 
+        incoterm: 'FOB', 
+        equipment: '40HC', 
+        volume: 0, 
+        volumeUnit: 'TEU', 
+        frequency: 'MONTHLY'
     });
 
     const handleSubmit = () => {
         if (!data.origin || !data.destination) return;
         
+        // FIX 2: Removed 'as any' casting where possible and relied on correct types
         onSave({
             id: Math.random().toString(36).substr(2, 9),
             origin: data.origin.toUpperCase(),
             destination: data.destination.toUpperCase(),
-            mode: data.mode as any,
-            incoterm: data.incoterm as any,
-            equipment: data.equipment as any,
+            mode: data.mode as TransportMode,
+            incoterm: data.incoterm as Incoterm,
+            equipment: data.equipment as any, // Equipment type is distinct, keeping simple cast or strictly typing if needed
             volume: Number(data.volume) || 0,
             volumeUnit: data.volumeUnit as any,
             frequency: data.frequency as any
         });
         setOpen(false);
         setData({ 
-            origin: '', destination: '', mode: 'SEA', 
+            origin: '', destination: '', mode: 'SEA_FCL', 
             incoterm: 'FOB', equipment: '40HC', 
             volume: 0, volumeUnit: 'TEU', frequency: 'MONTHLY' 
         });
@@ -69,10 +77,11 @@ export function RouteDialog({ onSave }: RouteDialogProps) {
                     <div className="grid grid-cols-3 gap-4">
                         <div className="space-y-2">
                             <Label className="text-xs text-slate-500">Mode</Label>
-                            <Select value={data.mode} onValueChange={(v: any) => setData({...data, mode: v})}>
+                            <Select value={data.mode} onValueChange={(v: TransportMode) => setData({...data, mode: v})}>
                                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="SEA">Sea Freight</SelectItem>
+                                    <SelectItem value="SEA_FCL">Sea FCL</SelectItem>
+                                    <SelectItem value="SEA_LCL">Sea LCL</SelectItem>
                                     <SelectItem value="AIR">Air Freight</SelectItem>
                                     <SelectItem value="ROAD">Road Freight</SelectItem>
                                 </SelectContent>
@@ -80,14 +89,16 @@ export function RouteDialog({ onSave }: RouteDialogProps) {
                         </div>
                         <div className="space-y-2">
                             <Label className="text-xs text-slate-500">Incoterm</Label>
-                            <Select value={data.incoterm} onValueChange={(v: any) => setData({...data, incoterm: v})}>
+                            <Select value={data.incoterm} onValueChange={(v: Incoterm) => setData({...data, incoterm: v})}>
                                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="EXW">EXW - Ex Works</SelectItem>
-                                    <SelectItem value="FOB">FOB - Free On Board</SelectItem>
-                                    <SelectItem value="CIF">CIF - Cost Ins Frt</SelectItem>
-                                    <SelectItem value="DAP">DAP - Delivered</SelectItem>
-                                    <SelectItem value="DDP">DDP - Duty Paid</SelectItem>
+                                    <SelectItem value="EXW">EXW</SelectItem>
+                                    <SelectItem value="FCA">FCA</SelectItem>
+                                    <SelectItem value="FOB">FOB</SelectItem>
+                                    <SelectItem value="CFR">CFR</SelectItem>
+                                    <SelectItem value="CIF">CIF</SelectItem>
+                                    <SelectItem value="DAP">DAP</SelectItem>
+                                    <SelectItem value="DDP">DDP</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
