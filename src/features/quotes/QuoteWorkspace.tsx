@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { 
   Ship, Plane, Truck, Copy, Trash2, 
-  Plus, MoreHorizontal, FileOutput, 
+  Plus, MoreHorizontal, 
   ArrowRightLeft, Container
 } from "lucide-react";
 
@@ -186,9 +186,7 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
 
           {/* RIGHT ACTIONS */}
           <div className="flex items-center gap-2">
-             <Button onClick={handleGeneratePDF} size="sm" className="h-8 text-xs bg-slate-800 text-white hover:bg-slate-900 shadow-sm">
-                <FileOutput className="h-3.5 w-3.5 mr-2" /> Preview PDF
-             </Button>
+             {/* PDF Button removed as requested */}
           </div>
       </div>
 

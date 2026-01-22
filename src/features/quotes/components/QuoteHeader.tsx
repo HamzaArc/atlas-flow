@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/command";
 import { 
     Save, ArrowLeft, Copy, Coins, Settings2, 
-    User, Clock, Check, GitBranch, MessageSquare, ChevronsUpDown
+    User, Clock, Check, GitBranch, ChevronsUpDown
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { useClientStore } from "@/store/useClientStore"; 
@@ -22,8 +22,7 @@ import { useUserStore } from "@/store/useUserStore";
 import { Currency } from "@/types/index";
 import { cn } from "@/lib/utils";
 import { ApprovalAction } from "./ApprovalAction";
-// Removed unused useToast import
-import { WhatsAppOfferDialog, QuoteOfferData } from "./WhatsAppOfferDialog"; 
+import { useToast } from "@/components/ui/use-toast";
 
 interface QuoteHeaderProps {
     onBack: () => void;
@@ -46,19 +45,16 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
     quoteCurrency, exchangeRates, paymentTerms,
     setIdentity, setClientSnapshot, setStatus, saveQuote, duplicateQuote, createRevision,
     setQuoteCurrency, setExchangeRate,
-    totalTTCTarget, mode, pol, pod,
-    // Extract additional fields for WhatsApp Message
-    goodsDescription, equipmentList, totalPackages, chargeableWeight, transitTime
   } = useQuoteStore();
 
   // Client Store Integration
   const { clients, fetchClients } = useClientStore();
   // User Store Integration
   const { users, fetchUsers } = useUserStore();
+  const { toast } = useToast();
   
   // Local State
   const [openClient, setOpenClient] = useState(false);
-  const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(false);
 
   // Initialize Data
   useEffect(() => {
@@ -108,6 +104,18 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
     setOpenClient(false);
   };
 
+  const handleSave = async () => {
+    await saveQuote();
+    // FIXED: Use simplified toast signature (string, string)
+    toast("Quote Saved: Your changes have been saved successfully.", "success");
+  };
+
+  const handleRevision = async () => {
+      if (confirm(`Create a new version (v${version + 1}) for negotiation? This will duplicate the current quote as a Draft.`)) {
+          await createRevision();
+      }
+  };
+
   // --- COMPONENT: WORKFLOW STEPPER ---
   const StatusStepper = () => (
       <div className="flex items-center mr-6 bg-slate-50 rounded-lg p-1 border border-slate-200">
@@ -142,30 +150,6 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
       if (!dateVal) return '';
       if (typeof dateVal === 'string') return dateVal.split('T')[0];
       return dateVal.toISOString().split('T')[0];
-  };
-
-  // --- PREPARE DATA FOR WHATSAPP ---
-  const isFCL = mode === 'SEA_FCL' || mode === 'ROAD'; 
-  
-  const whatsAppData: QuoteOfferData = {
-      reference,
-      pol: pol || 'POL',
-      pod: pod || 'POD',
-      mode: mode || 'SEA_FCL',
-      commodity: goodsDescription || 'General Cargo',
-      equipment: isFCL && equipmentList
-        ? equipmentList.map(e => `${e.count}x ${e.type}`).join(', ') 
-        : `${totalPackages || 0} Pkgs / ${chargeableWeight || 0}kg`,
-      totalPrice: totalTTCTarget,
-      currency: quoteCurrency,
-      validityDate: validityDate || new Date(),
-      transitTime: transitTime || 0
-  };
-
-  const handleRevision = async () => {
-      if (confirm(`Create a new version (v${version + 1}) for negotiation? This will duplicate the current quote as a Draft.`)) {
-          await createRevision();
-      }
   };
 
   return (
@@ -251,16 +235,6 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
            {/* Action Buttons */}
            <div className="flex gap-2 items-center">
                
-               <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => setIsWhatsAppOpen(true)} 
-                    className="h-8 text-xs border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
-                    title="Open in WhatsApp"
-               >
-                   <MessageSquare className="h-3.5 w-3.5 mr-2" /> WhatsApp
-               </Button>
-
                <Button variant="outline" size="sm" onClick={duplicateQuote} className="h-8 text-xs border-slate-200 text-slate-600">
                    <Copy className="h-3.5 w-3.5 mr-2" /> Copy
                </Button>
@@ -274,7 +248,7 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                {!isLocked && (
                    <>
                     <ApprovalAction />
-                    <Button size="sm" onClick={saveQuote} className="h-8 bg-slate-900 hover:bg-slate-800 text-xs px-4 ml-2">
+                    <Button size="sm" onClick={handleSave} className="h-8 bg-slate-900 hover:bg-slate-800 text-xs px-4 ml-2">
                         <Save className="h-3.5 w-3.5 mr-2" /> Save
                     </Button>
                    </>
@@ -410,13 +384,6 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
               </div>
           </div>
       </div>
-
-      {/* 3. MODALS */}
-      <WhatsAppOfferDialog 
-        open={isWhatsAppOpen} 
-        onOpenChange={setIsWhatsAppOpen} 
-        data={whatsAppData} 
-      />
     </div>
   );
 }

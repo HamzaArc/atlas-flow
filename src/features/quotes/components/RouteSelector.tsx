@@ -371,12 +371,14 @@ export const SmartPortSelector = ({
   value, 
   onChange, 
   label, 
-  icon: Icon 
+  icon: Icon,
+  disabled 
 }: { 
   value: string; 
   onChange: (val: string) => void; 
   label: string;
   icon: any;
+  disabled?: boolean;
 }) => {
   const [open, setOpen] = useState(false);
   const selectedPort = PORT_DB.find(p => p.id === value);
@@ -390,6 +392,7 @@ export const SmartPortSelector = ({
             variant="outline"
             role="combobox"
             aria-expanded={open}
+            disabled={disabled}
             className="w-full justify-between h-9 text-xs font-bold border-slate-200 bg-white hover:bg-slate-50 shadow-sm transition-all"
           >
             <div className="flex items-center gap-2 truncate">
@@ -665,12 +668,14 @@ export function RouteSelector() {
                         value={pol}
                         onChange={(val) => setRouteLocations('pol', val)}
                         icon={MapPin}
+                        disabled={isReadOnly}
                       />
                       <SmartPortSelector 
                         label={isAir ? "Airport of Destination" : "Port of Discharge"}
                         value={pod}
                         onChange={(val) => setRouteLocations('pod', val)}
                         icon={Anchor}
+                        disabled={isReadOnly}
                       />
                   </div>
 

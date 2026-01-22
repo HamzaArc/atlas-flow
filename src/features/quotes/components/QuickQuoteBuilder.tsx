@@ -238,9 +238,9 @@ const AddressWithMap = ({
 // -----------------------------------------------------------------------------
 
 const ModeButton = ({ 
-  mode, current, onClick 
+  mode, current, onClick, disabled
 }: { 
-  mode: TransportMode, current: TransportMode, onClick: () => void 
+  mode: TransportMode, current: TransportMode, onClick: () => void, disabled?: boolean
 }) => {
   const icons = {
     'SEA_FCL': <Container className="h-5 w-5" />,
@@ -259,9 +259,10 @@ const ModeButton = ({
 
   return (
     <div 
-      onClick={onClick}
+      onClick={() => !disabled && onClick()}
       className={cn(
-        "cursor-pointer flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all duration-200 h-24",
+        "flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all duration-200 h-24",
+        disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
         isActive 
           ? "border-indigo-600 bg-indigo-50/50 shadow-sm ring-1 ring-indigo-100" 
           : "border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50"
@@ -288,7 +289,7 @@ interface QuickQuoteBuilderProps {
 export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
   const { 
     // Identity
-    reference, clientName, setClientSnapshot,
+    reference, clientName, setClientSnapshot, status,
     // Route
     pol, pod, mode, incoterm, setMode, setIncoterm, setRouteLocations,
     placeOfLoading, placeOfDelivery, 
@@ -319,6 +320,9 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
   // Audit Log State
   const [auditNote, setAuditNote] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Locking Logic
+  const isLocked = ['SENT', 'ACCEPTED', 'REJECTED'].includes(status || 'DRAFT');
   
   // Local Derived Totals State
   const [localTotals, setLocalTotals] = useState({
@@ -355,9 +359,10 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
         // 2. Convert Cost to Base Currency (MAD)
         const buyInBase = (item.buyPrice || 0) * rate;
 
-        // 3. Apply Markup
-        const markup = item.markupValue || 0;
-        const sellExVat = buyInBase * (1 + markup / 100);
+        // 3. Sell Price
+        // REFACTOR: Use stored Sell Price (HT Base) if available.
+        // If stored sellPrice is 0, we treat it as 0.
+        const sellExVat = item.sellPrice || 0;
         
         // 4. Calculate VAT
         const vatRate = VAT_RATES[item.vatRule] || 0;
@@ -427,17 +432,16 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
 
   // --- SMART PRICING HANDLERS ---
 
-  // 1. EDIT SELL PRICE -> Recalculate COST (Reverse Calc)
+  // 1. EDIT SELL PRICE
+  // CONSTRAINT: Manual entry. Never recalculate markup.
+  // "calculate only sell price if empty or nul" -> This is a manual override, so we strictly set it.
   const handleSellPriceChange = (id: string, newSellTTC: number) => {
     const item = items.find(i => i.id === id);
     if (!item) return;
 
     // Rates
-    const buyRate = exchangeRates?.[item.buyCurrency || 'MAD'] || 1;
     const quoteRate = exchangeRates?.[quoteCurrency || 'MAD'] || 1;
-    
     const vatRate = VAT_RATES[item.vatRule] || 0;
-    const markupFactor = 1 + (item.markupValue || 0) / 100;
 
     // A. Strip VAT to get Target Sell HT (in Quote Currency)
     const newSellHT_Quote = newSellTTC / (1 + vatRate);
@@ -445,20 +449,14 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
     // B. Convert Target Sell to Base Currency (MAD)
     const newSellHT_Base = newSellHT_Quote * quoteRate;
 
-    // C. Remove Markup to get Target Cost (Base)
-    // SellBase = CostBase * MarkupFactor
-    // CostBase = SellBase / MarkupFactor
-    if (markupFactor === 0) return; // Prevent division by zero
-    const newCost_Base = newSellHT_Base / markupFactor;
-
-    // D. Convert Cost Base -> Cost BuyCurrency
-    if (buyRate === 0) return;
-    const newBuyPrice = newCost_Base / buyRate;
-
-    updateLineItem(id, { buyPrice: round2(newBuyPrice) });
+    // C. Update ONLY Sell Price (Base HT)
+    // We do NOT back-calculate Cost or Markup.
+    updateLineItem(id, { sellPrice: round2(newSellHT_Base) });
   };
 
-  // 2. EDIT COST -> Recalculate MARKUP (Price Maintenance)
+  // 2. EDIT COST
+  // CONSTRAINT: "don't calculate the markup"
+  // CONSTRAINT: "calculate only sell price if empty or nul"
   const handleCostChange = (id: string, newBuyPrice: number) => {
     const item = items.find(i => i.id === id);
     if (!item) return;
@@ -466,34 +464,47 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
     // Rates
     const buyRate = exchangeRates?.[item.buyCurrency || 'MAD'] || 1;
     
-    // A. Calculate CURRENT Sell HT (in Quote Currency) before the change
-    // We want to LOCK this value.
-    const currentBuyInBase = (item.buyPrice || 0) * buyRate;
-    const currentMarkupFactor = 1 + (item.markupValue || 0) / 100;
-    const currentSellBase = currentBuyInBase * currentMarkupFactor;
-
-    // B. Calculate NEW Cost in Base
+    // A. Calculate NEW Cost in Base
     const newBuyInBase = newBuyPrice * buyRate;
 
-    // C. Calculate REQUIRED Markup to hit the SAME Sell Price
-    // CurrentSellBase = NewBuyInBase * (1 + NewMarkup)
-    // (1 + NewMarkup) = CurrentSellBase / NewBuyInBase
-    // NewMarkup = (CurrentSellBase / NewBuyInBase) - 1
+    // Prepare updates
+    const updates: Partial<QuoteLineItem> = { 
+        buyPrice: newBuyPrice 
+    };
 
-    if (newBuyInBase <= 0.01) {
-         // Fallback if cost is zero/negative: just update price, standard logic will yield 0 sell
-         updateLineItem(id, { buyPrice: round2(newBuyPrice) });
-         return;
+    // B. Logic: Only calculate Sell Price if it is currently EMPTY (0)
+    if (!item.sellPrice || item.sellPrice === 0) {
+        // Calculate Sell Price based on Cost + Markup
+        const newSellHTBase = newBuyInBase * (1 + (item.markupValue || 0) / 100);
+        updates.sellPrice = round2(newSellHTBase);
+    } 
+    // ELSE: Keep existing Sell Price (Price Maintenance / Static)
+
+    updateLineItem(id, updates);
+  };
+
+  // 3. EDIT MARKUP
+  // New handler to ensure markup updates follow the same "only calc sell if empty" rule
+  const handleMarkupChange = (id: string, newMarkup: number) => {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+
+    // Rates
+    const buyRate = exchangeRates?.[item.buyCurrency || 'MAD'] || 1;
+    const buyInBase = (item.buyPrice || 0) * buyRate;
+
+    const updates: Partial<QuoteLineItem> = {
+        markupValue: newMarkup
+    };
+
+    // Logic: Only calculate Sell Price if it is currently EMPTY (0)
+    if (!item.sellPrice || item.sellPrice === 0) {
+        const newSellHTBase = buyInBase * (1 + newMarkup / 100);
+        updates.sellPrice = round2(newSellHTBase);
     }
 
-    const newMarkupPercent = ((currentSellBase / newBuyInBase) - 1) * 100;
-
-    updateLineItem(id, { 
-        buyPrice: round2(newBuyPrice), 
-        markupValue: round2(newMarkupPercent),
-        markupType: 'PERCENT' 
-    });
-  };
+    updateLineItem(id, updates);
+  }
 
 
   // Agent RFQ Generator (Buying Side)
@@ -630,6 +641,7 @@ Best regards,`;
              <Button 
                 variant="outline" 
                 onClick={handleRequestRates}
+                disabled={isLocked}
                 className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
              >
                  <Zap className="h-4 w-4 mr-2" />
@@ -674,6 +686,7 @@ Best regards,`;
                         <div className="space-y-1.5">
                             <Label className="text-xs font-semibold text-slate-500">Customer</Label>
                             <Select 
+                                disabled={isLocked}
                                 value={clientName} 
                                 onValueChange={(val) => {
                                     const c = clients.find(cl => cl.entityName === val);
@@ -715,7 +728,7 @@ Best regards,`;
                         <Label className="text-xs font-semibold text-slate-500 mb-2 block">Transport Mode</Label>
                         <div className="grid grid-cols-4 gap-3">
                             {(['SEA_FCL', 'SEA_LCL', 'AIR', 'ROAD'] as TransportMode[]).map(m => (
-                                <ModeButton key={m} mode={m} current={mode} onClick={() => setMode(m)} />
+                                <ModeButton key={m} mode={m} current={mode} onClick={() => setMode(m)} disabled={isLocked} />
                             ))}
                         </div>
                     </div>
@@ -731,6 +744,7 @@ Best regards,`;
                                     value={placeOfLoading}
                                     onChange={(val) => setRouteLocations('placeOfLoading', val)}
                                     iconClassName="text-amber-500"
+                                    disabled={isLocked}
                                 />
                             </div>
                         )}
@@ -743,6 +757,7 @@ Best regards,`;
                                     value={pol} 
                                     onChange={(v) => setRouteLocations('pol', v)}
                                     icon={MapPin}
+                                    disabled={isLocked}
                                 />
                              </div>
                              <div className="hidden md:flex col-span-2 items-center justify-center pb-2">
@@ -754,6 +769,7 @@ Best regards,`;
                                     value={pod} 
                                     onChange={(v) => setRouteLocations('pod', v)}
                                     icon={MapPin}
+                                    disabled={isLocked}
                                 />
                              </div>
                         </div>
@@ -767,6 +783,7 @@ Best regards,`;
                                     value={placeOfDelivery}
                                     onChange={(val) => setRouteLocations('placeOfDelivery', val)}
                                     iconClassName="text-blue-500"
+                                    disabled={isLocked}
                                 />
                             </div>
                         )}
@@ -776,7 +793,7 @@ Best regards,`;
                     <div className="grid grid-cols-3 gap-4">
                         <div className="space-y-1.5">
                              <Label className="text-xs font-semibold text-slate-500">Incoterm</Label>
-                             <Select value={incoterm} onValueChange={(v: Incoterm) => setIncoterm(v)}>
+                             <Select disabled={isLocked} value={incoterm} onValueChange={(v: Incoterm) => setIncoterm(v)}>
                                 <SelectTrigger className="h-10">
                                     <SelectValue />
                                 </SelectTrigger>
@@ -792,6 +809,7 @@ Best regards,`;
                              <div className="relative">
                                 <Input 
                                     type="date" 
+                                    disabled={isLocked}
                                     className="h-10 pl-9"
                                     value={requestedDepartureDate ? requestedDepartureDate.toString().split('T')[0] : ''}
                                     onChange={(e) => setIdentity('requestedDepartureDate', e.target.value)}
@@ -804,6 +822,7 @@ Best regards,`;
                              <div className="relative">
                                 <Input 
                                     type="date" 
+                                    disabled={isLocked}
                                     className="h-10 pl-9"
                                     value={estimatedArrivalDate ? estimatedArrivalDate.toString().split('T')[0] : ''}
                                     onChange={(e) => setIdentity('estimatedArrivalDate', e.target.value)}
@@ -822,6 +841,7 @@ Best regards,`;
                                     type="number" className="h-9 pl-9 bg-slate-50" 
                                     value={transitTime === 0 ? '' : transitTime}
                                     onChange={(e) => setLogisticsParam('transitTime', parseInt(e.target.value) || 0)}
+                                    disabled={isLocked}
                                 />
                                 <Clock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                             </div>
@@ -835,6 +855,7 @@ Best regards,`;
                                         type="number" className="h-9 pl-9 bg-slate-50" 
                                         value={freeTime === 0 ? '' : freeTime}
                                         onChange={(e) => setLogisticsParam('freeTime', parseInt(e.target.value) || 0)}
+                                        disabled={isLocked}
                                     />
                                     <Anchor className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                                 </div>
@@ -872,7 +893,7 @@ Best regards,`;
                           <div className="flex flex-col items-center justify-center h-48 text-slate-400">
                               <Wand2 className="h-8 w-8 mb-2 opacity-20" />
                               <p className="text-xs">No lines added.</p>
-                              <Button variant="link" size="sm" onClick={handleRequestRates}>
+                              <Button variant="link" size="sm" onClick={handleRequestRates} disabled={isLocked}>
                                   Auto-Populate Defaults
                               </Button>
                           </div>
@@ -891,13 +912,11 @@ Best regards,`;
 
                           {items.map((item) => {
                               // Calculations for display - uses same logic as useEffect
-                              // Dynamically retrieve rate from store
-                              const rate = exchangeRates?.[item.buyCurrency || 'MAD'] || 1;
                               const quoteRate = exchangeRates?.[quoteCurrency || 'MAD'] || 1;
                               
-                              const buyInBase = (item.buyPrice || 0) * rate;
+                              // REFACTOR: Use stored Sell Price for display (source of truth)
+                              const sellExVatBase = item.sellPrice || 0;
                               const vatRate = VAT_RATES[item.vatRule] || 0;
-                              const sellExVatBase = buyInBase * (1 + (item.markupValue || 0) / 100);
                               
                               // Convert to Quote Currency for Display
                               const sellExVatQuote = quoteRate > 0 ? sellExVatBase / quoteRate : 0;
@@ -919,12 +938,13 @@ Best regards,`;
                                           {item.section.substring(0,3)}
                                       </Badge>
                                       <Input 
+                                        disabled={isLocked}
                                         value={item.description} 
                                         onChange={(e) => updateLineItem(item.id, { description: e.target.value })}
                                         className="h-7 text-xs border-transparent focus:border-blue-300 px-1 font-medium bg-transparent w-full" 
                                         placeholder="Description..."
                                       />
-                                      <Button onClick={() => removeLineItem(item.id)} size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 shrink-0">
+                                      <Button onClick={() => removeLineItem(item.id)} disabled={isLocked} size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 shrink-0">
                                           <X className="h-3 w-3" />
                                       </Button>
                                   </div>
@@ -932,6 +952,7 @@ Best regards,`;
                                   {/* Currency Column */}
                                   <div className="col-span-2">
                                       <Select 
+                                        disabled={isLocked}
                                         value={item.buyCurrency || 'MAD'} 
                                         onValueChange={(val: any) => handleLineItemUpdate(item.id, { buyCurrency: val })}
                                       >
@@ -950,6 +971,7 @@ Best regards,`;
                                   <div className="col-span-2 relative">
                                       <Input 
                                         type="number"
+                                        disabled={isLocked}
                                         value={item.buyPrice === 0 ? '' : item.buyPrice}
                                         onChange={(e) => handleCostChange(item.id, parseFloat(e.target.value) || 0)}
                                         className="h-7 text-xs pl-3 bg-slate-50 border-slate-200 text-slate-600 focus:border-blue-300" 
@@ -960,8 +982,9 @@ Best regards,`;
                                   <div className="col-span-1 relative">
                                       <Input 
                                         type="number"
+                                        disabled={isLocked}
                                         value={item.markupValue === 0 ? '' : item.markupValue}
-                                        onChange={(e) => handleLineItemUpdate(item.id, { markupValue: parseFloat(e.target.value) || 0 })}
+                                        onChange={(e) => handleMarkupChange(item.id, parseFloat(e.target.value) || 0)}
                                         className="h-7 text-xs pl-1 font-medium text-emerald-600 bg-emerald-50/30 border-emerald-100" 
                                       />
                                   </div>
@@ -969,6 +992,7 @@ Best regards,`;
                                   {/* VAT Rule */}
                                   <div className="col-span-1">
                                        <Select 
+                                            disabled={isLocked}
                                             value={item.vatRule} 
                                             onValueChange={(val: any) => handleLineItemUpdate(item.id, { vatRule: val })}
                                         >
@@ -989,6 +1013,7 @@ Best regards,`;
                                       <div className="relative">
                                           <Input 
                                             type="number"
+                                            disabled={isLocked}
                                             // Rounding for display to avoid ugly float decimals (e.g. 120.000004)
                                             value={displaySellPrice === 0 ? '' : displaySellPrice} 
                                             onChange={(e) => handleSellPriceChange(item.id, parseFloat(e.target.value) || 0)}
@@ -1008,13 +1033,13 @@ Best regards,`;
 
                   {/* Actions Bar */}
                   <div className="p-3 bg-slate-100 border-t border-slate-200 grid grid-cols-3 gap-2 shrink-0">
-                      <Button variant="outline" size="sm" onClick={() => handleAddQuickLine('ORIGIN')} className="text-[10px] h-8 bg-white border-dashed text-slate-600 hover:text-amber-600 hover:border-amber-300">
+                      <Button variant="outline" size="sm" onClick={() => handleAddQuickLine('ORIGIN')} disabled={isLocked} className="text-[10px] h-8 bg-white border-dashed text-slate-600 hover:text-amber-600 hover:border-amber-300">
                           + Origin
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleAddQuickLine('FREIGHT')} className="text-[10px] h-8 bg-white border-dashed text-slate-600 hover:text-blue-600 hover:border-blue-300">
+                      <Button variant="outline" size="sm" onClick={() => handleAddQuickLine('FREIGHT')} disabled={isLocked} className="text-[10px] h-8 bg-white border-dashed text-slate-600 hover:text-blue-600 hover:border-blue-300">
                           + Freight
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleAddQuickLine('DESTINATION')} className="text-[10px] h-8 bg-white border-dashed text-slate-600 hover:text-purple-600 hover:border-purple-300">
+                      <Button variant="outline" size="sm" onClick={() => handleAddQuickLine('DESTINATION')} disabled={isLocked} className="text-[10px] h-8 bg-white border-dashed text-slate-600 hover:text-purple-600 hover:border-purple-300">
                           + Dest.
                       </Button>
                   </div>
@@ -1031,6 +1056,7 @@ Best regards,`;
                           <Textarea 
                             placeholder="Add private notes, operational constraints, or margin justifications..." 
                             value={internalNotes} 
+                            disabled={isLocked}
                             onChange={(e) => setIdentity('internalNotes', e.target.value)}
                             className="h-24 resize-none border-slate-200 bg-slate-50/50 text-xs"
                         />
@@ -1090,11 +1116,11 @@ Best regards,`;
                         <Package className="h-4 w-4 text-amber-500" /> Cargo Specification
                     </h2>
                     {isFCL ? (
-                        <Button variant="ghost" size="sm" onClick={() => addEquipment('40HC', 1)} className="h-7 text-xs text-blue-600">
+                        <Button variant="ghost" size="sm" onClick={() => addEquipment('40HC', 1)} disabled={isLocked} className="h-7 text-xs text-blue-600">
                             <Plus className="h-3 w-3 mr-1" /> Add Unit
                         </Button>
                     ) : (
-                         <Button variant="ghost" size="sm" onClick={addCargoRow} className="h-7 text-xs text-blue-600">
+                         <Button variant="ghost" size="sm" onClick={addCargoRow} disabled={isLocked} className="h-7 text-xs text-blue-600">
                              <Plus className="h-3 w-3 mr-1" /> Add Line
                          </Button>
                     )}
@@ -1107,6 +1133,7 @@ Best regards,`;
                         <Label className="text-xs font-semibold text-slate-500">Commodity (Description)</Label>
                         <Input 
                             value={goodsDescription} 
+                            disabled={isLocked}
                             onChange={(e) => setIdentity('goodsDescription', e.target.value)}
                             placeholder="E.g. Auto parts, Textiles, General Cargo..."
                             className="h-10 bg-slate-50"
@@ -1125,6 +1152,7 @@ Best regards,`;
                                             <Label className="text-[10px] text-slate-400 uppercase font-bold">Qty</Label>
                                             <Input 
                                                 type="number" 
+                                                disabled={isLocked}
                                                 min={1}
                                                 className="h-9 font-bold text-center"
                                                 value={eq.count}
@@ -1133,7 +1161,7 @@ Best regards,`;
                                         </div>
                                         <div>
                                             <Label className="text-[10px] text-slate-400 uppercase font-bold">Type</Label>
-                                            <Select value={eq.type} onValueChange={(v) => updateEquipment(eq.id, v, eq.count)}>
+                                            <Select disabled={isLocked} value={eq.type} onValueChange={(v) => updateEquipment(eq.id, v, eq.count)}>
                                                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                                                 <SelectContent>
                                                     <SelectItem value="20DV">20' Dry Standard</SelectItem>
@@ -1146,7 +1174,7 @@ Best regards,`;
                                     </div>
                                     {equipmentList.length > 1 && (
                                         <div className="pt-4">
-                                            <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-300 hover:text-red-500" onClick={() => removeEquipment(eq.id)}>
+                                            <Button variant="ghost" size="icon" disabled={isLocked} className="h-9 w-9 text-slate-300 hover:text-red-500" onClick={() => removeEquipment(eq.id)}>
                                                 <X className="h-4 w-4" />
                                             </Button>
                                         </div>
@@ -1172,12 +1200,13 @@ Best regards,`;
                                         <div className="col-span-1">
                                             <Input 
                                                 className="h-8 text-center px-0 font-bold" 
+                                                disabled={isLocked}
                                                 value={row.qty}
                                                 onChange={(e) => updateCargoRow(row.id, 'qty', parseFloat(e.target.value) || 0)}
                                             />
                                         </div>
                                         <div className="col-span-2">
-                                            <Select value={row.pkgType} onValueChange={(v) => updateCargoRow(row.id, 'pkgType', v)}>
+                                            <Select disabled={isLocked} value={row.pkgType} onValueChange={(v) => updateCargoRow(row.id, 'pkgType', v)}>
                                                 <SelectTrigger className="h-8 text-xs px-2"><SelectValue /></SelectTrigger>
                                                 <SelectContent>
                                                     <SelectItem value="PALLETS">Pallets</SelectItem>
@@ -1187,13 +1216,14 @@ Best regards,`;
                                             </Select>
                                         </div>
                                         <div className="col-span-3 flex gap-1">
-                                            <Input placeholder="L" className="h-8 text-center px-0 text-xs" value={row.length} onChange={(e) => updateCargoRow(row.id, 'length', parseFloat(e.target.value) || 0)} />
-                                            <Input placeholder="W" className="h-8 text-center px-0 text-xs" value={row.width} onChange={(e) => updateCargoRow(row.id, 'width', parseFloat(e.target.value) || 0)} />
-                                            <Input placeholder="H" className="h-8 text-center px-0 text-xs" value={row.height} onChange={(e) => updateCargoRow(row.id, 'height', parseFloat(e.target.value) || 0)} />
+                                            <Input placeholder="L" disabled={isLocked} className="h-8 text-center px-0 text-xs" value={row.length} onChange={(e) => updateCargoRow(row.id, 'length', parseFloat(e.target.value) || 0)} />
+                                            <Input placeholder="W" disabled={isLocked} className="h-8 text-center px-0 text-xs" value={row.width} onChange={(e) => updateCargoRow(row.id, 'width', parseFloat(e.target.value) || 0)} />
+                                            <Input placeholder="H" disabled={isLocked} className="h-8 text-center px-0 text-xs" value={row.height} onChange={(e) => updateCargoRow(row.id, 'height', parseFloat(e.target.value) || 0)} />
                                         </div>
                                         <div className="col-span-2">
                                             <Input 
                                                 className="h-8 text-center px-0 text-xs" 
+                                                disabled={isLocked}
                                                 value={row.weight}
                                                 onChange={(e) => updateCargoRow(row.id, 'weight', parseFloat(e.target.value) || 0)}
                                             />
@@ -1202,7 +1232,7 @@ Best regards,`;
                                             <span className="text-xs font-mono font-bold text-slate-600">
                                                 {(row.weight * row.qty).toLocaleString()}
                                             </span>
-                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-red-500" onClick={() => removeCargoRow(row.id)}>
+                                            <Button variant="ghost" size="icon" disabled={isLocked} className="h-7 w-7 text-slate-300 hover:text-red-500" onClick={() => removeCargoRow(row.id)}>
                                                 <Trash2 className="h-3 w-3" />
                                             </Button>
                                         </div>
