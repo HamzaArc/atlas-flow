@@ -683,6 +683,15 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
   addLineItem: (section, initialData = {}) => {
     const { id, activeOptionId, options, items } = get();
+    // Calculate default sellPrice based on initial data or defaults
+    const defaultBuy = initialData.buyPrice || 0;
+    const defaultMarkup = initialData.markupValue || 20;
+    const defaultMarkupType = initialData.markupType || 'PERCENT';
+    
+    const defaultSell = defaultMarkupType === 'PERCENT'
+      ? defaultBuy * (1 + defaultMarkup / 100)
+      : defaultBuy + defaultMarkup;
+
     const newItem: QuoteLineItem = {
       id: Math.random().toString(36).substring(7),
       quoteId: id,
@@ -690,6 +699,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       section,
       description: '',
       buyPrice: 0,
+      sellPrice: 0, // Explicit initialization
       buyCurrency: 'MAD', 
       markupType: 'PERCENT',
       markupValue: 20, 
@@ -699,6 +709,12 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       source: 'MANUAL',
       ...initialData
     };
+    
+    // Ensure sellPrice is set if not provided in initialData
+    if (newItem.sellPrice === 0 && newItem.buyPrice === 0 && !initialData.sellPrice) {
+         newItem.sellPrice = defaultSell;
+    }
+
     const newItems = [...items, newItem];
     const updatedOptions = options.map(o => o.id === activeOptionId ? { ...o, items: newItems } : o);
     set({ 
@@ -767,6 +783,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         section,
         description: desc,
         buyPrice: priceInfo.price,
+        sellPrice: priceInfo.price, // Initialize sellPrice (0% markup default for smart lines)
         buyCurrency: 'MAD',
         markupType: 'PERCENT',
         markupValue: 0,
@@ -862,7 +879,21 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     let updatedItems = items.map(item => {
       if (item.id !== id && id !== 'trigger') return item;
       if (id !== 'trigger') {
-          return { ...item, ...updates };
+          const merged = { ...item, ...updates };
+          
+          // STRICT TYPE FIX: Always calculate sellPrice to ensure it matches 'number' type
+          // If updates contains sellPrice, we use it, otherwise we calculate it from buyPrice + markup
+          let newSellPrice = merged.sellPrice;
+          
+          if (updates.buyPrice !== undefined || updates.markupValue !== undefined || updates.markupType !== undefined) {
+              if (merged.markupType === 'PERCENT') {
+                  newSellPrice = merged.buyPrice * (1 + merged.markupValue / 100);
+              } else {
+                  newSellPrice = merged.buyPrice + merged.markupValue;
+              }
+          }
+          
+          return { ...merged, sellPrice: newSellPrice || 0 };
       }
       return item;
     });
@@ -879,7 +910,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
                 
                 updatedItems = updatedItems.map(i => 
                     i.id === rebateLine.id 
-                    ? { ...i, buyPrice: parseFloat(newRebatePrice.toFixed(2)) }
+                    ? { ...i, buyPrice: parseFloat(newRebatePrice.toFixed(2)), sellPrice: parseFloat(newRebatePrice.toFixed(2)) }
                     : i
                 );
             }
@@ -1226,7 +1257,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               
               equipmentList: activeOpt?.equipmentList || [],
               
-              editorMode: 'EXPERT'
+              editorMode: 'EXPRESS' // Enforced Express Mode on Load
           });
 
           if (activeOptId) {
@@ -1262,6 +1293,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         masterReference: newRef,
         version: 1, 
         status: 'DRAFT',
+        editorMode: 'EXPRESS', // Force Express mode on duplicate
         activities: [
             { id: 'init', category: 'SYSTEM', text: 'Duplicated from ' + current.reference, meta: 'System', tone: 'neutral', timestamp: new Date() }
         ]

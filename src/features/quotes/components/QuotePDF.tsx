@@ -114,14 +114,30 @@ const styles = StyleSheet.create({
 
   // TERMS & CONDITIONS
   termsContainer: { 
-    marginTop: 30, 
-    paddingTop: 15, 
+    marginTop: 20, 
+    paddingTop: 10, 
     borderTopWidth: 1, 
     borderTopColor: '#e2e8f0' 
   },
   termsTitle: { fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#0f172a', marginBottom: 5, textTransform: 'uppercase' },
-  termsText: { fontSize: 6.5, color: '#64748b', textAlign: 'justify', marginBottom: 4, lineHeight: 1.3 },
+  termsText: { fontSize: 6.5, color: '#64748b', textAlign: 'justify', marginBottom: 3, lineHeight: 1.3 },
   
+  // SIGNATURE BLOCK
+  acceptanceBlock: {
+      marginTop: 25,
+      borderWidth: 1,
+      borderColor: '#e2e8f0',
+      borderRadius: 4,
+      padding: 12,
+      backgroundColor: '#f8fafc',
+      pageBreakInside: 'avoid'
+  },
+  acceptanceTitle: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#0f172a', marginBottom: 15, textTransform: 'uppercase' },
+  sigRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 },
+  sigCol: { width: '45%' },
+  sigLine: { borderBottomWidth: 1, borderBottomColor: '#94a3b8', height: 20, marginBottom: 4 },
+  sigLabel: { fontSize: 7, color: '#64748b', textTransform: 'uppercase' },
+
   footer: { 
     position: 'absolute', 
     bottom: 30, 
@@ -151,11 +167,18 @@ export const QuotePDF: React.FC<QuotePDFProps> = ({ data }) => {
     // RESOLVE ACTIVE OPTION
     const activeOption = data.options.find(o => o.id === data.activeOptionId) || data.options[0];
     const quoteCurrency = activeOption?.quoteCurrency || 'MAD';
+    const mode = activeOption?.mode || data.mode || 'SEA_LCL';
     
-    // RESOLVE EQUIPMENT STRING (UPDATED LOGIC)
+    // RESOLVE EQUIPMENT STRING
     const equipmentStr = activeOption?.equipmentList && activeOption.equipmentList.length > 0
         ? activeOption.equipmentList.map(e => `${e.count}x ${e.type}`).join(', ')
         : (activeOption?.equipmentType ? `${activeOption.containerCount}x ${activeOption.equipmentType}` : '-');
+
+    // LOGIC: Hide Manifest AND Weight/Vol for FCL or ROAD
+    const showDetails = !['SEA_FCL', 'ROAD'].includes(mode);
+
+    // LOGIC: Show Equipment only for FCL or ROAD (Hide for LCL / AIR)
+    const showEquipment = ['SEA_FCL', 'ROAD'].includes(mode);
 
     // FINANCIALS
     const subTotal = data.totalSellTarget || 0;
@@ -174,6 +197,7 @@ export const QuotePDF: React.FC<QuotePDFProps> = ({ data }) => {
                 <View style={styles.header}>
                     <View style={styles.logoBlock}>
                         <Text style={styles.logoText}>ATLAS FLOW</Text>
+                        <Text style={styles.logoSub}>Logistics Operating System</Text>
                     </View>
                     <View style={styles.metaBlock}>
                         <Text style={styles.statusBadge}>{data.status}</Text>
@@ -207,7 +231,7 @@ export const QuotePDF: React.FC<QuotePDFProps> = ({ data }) => {
                     </View>
                 </View>
 
-                {/* 3. LOGISTICS CONTEXT (UPDATED FOR EQUIPMENT LIST) */}
+                {/* 3. LOGISTICS CONTEXT */}
                 <View style={styles.contextBar}>
                     <View style={styles.contextItem}>
                         <Text style={styles.contextLabel}>Origin (POL)</Text>
@@ -217,50 +241,62 @@ export const QuotePDF: React.FC<QuotePDFProps> = ({ data }) => {
                         <Text style={styles.contextLabel}>Destination (POD)</Text>
                         <Text style={styles.contextValue}>{data.pod || activeOption?.pod || '-'}</Text>
                     </View>
-                    <View style={styles.contextItem}>
-                        <Text style={styles.contextLabel}>Mode / Equipment</Text>
-                        <Text style={styles.contextValue}>{data.mode || activeOption?.mode} | {equipmentStr}</Text>
-                    </View>
-                    <View style={styles.contextItemLast}>
-                        <Text style={styles.contextLabel}>Total Weight / Vol</Text>
+                    {/* Item 3: If details (Weight/Vol) are shown, this is a middle item. If details are hidden, this is the last item. */}
+                    <View style={showDetails ? styles.contextItem : styles.contextItemLast}>
+                        <Text style={styles.contextLabel}>Mode {showEquipment ? '/ Equipment' : ''}</Text>
                         <Text style={styles.contextValue}>
-                            {data.totalWeight?.toFixed(2) || 0} kg | {data.totalVolume?.toFixed(3) || 0} cbm
+                            {mode}{showEquipment ? ` | ${equipmentStr}` : ''}
                         </Text>
                     </View>
-                </View>
-
-                {/* 4. CARGO MANIFEST */}
-                <Text style={styles.sectionTitle}>Cargo Manifest</Text>
-                <View style={styles.cargoTable}>
-                    <View style={styles.cargoHeader}>
-                        <Text style={[styles.th, styles.cQty]}>Qty</Text>
-                        <Text style={[styles.th, styles.cType]}>Package Type</Text>
-                        <Text style={[styles.th, styles.cDims]}>Dims (L x W x H)</Text>
-                        <Text style={[styles.th, styles.cVol]}>Vol (cbm)</Text>
-                        <Text style={[styles.th, styles.cWgt]}>Weight (kg)</Text>
-                    </View>
-                    {data.cargoRows && data.cargoRows.length > 0 ? (
-                        data.cargoRows.map((row, idx) => {
-                           const rowVol = ((row.length * row.width * row.height) / 1000000) * row.qty;
-                           const rowWgt = row.weight * row.qty;
-                           return (
-                            <View key={idx} style={styles.cargoRow}>
-                                <Text style={[styles.td, styles.cQty]}>{row.qty}</Text>
-                                <Text style={[styles.td, styles.cType]}>{row.pkgType}</Text>
-                                <Text style={[styles.td, styles.cDims]}>{row.length}x{row.width}x{row.height} cm</Text>
-                                <Text style={[styles.td, styles.cVol]}>{rowVol.toFixed(3)}</Text>
-                                <Text style={[styles.td, styles.cWgt]}>{rowWgt.toFixed(2)}</Text>
-                            </View>
-                           );
-                        })
-                    ) : (
-                        <View style={styles.cargoRow}>
-                            <Text style={[styles.td, { width: '100%', textAlign: 'center', fontStyle: 'italic' }]}>
-                                No cargo details specified.
+                    {/* Item 4: Total Weight / Vol (Only for LCL/AIR) */}
+                    {showDetails && (
+                        <View style={styles.contextItemLast}>
+                            <Text style={styles.contextLabel}>Total Weight / Vol</Text>
+                            <Text style={styles.contextValue}>
+                                {data.totalWeight?.toFixed(2) || 0} kg | {data.totalVolume?.toFixed(3) || 0} cbm
                             </Text>
                         </View>
                     )}
                 </View>
+
+                {/* 4. CARGO MANIFEST (CONDITIONAL) */}
+                {showDetails ? (
+                    <>
+                        <Text style={styles.sectionTitle}>Cargo Manifest</Text>
+                        <View style={styles.cargoTable}>
+                            <View style={styles.cargoHeader}>
+                                <Text style={[styles.th, styles.cQty]}>Qty</Text>
+                                <Text style={[styles.th, styles.cType]}>Package Type</Text>
+                                <Text style={[styles.th, styles.cDims]}>Dims (L x W x H)</Text>
+                                <Text style={[styles.th, styles.cVol]}>Vol (cbm)</Text>
+                                <Text style={[styles.th, styles.cWgt]}>Weight (kg)</Text>
+                            </View>
+                            {data.cargoRows && data.cargoRows.length > 0 ? (
+                                data.cargoRows.map((row, idx) => {
+                                const rowVol = ((row.length * row.width * row.height) / 1000000) * row.qty;
+                                const rowWgt = row.weight * row.qty;
+                                return (
+                                    <View key={idx} style={styles.cargoRow}>
+                                        <Text style={[styles.td, styles.cQty]}>{row.qty}</Text>
+                                        <Text style={[styles.td, styles.cType]}>{row.pkgType}</Text>
+                                        <Text style={[styles.td, styles.cDims]}>{row.length}x{row.width}x{row.height} cm</Text>
+                                        <Text style={[styles.td, styles.cVol]}>{rowVol.toFixed(3)}</Text>
+                                        <Text style={[styles.td, styles.cWgt]}>{rowWgt.toFixed(2)}</Text>
+                                    </View>
+                                );
+                                })
+                            ) : (
+                                <View style={styles.cargoRow}>
+                                    <Text style={[styles.td, { width: '100%', textAlign: 'center', fontStyle: 'italic' }]}>
+                                        No cargo details specified.
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                    </>
+                ) : (
+                    <View style={{ marginBottom: 15 }}></View> // Spacer if manifest is hidden
+                )}
 
                 {/* 5. PRICING TABLE */}
                 <Text style={styles.sectionTitle}>Charges & Fees</Text>
@@ -312,25 +348,63 @@ export const QuotePDF: React.FC<QuotePDFProps> = ({ data }) => {
                     </View>
                 </View>
 
-                {/* 7. TERMS & CONDITIONS */}
-                <View style={styles.termsContainer}>
+                {/* 7. TERMS & CONDITIONS (New Page via break prop) */}
+                <View style={styles.termsContainer} break>
                     <Text style={styles.termsTitle}>Standard Terms & Conditions</Text>
                     
                     <Text style={styles.termsText}>
-                        1. <Text style={{ fontFamily: 'Helvetica-Bold' }}>VALIDITY:</Text> This quotation is valid until {validUntil}. Rates are subject to space and equipment availability.
+                        1. <Text style={{ fontFamily: 'Helvetica-Bold' }}>VALIDITY & BOOKING:</Text> Rates are valid until {validUntil} and subject to equipment/space availability at time of booking. Spot rates are subject to change without notice.
                     </Text>
                     
                     <Text style={styles.termsText}>
-                        2. <Text style={{ fontFamily: 'Helvetica-Bold' }}>LIABILITY:</Text> All business is undertaken subject to the Standard Trading Conditions of Atlas Flow SARL.
+                        2. <Text style={{ fontFamily: 'Helvetica-Bold' }}>EXCLUSIONS:</Text> Unless strictly specified, rates exclude Customs Duties, Taxes (VAT), Inspection Fees, Scanning, Storage, Detention, Demurrage, and Waiting Time.
+                    </Text>
+
+                    <Text style={styles.termsText}>
+                        3. <Text style={{ fontFamily: 'Helvetica-Bold' }}>INSURANCE:</Text> Goods travel at the risk of the cargo owner. Cargo insurance is NOT included unless explicitly itemized. We strongly recommend arranging comprehensive marine insurance.
                     </Text>
                     
                     <Text style={styles.termsText}>
-                        3. <Text style={{ fontFamily: 'Helvetica-Bold' }}>PAYMENT:</Text> Payment is due according to the agreed credit terms ({data.paymentTerms}).
+                        4. <Text style={{ fontFamily: 'Helvetica-Bold' }}>PAYMENT:</Text> Invoices are payable according to agreed credit terms ({data.paymentTerms}). Late payments may be subject to interest charges. 
+                    </Text>
+
+                    <Text style={styles.termsText}>
+                        5. <Text style={{ fontFamily: 'Helvetica-Bold' }}>EXCHANGE RATES:</Text> Final invoicing will be based on the exchange rate valid at the date of invoicing or date of shipment, as per company policy.
+                    </Text>
+
+                    <Text style={styles.termsText}>
+                        6. <Text style={{ fontFamily: 'Helvetica-Bold' }}>LIABILITY:</Text> All business is undertaken subject to the Standard Trading Conditions of Atlas Flow SARL and applicable international conventions (Hague-Visby, CMR, Montreal).
                     </Text>
                 </View>
 
+                {/* 8. ACCEPTANCE & SIGNATURE */}
+                <View style={styles.acceptanceBlock}>
+                    <Text style={styles.acceptanceTitle}>Acceptance of Quotation</Text>
+                    <Text style={{ fontSize: 7, color: '#475569', marginBottom: 10 }}>
+                        By signing below, the client acknowledges and accepts the rates, terms, and conditions outlined in this quotation.
+                    </Text>
+                    
+                    <View style={styles.sigRow}>
+                        <View style={styles.sigCol}>
+                            <View style={styles.sigLine} />
+                            <Text style={styles.sigLabel}>Name & Title</Text>
+                        </View>
+                        <View style={styles.sigCol}>
+                            <View style={styles.sigLine} />
+                            <Text style={styles.sigLabel}>Date</Text>
+                        </View>
+                    </View>
+                    
+                    <View style={[styles.sigRow, { marginTop: 30 }]}>
+                        <View style={[styles.sigCol, { width: '100%' }]}>
+                            <View style={{ height: 40, borderBottomWidth: 1, borderBottomColor: '#94a3b8', marginBottom: 4 }} />
+                            <Text style={styles.sigLabel}>Signature & Company Stamp</Text>
+                        </View>
+                    </View>
+                </View>
+
                 <View style={styles.footer}>
-                    <Text style={styles.footerText}>Atlas Flow SARL | 123 Logistics Blvd, Casablanca | RC: 12345 | ICE: 00152637283</Text>
+                    <Text style={styles.footerText}>Atlas Flow SARL | 123 Logistics Blvd, Casablanca | RC: 12345 | ICE: 00152637283 | www.atlasflow.com</Text>
                 </View>
 
             </Page>

@@ -16,6 +16,7 @@ import LoginPage from "@/features/auth/LoginPage";
 
 import { Toaster } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 function App() {
   const [session, setSession] = useState<any>(null);
@@ -27,6 +28,9 @@ function App() {
   const [crmView, setCrmView] = useState<'list' | 'details'>('list');
   const [dossierView, setDossierView] = useState<'dashboard' | 'dossier'>('dashboard'); 
   const [tariffView, setTariffView] = useState<'dashboard' | 'workspace'>('dashboard');
+
+  // Sidebar State (False = Expanded by Default)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     // 1. Get initial session
@@ -58,8 +62,13 @@ function App() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    // State update handled by onAuthStateChange listener
   };
+
+  // DYNAMIC LAYOUT CALCULATIONS
+  // When collapsed (isSidebarCollapsed = true) -> Width is 72px -> content PL is 72px
+  // When expanded (isSidebarCollapsed = false) -> Width is 280px -> content PL is 280px
+  const mainContentPadding = isSidebarCollapsed ? 'pl-[72px]' : 'pl-[280px]';
+  const overlayLeftPosition = isSidebarCollapsed ? 'left-[72px]' : 'left-[280px]';
 
   // --------------------------------------------------------------------------
   // RENDER LOGIC
@@ -79,11 +88,7 @@ function App() {
     return (
         <LandingPage 
             onEnterApp={() => {
-                if (session) {
-                    setShowLanding(false);
-                } else {
-                    setShowLanding(false);
-                }
+                setShowLanding(false);
             }} 
         />
     );
@@ -98,31 +103,30 @@ function App() {
   return (
     <div className="flex min-h-screen w-full bg-slate-50 text-slate-900 font-sans">
       
-      {/* Sidebar is now self-contained and fixed. 
-        We do not wrap it in an <aside> that changes width, because the sidebar expands OVER content.
-      */}
+      {/* Sidebar - Controlled by App state */}
       <Sidebar 
         currentView={currentPage} 
         onNavigate={handleSidebarNav} 
         onLogout={handleLogout}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       /> 
 
       {/* Main Content Area 
-        We use padding-left (pl-[72px]) to reserve space for the *collapsed* sidebar.
-        This ensures the content never jumps when the sidebar expands.
+        Dynamically adjusted padding ensures content flows with sidebar expansion.
       */}
-      <main className="flex-1 h-screen overflow-hidden flex flex-col relative transition-all duration-300 pl-[72px]">
+      <main className={cn("flex-1 h-screen overflow-hidden flex flex-col relative transition-all duration-300 ease-in-out", mainContentPadding)}>
         
         {currentPage === 'dashboard' && <QuoteDashboard onNavigate={setCurrentPage} />}
         {currentPage === 'create' && (
-          <div className="absolute inset-0 z-20 bg-white left-[72px]"> {/* Ensure overlaid content also respects sidebar */}
+          <div className={cn("absolute inset-0 z-20 bg-white transition-all duration-300 ease-in-out", overlayLeftPosition)}>
              <QuoteWorkspace onBack={() => setCurrentPage('dashboard')} />
           </div>
         )}
 
         {currentPage === 'dossier' && (
             dossierView === 'dashboard' ? <DossierDashboard onNavigate={setDossierView} /> : (
-                <div className="absolute inset-0 z-20 bg-white left-[72px]">
+                <div className={cn("absolute inset-0 z-20 bg-white transition-all duration-300 ease-in-out", overlayLeftPosition)}>
                     <DossierWorkspace onBack={() => setDossierView('dashboard')} />
                 </div>
             )
@@ -130,7 +134,7 @@ function App() {
 
         {currentPage === 'crm' && (
             crmView === 'list' ? <ClientListPage onNavigate={setCrmView} /> : (
-                <div className="absolute inset-0 z-20 bg-white left-[72px]">
+                <div className={cn("absolute inset-0 z-20 bg-white transition-all duration-300 ease-in-out", overlayLeftPosition)}>
                     <div className="h-full flex flex-col">
                         <div className="bg-white border-b px-4 py-2">
                             <button onClick={() => setCrmView('list')} className="text-xs text-blue-600 hover:underline">← Back to List</button>
@@ -149,7 +153,7 @@ function App() {
 
         {currentPage === 'tariffs' && (
             tariffView === 'dashboard' ? <RateDashboard onNavigate={setTariffView} /> : (
-                <div className="absolute inset-0 z-20 bg-white left-[72px]">
+                <div className={cn("absolute inset-0 z-20 bg-white transition-all duration-300 ease-in-out", overlayLeftPosition)}>
                     <RateWorkspace onBack={() => setTariffView('dashboard')} />
                 </div>
             )

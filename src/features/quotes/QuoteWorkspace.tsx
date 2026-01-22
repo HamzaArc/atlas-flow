@@ -59,7 +59,7 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
   // Force Express Mode on Mount
   useEffect(() => {
       setEditorMode('EXPRESS');
-  }, []);
+  }, [setEditorMode]);
 
   const marginPercent = totalSellMAD > 0 ? ((totalMarginMAD / totalSellMAD) * 100).toFixed(1) : "0.0";
   const isCriticalMode = mode === 'AIR' || mode === 'SEA_LCL';
