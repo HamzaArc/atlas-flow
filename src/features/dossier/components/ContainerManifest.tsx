@@ -33,7 +33,8 @@ export function ContainerManifest() {
                 <Badge variant="secondary" className="ml-2 text-[10px] h-5">{dossier.containers.length} Units</Badge>
             </h3>
             {isEditing && (
-                <Button size="sm" variant="outline" onClick={addContainer} className="h-7 text-xs bg-white">
+                // FIXED: Wrapped in anonymous function to prevent passing MouseEvent
+                <Button size="sm" variant="outline" onClick={() => addContainer()} className="h-7 text-xs bg-white">
                     <Plus className="h-3 w-3 mr-1" /> Add Container
                 </Button>
             )}

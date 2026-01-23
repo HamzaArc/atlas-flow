@@ -28,7 +28,7 @@ interface DossierState {
   setStage: (stage: ShipmentStage) => void;
   
   // Container Actions
-  addContainer: () => void;
+  addContainer: (container?: DossierContainer) => void;
   updateContainer: <K extends keyof DossierContainer>(id: string, field: K, value: DossierContainer[K]) => void;
   removeContainer: (id: string) => void;
 
@@ -63,15 +63,15 @@ const DEFAULT_DOSSIER: Dossier = {
     incoterm: 'FOB', 
     mode: 'SEA_FCL', 
     freeTimeDays: 7,
-    // FIX: Updated shipper/consignee to match ShipmentParty (added role)
     shipper: { name: '', role: 'Shipper' }, 
     consignee: { name: '', role: 'Consignee' },
-    parties: [], // New
-    containers: [], 
+    parties: [], 
+    containers: [],
+    cargoItems: [], // New default
     activities: [], 
-    tasks: [], // New
-    events: [], // New
-    tags: [], // New
+    tasks: [], 
+    events: [], 
+    tags: [], 
     totalRevenue: 0, 
     totalCost: 0, 
     currency: 'MAD',
@@ -88,8 +88,6 @@ export const useDossierStore = create<DossierState>((set, get) => ({
   fetchDossiers: async () => {
       set({ isLoading: true });
       try {
-          // In a real scenario, this service would need to return the expanded shape
-          // For now, we assume the service logic is updated or handles partial data gracefully
           const dossiers = await DossierService.fetchAll();
           set({ dossiers, isLoading: false });
       } catch (e) {
@@ -104,14 +102,14 @@ export const useDossierStore = create<DossierState>((set, get) => ({
   loadDossier: (id) => {
       const found = get().dossiers.find(d => d.id === id);
       if (found) {
-          // Deep copy to avoid mutating the list directly while editing
           const safeCopy = JSON.parse(JSON.stringify(found));
           
-          // Data repair for older records if they miss new fields
           if (!safeCopy.tasks) safeCopy.tasks = [];
           if (!safeCopy.events) safeCopy.events = [];
           if (!safeCopy.parties) safeCopy.parties = [];
           if (!safeCopy.tags) safeCopy.tags = [];
+          if (!safeCopy.containers) safeCopy.containers = [];
+          if (!safeCopy.cargoItems) safeCopy.cargoItems = [];
           if (!safeCopy.stage) safeCopy.stage = ShipmentStage.INTAKE;
 
           set({ dossier: safeCopy, isEditing: false });
@@ -125,7 +123,6 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       set((state) => ({
           dossier: { ...state.dossier, [field]: value }
       }));
-      // Auto-run checks on critical field updates
       if (['eta', 'etd', 'status', 'mblNumber', 'totalRevenue', 'totalCost'].includes(field as string)) {
           get().runSmartChecks();
       }
@@ -153,8 +150,8 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       get().addActivity(`Shipment moved to stage: ${stage}`, 'SYSTEM', 'neutral');
   },
 
-  addContainer: () => {
-      const newContainer: DossierContainer = {
+  addContainer: (container) => {
+      const newContainer: DossierContainer = container || {
           id: Math.random().toString(36).substr(2,9),
           number: '', 
           type: '40HC', 
@@ -200,7 +197,7 @@ export const useDossierStore = create<DossierState>((set, get) => ({
 
   saveDossier: async () => {
       set({ isLoading: true });
-      get().runSmartChecks(); // Final check before save
+      get().runSmartChecks(); 
       
       const state = get();
       await DossierService.save(state.dossier);
@@ -237,7 +234,6 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       }
   })),
 
-  // --- LOGIC DELEGATED TO SERVICE ---
   runSmartChecks: () => {
       const { dossier } = get();
       const { alerts, nextAction } = DossierService.analyzeHealth(dossier);

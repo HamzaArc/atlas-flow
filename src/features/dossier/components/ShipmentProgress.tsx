@@ -1,104 +1,83 @@
-import { Check, Truck, Ship, Package, FileCheck, Anchor, Home } from "lucide-react";
-import { ShipmentStatus } from "@/types/index";
+import React from 'react';
+import { Check } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
-import { cn } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-
-const STEPS: { id: ShipmentStatus; label: string; icon: any }[] = [
-    { id: 'BOOKED', label: 'Booked', icon: FileCheck },
-    { id: 'PICKUP', label: 'Pickup', icon: Truck },
-    { id: 'AT_POL', label: 'Departure', icon: Anchor },
-    { id: 'ON_WATER', label: 'In Transit', icon: Ship },
-    { id: 'AT_POD', label: 'Arrival', icon: Anchor },
-    { id: 'CUSTOMS', label: 'Customs', icon: Package },
-    { id: 'DELIVERED', label: 'Final Delivery', icon: Home },
-];
+import { ShipmentStage } from "@/types/index";
 
 export function ShipmentProgress() {
-    const { dossier, setStatus } = useDossierStore();
-    const currentIdx = STEPS.findIndex(s => s.id === dossier.status);
+    const { dossier, setStage } = useDossierStore();
     
-    // Calculate progress percentage for the fill bar
-    const progressPercentage = (currentIdx / (STEPS.length - 1)) * 100;
+    const STAGES = [
+        ShipmentStage.INTAKE,
+        ShipmentStage.BOOKING,
+        ShipmentStage.ORIGIN,
+        ShipmentStage.TRANSIT,
+        ShipmentStage.DELIVERY,
+        ShipmentStage.FINANCE,
+        ShipmentStage.CLOSED
+    ];
 
-    const handleStepClick = (stepId: ShipmentStatus, stepIdx: number) => {
-        // Allow clicking any past step to revert, or immediate next step
-        if (stepIdx <= currentIdx + 1) {
-            setStatus(stepId);
-        }
+    const activeStepIndex = STAGES.indexOf(dossier.stage);
+
+    // FIXED: Removed unused 'idx' parameter
+    const handleStepClick = (stage: ShipmentStage) => {
+        setStage(stage);
     };
 
     return (
-        <div className="w-full py-4 px-4">
-            <div className="relative flex items-center justify-between">
-                
-                {/* 1. Background Track (Gray) */}
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-slate-100 rounded-full -z-10" />
-
-                {/* 2. Active Track (Colored Fill) */}
-                <div 
-                    className="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-blue-600 rounded-full -z-10 transition-all duration-700 ease-in-out" 
-                    style={{ width: `${progressPercentage}%` }}
-                />
-
-                {/* 3. Steps Nodes */}
-                {STEPS.map((step, idx) => {
-                    const isCompleted = idx < currentIdx;
-                    const isCurrent = idx === currentIdx;
-                    const isNext = idx === currentIdx + 1;
+        <div className="px-6 pb-4 pt-2 flex items-center gap-6 overflow-x-auto border-t border-transparent">
+            <div className="flex-1 flex items-center min-w-0">
+                {STAGES.map((step, idx) => {
+                    const isCompleted = idx < activeStepIndex;
+                    const isCurrent = idx === activeStepIndex;
+                    const isLast = idx === STAGES.length - 1;
                     
                     return (
-                        <div key={step.id} className="relative flex flex-col items-center group">
+                        <React.Fragment key={step}>
+                            <div className="flex flex-col items-center relative group">
+                                <button 
+                                    // FIXED: Removed index argument
+                                    onClick={() => handleStepClick(step)}
+                                    className={`
+                                        relative z-10 flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold transition-all duration-300
+                                        ${isCompleted ? 'bg-green-500 text-white shadow-sm' : ''}
+                                        ${isCurrent ? 'bg-blue-600 text-white ring-4 ring-blue-50 shadow-md scale-110' : ''}
+                                        ${!isCompleted && !isCurrent ? 'bg-slate-100 text-slate-400 border border-slate-200 hover:border-blue-300 cursor-pointer' : ''}
+                                    `}
+                                >
+                                    {isCompleted ? <Check className="h-3.5 w-3.5 stroke-[3]" /> : idx + 1}
+                                </button>
+                                {/* Label */}
+                                <span className={`
+                                    absolute top-9 whitespace-nowrap text-[11px] font-bold tracking-tight transition-colors duration-300
+                                    ${isCurrent ? 'text-blue-700' : isCompleted ? 'text-green-600' : 'text-slate-400'}
+                                `}>
+                                    {step}
+                                </span>
+                            </div>
                             
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <button
-                                            onClick={() => handleStepClick(step.id, idx)}
-                                            disabled={idx > currentIdx + 1}
-                                            className={cn(
-                                                "relative flex items-center justify-center w-8 h-8 rounded-full border-2 transition-all duration-300 z-10 bg-white",
-                                                // Border & Shadow Logic
-                                                isCurrent 
-                                                    ? "border-blue-600 text-blue-600 shadow-lg shadow-blue-100 ring-4 ring-blue-50 scale-110" 
-                                                    : isCompleted 
-                                                        ? "border-blue-600 bg-blue-600 text-white hover:bg-blue-700" 
-                                                        : isNext 
-                                                            ? "border-slate-300 text-slate-400 hover:border-blue-400 hover:text-blue-500 cursor-pointer"
-                                                            : "border-slate-200 text-slate-300 cursor-not-allowed"
-                                            )}
-                                        >
-                                            {/* Icon Logic */}
-                                            {isCompleted ? (
-                                                <Check className="w-4 h-4 stroke-[3]" /> 
-                                            ) : isCurrent ? (
-                                                <div className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse" />
-                                            ) : (
-                                                <step.icon className="w-3.5 h-3.5" />
-                                            )}
-                                        </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className="text-xs font-bold bg-slate-900 text-white mb-2">
-                                        {isCompleted ? "Completed" : isCurrent ? "In Progress" : "Pending"}
-                                    </TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-
-                            {/* Label Label */}
-                            <span className={cn(
-                                "absolute -bottom-7 text-[10px] font-bold uppercase tracking-wide transition-colors duration-300 whitespace-nowrap",
-                                isCurrent ? "text-blue-700 translate-y-0.5" : isCompleted ? "text-slate-600" : "text-slate-300"
-                            )}>
-                                {step.label}
-                            </span>
-                        </div>
+                            {/* Connecting Line */}
+                            {!isLast && (
+                                <div className="flex-1 h-1 mx-2 rounded-full bg-slate-100 overflow-hidden">
+                                    <div 
+                                        className={`h-full transition-all duration-500 ease-out ${idx < activeStepIndex ? 'bg-green-500 w-full' : 'w-0'}`}
+                                    />
+                                </div>
+                            )}
+                        </React.Fragment>
                     );
                 })}
+            </div>
+            
+            {/* Status Badge */}
+            <div className="flex flex-col items-end flex-shrink-0 pl-4 border-l border-slate-100">
+                <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">Current Status</span>
+                <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-bold bg-blue-50 text-blue-700 border border-blue-100 shadow-sm">
+                    <span className="relative flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+                    </span>
+                    {dossier.status || 'Active'}
+                </span>
             </div>
         </div>
     );

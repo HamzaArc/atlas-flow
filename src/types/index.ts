@@ -6,7 +6,6 @@ export type Incoterm =
   | 'FAS' | 'FOB' | 'CFR' | 'CIF';
 
 export type TransportMode = 'SEA_FCL' | 'SEA_LCL' | 'AIR' | 'ROAD';
-// FIX: Alias ShipmentMode to TransportMode
 export type ShipmentMode = TransportMode;
 
 export type Currency = 'MAD' | 'USD' | 'EUR' | 'GBP';
@@ -156,7 +155,6 @@ export interface Quote {
 // --- 3. DOSSIER MODELS (ENHANCED) ---
 export type ShipmentStatus = 'BOOKED' | 'PICKUP' | 'AT_POL' | 'ON_WATER' | 'AT_POD' | 'CUSTOMS' | 'DELIVERED' | 'COMPLETED';
 
-// New: Expanded Party Interface for RightRail
 export interface ShipmentParty {
     id?: string;
     name: string;
@@ -165,6 +163,17 @@ export interface ShipmentParty {
     contact?: string;
     email?: string;
     phone?: string;
+}
+
+// New: Cargo Item Interface matching the reference
+export interface CargoItem {
+  id: string;
+  description: string;
+  packageCount: number;
+  packageType: string;
+  weight: number; 
+  volume: number; 
+  dimensions?: string;
 }
 
 export interface DossierContainer {
@@ -188,7 +197,6 @@ export interface DossierAlert {
     actionRequired?: string;
 }
 
-// New: Task Interface for Operations Tab
 export interface DossierTask {
   id: string;
   title: string;
@@ -202,7 +210,6 @@ export interface DossierTask {
   stage?: ShipmentStage;
 }
 
-// New: Event Interface for Tracking Tab
 export interface ShipmentEvent {
   id: string;
   title: string;
@@ -218,70 +225,61 @@ export interface Dossier {
   ref: string; 
   bookingRef: string; 
   
-  // Stages & Status
-  status: ShipmentStatus;      // Technical Status
-  stage: ShipmentStage;        // Visual Workflow Stage (New)
+  status: ShipmentStatus;
+  stage: ShipmentStage;
   
   clientId: string;
   clientName: string;
   quoteId?: string;
   
-  // Reference
   mblNumber: string; 
   hblNumber: string; 
   customerReference?: string;
   
-  // Transport Details
   carrier: string;
   vesselName: string;
   voyageNumber: string;
   pol: string;
   pod: string;
   incoterm: Incoterm;
-  incotermPlace?: string; // New
+  incotermPlace?: string; 
   mode: TransportMode;
   
-  // Dates
   etd: Date;
   eta: Date;
   ata?: Date; 
   
-  // Parties (Refactored)
-  // FIX: Explicitly type these as ShipmentParty to ensure 'role' exists
   shipper: ShipmentParty;
   consignee: ShipmentParty;
   notify?: { name: string; address?: string };
-  parties: ShipmentParty[]; // New: Full list for RightRail
+  parties: ShipmentParty[]; 
   
-  // Cargo
   freeTimeDays: number; 
   vgmCutOff?: Date;
   portCutOff?: Date;
   docCutOff?: Date;
-  containers: DossierContainer[];
   
-  // Operations Data
+  containers: DossierContainer[];
+  cargoItems: CargoItem[]; // New Field
+  
   activities: ActivityItem[];
   alerts: DossierAlert[];
-  tasks: DossierTask[];        // New
-  events: ShipmentEvent[];     // New
-  tags: string[];              // New
+  tasks: DossierTask[];       
+  events: ShipmentEvent[];    
+  tags: string[];              
   
-  // Finance
   nextAction: string;
   totalRevenue: number;
-  revenue?: number; // FIX: Added for backward compatibility
+  revenue?: number; 
   totalCost: number;
   currency: Currency;
   
-  // Meta
   createdDate?: string;
   owner?: string;
 }
 
 // --- 4. FINANCE ENGINE ---
 export type ChargeType = 'INCOME' | 'EXPENSE';
-// FIX: Alias ChargeCategory
 export type ChargeCategory = ChargeType;
 
 export type ChargeStatus = 'ESTIMATED' | 'ACCRUED' | 'READY_TO_INVOICE' | 'INVOICED' | 'POSTED' | 'PAID' | 'PARTIAL';
@@ -293,7 +291,6 @@ export interface ChargeLine {
     id: string;
     dossierId: string;
     type: ChargeType;
-    // FIX: Added category property
     category?: ChargeCategory;
     code: string; 
     description: string;

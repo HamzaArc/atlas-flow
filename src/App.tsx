@@ -3,9 +3,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-
 import Sidebar from './components/ui/layout/Sidebar';
 import LoginPage from './features/auth/LoginPage';
 import { useUserStore } from './store/useUserStore';
-import { supabase } from './lib/supabase'; // FIX: Import Supabase
+import { supabase } from './lib/supabase'; 
 import { cn } from "@/lib/utils";
-import { Loader2 } from "lucide-react"; // For loading state
+import { Loader2 } from "lucide-react"; 
 
 // Pages
 import LandingPage from './features/landing/LandingPage';
@@ -53,7 +53,7 @@ function App() {
   const { login, logout } = useUserStore();
   const [isSessionLoading, setIsSessionLoading] = useState(true);
 
-  // FIX: Restore session on app load
+  // Restore session on app load
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
@@ -94,7 +94,8 @@ function App() {
 
         {/* --- PROTECTED ROUTES (Sidebar + Auth Check) --- */}
         <Route element={<ProtectedLayout />}>
-            <Route path="/dashboard" element={<Navigate to="/quotes" replace />} />
+            {/* FIX: Default Dashboard now points to Dossiers (Operations) */}
+            <Route path="/dashboard" element={<Navigate to="/dossiers" replace />} />
             
             {/* Quotes */}
             <Route path="/quotes" element={<QuoteDashboard />} />

@@ -1,134 +1,155 @@
-import { 
-  ArrowLeft, Copy, 
-  Anchor, Plane, Truck, Edit, 
-  CheckCircle2, ChevronRight 
-} from "lucide-react";
+import { useState } from 'react';
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { 
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger 
-} from "@/components/ui/dropdown-menu";
+  ArrowLeft, Copy, Printer, 
+  ChevronRight, Anchor, Plane, Truck, Box,
+  AlertCircle, Archive
+} from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
-import { ShipmentStage } from "@/types/index";
+import { ShipmentStage, Dossier } from "@/types/index";
+import { ShipmentProgress } from "./ShipmentProgress";
+import { WorkflowModal } from "./modals/WorkflowModal";
 
 export const DossierHeader = () => {
   const navigate = useNavigate();
-  const { dossier, setStage } = useDossierStore();
+  const { dossier, setStage, updateDossier } = useDossierStore();
+  const [isActionsOpen, setIsActionsOpen] = useState(false);
+  const [isWorkflowOpen, setIsWorkflowOpen] = useState(false);
 
-  const ModeIcon = () => {
-     if (dossier.mode?.includes('SEA')) return <Anchor className="h-5 w-5 text-blue-600" />;
-     if (dossier.mode?.includes('AIR')) return <Plane className="h-5 w-5 text-orange-600" />;
-     return <Truck className="h-5 w-5 text-emerald-600" />;
-  };
-
-  const getStatusColor = (status: string) => {
-    switch(status) {
-      case 'Intake': return 'bg-slate-100 text-slate-600 border-slate-200';
-      case 'Booking': return 'bg-blue-50 text-blue-700 border-blue-200';
-      case 'Transit': return 'bg-indigo-50 text-indigo-700 border-indigo-200';
-      case 'Delivery': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-      default: return 'bg-slate-50 text-slate-500 border-slate-200';
+  // Helper for CTA button text
+  const getCTA = (stage: ShipmentStage) => {
+    switch (stage) {
+      case ShipmentStage.INTAKE: return 'Confirm & Book';
+      case ShipmentStage.BOOKING: return 'Confirm Departure';
+      case ShipmentStage.ORIGIN: return 'Send Pre-Alert';
+      case ShipmentStage.TRANSIT: return 'Arrival Notice';
+      case ShipmentStage.DELIVERY: return 'Confirm POD';
+      case ShipmentStage.FINANCE: return 'Close Job';
+      default: return 'Job Completed';
     }
   };
 
-  const STAGES = [
-     ShipmentStage.INTAKE, 
-     ShipmentStage.BOOKING, 
-     ShipmentStage.ORIGIN, 
-     ShipmentStage.TRANSIT, 
-     ShipmentStage.DELIVERY, 
-     ShipmentStage.FINANCE
-  ];
+  // Handler for the Workflow Modal
+  const handleWorkflowAdvance = (updates: Partial<Dossier>, nextStage: ShipmentStage) => {
+    // 1. Update specific fields captured in modal (e.g. mblNumber, etd)
+    Object.entries(updates).forEach(([key, value]) => {
+      // @ts-ignore - dynamic update based on key
+      updateDossier(key as keyof Dossier, value);
+    });
+
+    // 2. Advance the stage
+    setStage(nextStage);
+  };
+
+  const isLastStage = dossier.stage === ShipmentStage.CLOSED;
+
+  const ModeIcon = () => {
+     if (dossier.mode?.includes('SEA')) return <Anchor className="h-6 w-6 text-blue-600" />;
+     if (dossier.mode?.includes('AIR')) return <Plane className="h-6 w-6 text-orange-600" />;
+     if (dossier.mode?.includes('ROAD')) return <Truck className="h-6 w-6 text-emerald-600" />;
+     return <Box className="h-6 w-6 text-slate-600" />;
+  };
 
   return (
-    <div className="bg-white border-b border-slate-200 shadow-sm z-10">
+    <div className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm">
       
-      {/* Top Bar: Navigation & Core ID */}
-      <div className="px-6 py-4 flex justify-between items-start">
-         <div className="flex items-start gap-4">
-            <Button 
-               variant="ghost" 
-               size="icon" 
-               onClick={() => navigate('/dashboard')}
-               className="mt-1 h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+      {/* Top Bar: Identity & Actions */}
+      <div className="px-6 py-3 flex items-center justify-between">
+         <div className="flex gap-4 items-center">
+            <button 
+               onClick={() => navigate('/dossiers')}
+               className="p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+               title="Back to Operations Dashboard"
             >
                <ArrowLeft className="h-5 w-5" />
-            </Button>
+            </button>
             
+            <div className="h-8 w-px bg-slate-200"></div>
+
+            <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+               <ModeIcon />
+            </div>
+
             <div>
-               <div className="flex items-center gap-3 mb-1">
-                  <div className="p-2 bg-slate-50 rounded-lg border border-slate-100 shadow-sm">
-                     <ModeIcon />
-                  </div>
-                  <div>
-                     <div className="flex items-center gap-2">
-                        <h1 className="text-xl font-bold text-slate-900 tracking-tight">{dossier.ref}</h1>
-                        <button className="text-slate-400 hover:text-blue-600 transition-colors">
-                           <Copy className="h-3.5 w-3.5" />
-                        </button>
-                        <Badge variant="outline" className={`ml-2 ${getStatusColor(dossier.stage)}`}>
-                           {dossier.stage}
-                        </Badge>
-                     </div>
-                     <p className="text-sm text-slate-500 font-medium">{dossier.clientName}</p>
-                  </div>
+               <div className="flex items-center gap-3">
+                  <h1 className="text-xl font-bold text-slate-900 tracking-tight">{dossier.ref}</h1>
+                  {dossier.mode && (
+                    <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-wider">
+                       {dossier.mode}
+                    </span>
+                  )}
+                  {dossier.incoterm && (
+                     <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200 uppercase tracking-wider">
+                        {dossier.incoterm}
+                     </span>
+                  )}
+               </div>
+               <div className="text-sm text-slate-500 font-medium mt-0.5 flex items-center gap-2">
+                  <span className="text-slate-900">{dossier.clientName}</span>
+                  <span className="text-slate-300">|</span>
+                  <span className="text-slate-400 font-normal">MBL: {dossier.mblNumber || 'Pending'}</span>
                </div>
             </div>
          </div>
 
-         <div className="flex items-center gap-2">
-            <Button variant="outline" className="h-9 gap-2 text-slate-600 border-slate-200 hover:bg-slate-50">
-               <Edit className="h-4 w-4" /> Edit Details
-            </Button>
-            <DropdownMenu>
-               <DropdownMenuTrigger asChild>
-                  <Button variant="default" className="h-9 gap-2 bg-slate-900 hover:bg-slate-800 shadow-md">
-                     Actions <ChevronRight className="h-4 w-4 opacity-50" />
-                  </Button>
-               </DropdownMenuTrigger>
-               <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuItem>Generate Arrival Notice</DropdownMenuItem>
-                  <DropdownMenuItem>Send Tracking Link</DropdownMenuItem>
-                  <DropdownMenuItem>Create Invoice</DropdownMenuItem>
-                  <DropdownMenuItem className="text-red-600">Cancel Shipment</DropdownMenuItem>
-               </DropdownMenuContent>
-            </DropdownMenu>
+         <div className="flex items-center gap-3">
+            <button className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+               <Printer className="h-4.5 w-4.5" />
+            </button>
+
+            <div className="relative">
+                <button 
+                    onClick={() => setIsActionsOpen(!isActionsOpen)}
+                    className="px-4 py-2.5 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2"
+                >
+                    Actions <ChevronRight className={`h-4 w-4 transition-transform ${isActionsOpen ? 'rotate-90' : 'rotate-0'}`} />
+                </button>
+                {isActionsOpen && (
+                    <>
+                    <div className="fixed inset-0 z-10" onClick={() => setIsActionsOpen(false)}></div>
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 z-20 animate-in fade-in zoom-in-95 duration-100">
+                        <button className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+                            <Copy className="h-3.5 w-3.5" /> Duplicate Job
+                        </button>
+                        <button className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                            <AlertCircle className="h-3.5 w-3.5" /> Cancel Job
+                        </button>
+                        <div className="h-px bg-slate-100 my-1"></div>
+                        <button className="w-full text-left px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 flex items-center gap-2">
+                            <Archive className="h-3.5 w-3.5" /> Archive
+                        </button>
+                    </div>
+                    </>
+                )}
+            </div>
+
+            <button 
+               onClick={() => setIsWorkflowOpen(true)}
+               disabled={isLastStage}
+               className={`
+                 px-5 py-2.5 text-sm font-semibold text-white rounded-lg shadow-sm transition-all transform flex items-center gap-2
+                 ${isLastStage 
+                    ? 'bg-slate-400 cursor-not-allowed opacity-75' 
+                    : 'bg-slate-900 hover:bg-slate-800 hover:-translate-y-0.5 active:translate-y-0'
+                 }
+               `}
+            >
+               {getCTA(dossier.stage)}
+               {!isLastStage && <ChevronRight className="h-4 w-4" />}
+            </button>
          </div>
       </div>
 
-      {/* Bottom Bar: Workflow Stepper */}
-      <div className="px-6 pb-0 overflow-x-auto">
-         <div className="flex items-center gap-2 text-sm border-t border-slate-100 py-3">
-            {STAGES.map((stage, idx) => {
-               const isActive = dossier.stage === stage;
-               const isPast = STAGES.indexOf(dossier.stage) > idx;
-               
-               return (
-                  <div key={stage} className="flex items-center">
-                     <button 
-                        onClick={() => setStage(stage)}
-                        className={`
-                           flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all
-                           ${isActive 
-                              ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-100 ring-offset-1' 
-                              : isPast 
-                                 ? 'text-blue-700 bg-blue-50 hover:bg-blue-100' 
-                                 : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
-                           }
-                        `}
-                     >
-                        {isPast ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
-                        {stage}
-                     </button>
-                     {idx < STAGES.length - 1 && (
-                        <div className="w-8 h-px bg-slate-200 mx-1" />
-                     )}
-                  </div>
-               );
-            })}
-         </div>
-      </div>
+      {/* Progress Stepper - Adaptive Width */}
+      <ShipmentProgress />
+
+      {/* Workflow Action Modal */}
+      <WorkflowModal 
+        isOpen={isWorkflowOpen}
+        onClose={() => setIsWorkflowOpen(false)}
+        dossier={dossier}
+        onAdvance={handleWorkflowAdvance}
+      />
 
     </div>
   );
