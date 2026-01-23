@@ -6,7 +6,7 @@ import { DossierService } from '@/services/dossier.service';
 interface DossierState {
   // Collection State
   dossiers: Dossier[];
-  dossier: Dossier; // The Active/Selected Dossier
+  dossier: Dossier; // The Active/Selected Dossier check
   isLoading: boolean;
   isEditing: boolean;
 
