@@ -1,12 +1,13 @@
+// src/store/useDossierStore.ts
 import { create } from 'zustand';
-import { Dossier, DossierContainer, ShipmentStatus, ActivityCategory } from '@/types/index';
+import { Dossier, DossierContainer, ShipmentStatus, ActivityCategory, ShipmentStage, DossierTask } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 import { DossierService } from '@/services/dossier.service';
 
 interface DossierState {
   // Collection State
   dossiers: Dossier[];
-  dossier: Dossier; // The Active/Selected Dossier check
+  dossier: Dossier; // The Active/Selected Dossier
   isLoading: boolean;
   isEditing: boolean;
 
@@ -24,11 +25,16 @@ interface DossierState {
   updateDossier: <K extends keyof Dossier>(field: K, value: Dossier[K]) => void;
   updateParty: (party: 'shipper' | 'consignee' | 'notify', field: string, value: string) => void;
   setStatus: (status: ShipmentStatus) => void;
+  setStage: (stage: ShipmentStage) => void;
   
   // Container Actions
   addContainer: () => void;
   updateContainer: <K extends keyof DossierContainer>(id: string, field: K, value: DossierContainer[K]) => void;
   removeContainer: (id: string) => void;
+
+  // Task Actions (New)
+  addTask: (task: DossierTask) => void;
+  toggleTask: (taskId: string) => void;
 
   // Collaboration
   addActivity: (text: string, category: ActivityCategory, tone?: 'success' | 'neutral' | 'warning' | 'destructive') => void;
@@ -38,13 +44,38 @@ interface DossierState {
 }
 
 const DEFAULT_DOSSIER: Dossier = {
-    id: 'new', ref: 'NEW-FILE', bookingRef: '', status: 'BOOKED', clientId: '', clientName: '',
-    mblNumber: '', hblNumber: '', carrier: '', vesselName: '', voyageNumber: '',
-    pol: '', pod: '', etd: new Date(), eta: new Date(),
-    incoterm: 'FOB', mode: 'SEA_FCL', freeTimeDays: 7,
-    shipper: { name: '' }, consignee: { name: '' },
-    containers: [], activities: [], totalRevenue: 0, totalCost: 0, currency: 'MAD',
-    alerts: [], nextAction: 'Initialize Booking'
+    id: 'new', 
+    ref: 'NEW-FILE', 
+    bookingRef: '', 
+    status: 'BOOKED',
+    stage: ShipmentStage.INTAKE, // New Default
+    clientId: '', 
+    clientName: '',
+    mblNumber: '', 
+    hblNumber: '', 
+    carrier: '', 
+    vesselName: '', 
+    voyageNumber: '',
+    pol: '', 
+    pod: '', 
+    etd: new Date(), 
+    eta: new Date(),
+    incoterm: 'FOB', 
+    mode: 'SEA_FCL', 
+    freeTimeDays: 7,
+    shipper: { name: '' }, 
+    consignee: { name: '' },
+    parties: [], // New
+    containers: [], 
+    activities: [], 
+    tasks: [], // New
+    events: [], // New
+    tags: [], // New
+    totalRevenue: 0, 
+    totalCost: 0, 
+    currency: 'MAD',
+    alerts: [], 
+    nextAction: 'Initialize Booking'
 };
 
 export const useDossierStore = create<DossierState>((set, get) => ({
@@ -56,9 +87,10 @@ export const useDossierStore = create<DossierState>((set, get) => ({
   fetchDossiers: async () => {
       set({ isLoading: true });
       try {
+          // In a real scenario, this service would need to return the expanded shape
+          // For now, we assume the service logic is updated or handles partial data gracefully
           const dossiers = await DossierService.fetchAll();
           set({ dossiers, isLoading: false });
-          // Run checks on all loaded? No, expensive. Run on active if any.
       } catch (e) {
           set({ isLoading: false });
       }
@@ -71,7 +103,17 @@ export const useDossierStore = create<DossierState>((set, get) => ({
   loadDossier: (id) => {
       const found = get().dossiers.find(d => d.id === id);
       if (found) {
-          set({ dossier: JSON.parse(JSON.stringify(found)), isEditing: false });
+          // Deep copy to avoid mutating the list directly while editing
+          const safeCopy = JSON.parse(JSON.stringify(found));
+          
+          // Data repair for older records if they miss new fields
+          if (!safeCopy.tasks) safeCopy.tasks = [];
+          if (!safeCopy.events) safeCopy.events = [];
+          if (!safeCopy.parties) safeCopy.parties = [];
+          if (!safeCopy.tags) safeCopy.tags = [];
+          if (!safeCopy.stage) safeCopy.stage = ShipmentStage.INTAKE;
+
+          set({ dossier: safeCopy, isEditing: false });
           get().runSmartChecks();
       }
   },
@@ -103,6 +145,13 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       get().runSmartChecks();
   },
 
+  setStage: (stage) => {
+      set((state) => ({
+          dossier: { ...state.dossier, stage }
+      }));
+      get().addActivity(`Shipment moved to stage: ${stage}`, 'SYSTEM', 'neutral');
+  },
+
   addContainer: () => {
       const newContainer: DossierContainer = {
           id: Math.random().toString(36).substr(2,9),
@@ -131,6 +180,20 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       dossier: {
           ...state.dossier,
           containers: state.dossier.containers.filter(c => c.id !== id)
+      }
+  })),
+
+  addTask: (task) => set((state) => ({
+      dossier: {
+          ...state.dossier,
+          tasks: [...state.dossier.tasks, task]
+      }
+  })),
+
+  toggleTask: (taskId) => set((state) => ({
+      dossier: {
+          ...state.dossier,
+          tasks: state.dossier.tasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t)
       }
   })),
 

@@ -10,6 +10,21 @@ export type Currency = 'MAD' | 'USD' | 'EUR' | 'GBP';
 export type Probability = 'LOW' | 'MEDIUM' | 'HIGH';
 export type PackagingType = 'PALLETS' | 'CARTONS' | 'CRATES' | 'DRUMS' | 'LOOSE';
 
+// --- NEW ENUMS FROM PROTOTYPE ---
+export enum ShipmentStage {
+  INTAKE = 'Intake',
+  BOOKING = 'Booking',
+  ORIGIN = 'Origin',
+  TRANSIT = 'Transit',
+  DELIVERY = 'Delivery',
+  FINANCE = 'Finance',
+  CLOSED = 'Closed'
+}
+
+export type TaskCategory = 'General' | 'Booking' | 'Documents' | 'Customs' | 'Transport' | 'Finance';
+export type TaskPriority = 'High' | 'Medium' | 'Low';
+export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'STATUS_CHANGE' | 'UPLOAD' | 'EMAIL' | 'APPROVAL';
+
 // --- 2. QUOTE ENGINE MODELS ---
 export type ActivityCategory = 'NOTE' | 'SYSTEM' | 'EMAIL' | 'ALERT' | 'APPROVAL';
 
@@ -47,10 +62,9 @@ export interface QuoteLineItem {
   optionId?: string;
   section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION';
   description: string;
-  // quantity removed as requested
   buyPrice: number;
   sellPrice: number; 
-  buyCurrency: Currency; // Restored/Confirmed for the column
+  buyCurrency: Currency;
   vendorId?: string; 
   vendorName?: string; 
   validityDate?: Date; 
@@ -136,13 +150,18 @@ export interface Quote {
   options: QuoteOption[];
 }
 
-// --- 3. DOSSIER MODELS ---
+// --- 3. DOSSIER MODELS (ENHANCED) ---
 export type ShipmentStatus = 'BOOKED' | 'PICKUP' | 'AT_POL' | 'ON_WATER' | 'AT_POD' | 'CUSTOMS' | 'DELIVERED' | 'COMPLETED';
 
+// New: Expanded Party Interface for RightRail
 export interface ShipmentParty {
+    id?: string;
     name: string;
+    role: 'Shipper' | 'Consignee' | 'Notify' | 'Agent' | 'Carrier';
     address?: string;
     contact?: string;
+    email?: string;
+    phone?: string;
 }
 
 export interface DossierContainer {
@@ -166,40 +185,94 @@ export interface DossierAlert {
     actionRequired?: string;
 }
 
+// New: Task Interface for Operations Tab
+export interface DossierTask {
+  id: string;
+  title: string;
+  description?: string;
+  dueDate: string;
+  assignee: string; 
+  completed: boolean;
+  isBlocker: boolean;
+  category: TaskCategory;
+  priority: TaskPriority;
+  stage?: ShipmentStage;
+}
+
+// New: Event Interface for Tracking Tab
+export interface ShipmentEvent {
+  id: string;
+  title: string;
+  location?: string;
+  timestamp: string;
+  isException?: boolean;
+  exceptionReason?: string;
+  source?: 'Manual' | 'System' | 'Carrier';
+}
+
 export interface Dossier {
   id: string;
   ref: string; 
   bookingRef: string; 
-  status: ShipmentStatus;
+  
+  // Stages & Status
+  status: ShipmentStatus;      // Technical Status
+  stage: ShipmentStage;        // Visual Workflow Stage (New)
+  
   clientId: string;
   clientName: string;
   quoteId?: string;
+  
+  // Reference
   mblNumber: string; 
   hblNumber: string; 
+  customerReference?: string;
+  
+  // Transport Details
   carrier: string;
   vesselName: string;
   voyageNumber: string;
   pol: string;
   pod: string;
+  incoterm: Incoterm;
+  incotermPlace?: string; // New
+  mode: TransportMode;
+  
+  // Dates
   etd: Date;
   eta: Date;
   ata?: Date; 
-  shipper: ShipmentParty;
-  consignee: ShipmentParty;
-  notify?: ShipmentParty;
-  incoterm: Incoterm;
-  mode: TransportMode;
+  
+  // Parties (Refactored)
+  // We keep shipper/consignee for backward compat, but use parties[] for the new UI
+  shipper: { name: string; address?: string };
+  consignee: { name: string; address?: string };
+  notify?: { name: string; address?: string };
+  parties: ShipmentParty[]; // New: Full list for RightRail
+  
+  // Cargo
   freeTimeDays: number; 
   vgmCutOff?: Date;
   portCutOff?: Date;
   docCutOff?: Date;
   containers: DossierContainer[];
+  
+  // Operations Data
   activities: ActivityItem[];
   alerts: DossierAlert[];
+  tasks: DossierTask[];        // New
+  events: ShipmentEvent[];     // New
+  tags: string[];              // New
+  
+  // Finance
   nextAction: string;
   totalRevenue: number;
   totalCost: number;
   currency: Currency;
+  
+  // Meta
+  createdDate?: string;
+  owner?: string;
 }
 
 // --- 4. FINANCE ENGINE ---
@@ -289,7 +362,7 @@ export interface ClientDocument {
   expiryDate?: Date;
   size: string;
   url: string;
-  path?: string; // Added for Supabase storage reference
+  path?: string; 
   description?: string;
 }
 
@@ -321,18 +394,15 @@ export interface ClientSupplier {
   country?: string;
   city?: string;
   address?: string;
-  
-  // Enhanced Contact Info
   contactName?: string;
   email?: string;
   phone?: string;
-  socialQrCodeUrl?: string; // WeChat/WhatsApp QR
-  socialId?: string;        // Added Social ID (WeChat ID, etc.)
+  socialQrCodeUrl?: string; 
+  socialId?: string;        
   socialType?: 'WECHAT' | 'WHATSAPP' | 'OTHER';
-  
   products?: string; 
   website?: string;
-  defaultIncoterms?: Incoterm[]; // Preferred Incoterms
+  defaultIncoterms?: Incoterm[]; 
   notes?: string;
 }
 

@@ -1,115 +1,157 @@
-import { Dossier, DossierAlert } from '@/types/index';
-import { differenceInDays } from 'date-fns';
+import { Dossier, ShipmentStatus, ShipmentStage } from "@/types/index";
 
-// --- MOCK DATA (Moved from Store) ---
+// --- MOCK DATABASE ---
 const MOCK_DOSSIERS: Dossier[] = [
-    {
-        id: '1', ref: 'IMP-24-0056', bookingRef: 'BK-998877', status: 'ON_WATER', clientId: 'cli_1', clientName: 'TexNord SARL',
-        mblNumber: 'MAEU123456789', hblNumber: 'ATL-IMP-0056', carrier: 'Maersk Line',
-        vesselName: 'CMA CGM JULES VERNE', voyageNumber: '0ME2QE1MA',
-        pol: 'SHANGHAI (CN)', pod: 'CASABLANCA (MAP)', etd: new Date('2024-11-20'), eta: new Date('2024-12-05'),
-        incoterm: 'FOB', mode: 'SEA_FCL', freeTimeDays: 7,
-        shipper: { name: 'Shanghai Textiles Ltd' }, consignee: { name: 'TexNord SARL' },
-        containers: [{ id: 'c1', number: 'MSKU9012345', type: '40HC', seal: '123456', weight: 12500, packages: 500, packageType: 'CARTONS', volume: 65, status: 'ON_WATER' }],
-        activities: [], totalRevenue: 45000, totalCost: 32000, currency: 'MAD',
-        alerts: [], nextAction: 'Track Vessel Arrival'
-    },
-    {
-        id: '2', ref: 'EXP-24-0102', bookingRef: 'CMA-112233', status: 'BOOKED', clientId: 'cli_2', clientName: 'AgriSouss',
-        mblNumber: '', hblNumber: 'ATL-EXP-0102', carrier: 'CMA CGM',
-        vesselName: 'TANGER EXPRESS', voyageNumber: 'TGX99',
-        pol: 'AGADIR (MAP)', pod: 'ROTTERDAM (NL)', etd: new Date('2024-12-10'), eta: new Date('2024-12-16'),
-        incoterm: 'CIF', mode: 'SEA_FCL', freeTimeDays: 5,
-        shipper: { name: 'AgriSouss' }, consignee: { name: 'Fresh Market BV' },
-        containers: [], activities: [], totalRevenue: 28000, totalCost: 21000, currency: 'EUR',
-        alerts: [], nextAction: 'Collect Containers'
-    }
+  {
+    id: "dos-1001",
+    ref: "REF-2024-889",
+    bookingRef: "CMA-AE-99821",
+    status: "ON_WATER" as ShipmentStatus,
+    stage: ShipmentStage.TRANSIT,
+    clientId: "cli-1",
+    clientName: "Atlas Textiles SARL",
+    mblNumber: "CMAU123456789",
+    hblNumber: "ATL-24-892",
+    carrier: "CMA CGM",
+    vesselName: "CMA CGM MAGELLAN",
+    voyageNumber: "0FL3QE1MA",
+    pol: "Tanger Med",
+    pod: "Hamburg",
+    etd: new Date("2024-03-10"),
+    eta: new Date("2024-03-18"),
+    incoterm: "FOB",
+    mode: "SEA_FCL",
+    freeTimeDays: 7,
+    shipper: { name: "Morocco Garments Co.", address: "Zone Franche, Tanger" },
+    consignee: { name: "German Fashion GmbH", address: "HafenCity, Hamburg" },
+    parties: [
+       { id: 'p1', role: 'Notify', name: 'Hamburg Logistics Agent', email: 'ops@hla.de' },
+       { id: 'p2', role: 'Agent', name: 'Clearance Masters', email: 'declarant@customs.ma' }
+    ],
+    containers: [
+      { 
+         id: "cnt-1", number: "CMAU9988771", type: "40HC", seal: "SL-991", 
+         weight: 12500, packages: 450, packageType: "CARTONS", volume: 68, status: "ON_WATER" 
+      },
+      { 
+         id: "cnt-2", number: "CMAU9988772", type: "40HC", seal: "SL-992", 
+         weight: 12100, packages: 420, packageType: "CARTONS", volume: 68, status: "ON_WATER" 
+      }
+    ],
+    tasks: [
+      { id: "t1", title: "Verify Bill of Lading", category: "Documents", priority: "High", completed: true, dueDate: "2024-03-11", assignee: "KA", isBlocker: false },
+      { id: "t2", title: "Send Arrival Notice", category: "General", priority: "Medium", completed: false, dueDate: "2024-03-16", assignee: "KA", isBlocker: false },
+      { id: "t3", title: "Customs Clearance", category: "Customs", priority: "High", completed: false, dueDate: "2024-03-17", assignee: "Broker", isBlocker: true }
+    ],
+    events: [
+      { id: "e1", title: "Shipment Created", timestamp: "2024-03-01T09:00:00Z", source: "System" },
+      { id: "e2", title: "Booking Confirmed", timestamp: "2024-03-02T14:30:00Z", source: "Carrier" },
+      { id: "e3", title: "Empty Container Picked Up", timestamp: "2024-03-05T08:15:00Z", location: "Tanger Med Depot", source: "Manual" },
+      { id: "e4", title: "Gate In Full", timestamp: "2024-03-08T11:20:00Z", location: "Tanger Med Terminal", source: "System" },
+      { id: "e5", title: "Vessel Departure", timestamp: "2024-03-10T23:45:00Z", location: "Tanger Med", source: "Carrier" },
+    ],
+    revenue: [
+       { id: "r1", dossierId: "dos-1001", type: "INCOME", code: "FRT", description: "Ocean Freight", currency: "USD", amount: 1200, exchangeRate: 10.05, vatRate: 0, totalAmount: 12060, status: "INVOICED", isBillable: true, amountLocal: 12060, vatAmount: 0, vatRule: "EXPORT_0_ART92" },
+       { id: "r2", dossierId: "dos-1001", type: "INCOME", code: "THC", description: "THC Origin", currency: "MAD", amount: 1800, exchangeRate: 1, vatRate: 20, totalAmount: 2160, status: "INVOICED", isBillable: true, amountLocal: 1800, vatAmount: 360, vatRule: "STD_20" }
+    ],
+    costs: [
+       { id: "c1", dossierId: "dos-1001", type: "EXPENSE", code: "FRT_BUY", description: "Ocean Freight Buying", currency: "USD", amount: 950, exchangeRate: 10.05, vatRate: 0, totalAmount: 9547.5, status: "PAID", isBillable: false, amountLocal: 9547.5, vatAmount: 0, vatRule: "EXPORT_0_ART92" }
+    ],
+    activities: [
+       { id: "a1", category: "SYSTEM", text: "Shipment moved to TRANSIT stage", timestamp: new Date("2024-03-10T10:00:00Z"), meta: "System" },
+       { id: "a2", category: "EMAIL", text: "Sent booking confirmation to client", timestamp: new Date("2024-03-02T15:00:00Z"), meta: "Karim Alami" }
+    ],
+    tags: ["VIP Client", "Textile"],
+    totalRevenue: 14220,
+    totalCost: 9547.5,
+    currency: "MAD",
+    alerts: [],
+    nextAction: "Track Arrival"
+  },
+  {
+    id: "dos-1002",
+    ref: "REF-2024-890",
+    bookingRef: "AF-KLM-882",
+    status: "BOOKED" as ShipmentStatus,
+    stage: ShipmentStage.BOOKING,
+    clientId: "cli-2",
+    clientName: "TechParts Maroc",
+    mblNumber: "057-22991188",
+    hblNumber: "ATL-AIR-204",
+    carrier: "Air France",
+    vesselName: "AF1288",
+    voyageNumber: "N/A",
+    pol: "Paris CDG",
+    pod: "Casablanca CMN",
+    etd: new Date("2024-03-20"),
+    eta: new Date("2024-03-20"),
+    incoterm: "EXW",
+    mode: "AIR",
+    freeTimeDays: 2,
+    shipper: { name: "Tech Components SA", address: "Roissy, France" },
+    consignee: { name: "TechParts Maroc", address: "Sidi Maarouf, Casablanca" },
+    parties: [],
+    containers: [],
+    tasks: [
+       { id: "t4", title: "Arrange Pickup at EXW", category: "Transport", priority: "High", completed: false, dueDate: "2024-03-18", assignee: "KA", isBlocker: true }
+    ],
+    events: [],
+    revenue: [],
+    costs: [],
+    activities: [],
+    tags: ["Urgent", "AOG"],
+    totalRevenue: 0,
+    totalCost: 0,
+    currency: "MAD",
+    alerts: [],
+    nextAction: "Confirm Pickup"
+  }
 ];
 
 export const DossierService = {
-    fetchAll: async (): Promise<Dossier[]> => {
-        // Simulate API latency
-        return new Promise((resolve) => {
-            setTimeout(() => resolve([...MOCK_DOSSIERS]), 500);
-        });
-    },
+  // Simulate API Delay
+  delay: (ms: number) => new Promise(resolve => setTimeout(resolve, ms)),
 
-    save: async (dossier: Dossier): Promise<void> => {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                // Log to console to satisfy "unused variable" linter check
-                console.log("Saving dossier mock:", dossier.ref);
-                resolve();
-            }, 800);
-        });
-    },
+  async fetchAll(): Promise<Dossier[]> {
+    await this.delay(600);
+    return MOCK_DOSSIERS;
+  },
 
-    /**
-     * The "Expert Logic Engine" - Pure Function
-     * Analyzes a dossier and returns Alerts and Next Actions
-     */
-    analyzeHealth: (d: Dossier): { alerts: DossierAlert[], nextAction: string } => {
-        const alerts: DossierAlert[] = [];
-        let nextAction = "Monitor Status";
+  async fetchById(id: string): Promise<Dossier | undefined> {
+    await this.delay(400);
+    if (id === 'new') return undefined;
+    
+    const found = MOCK_DOSSIERS.find(d => d.id === id);
+    if (found) return found;
 
-        // 1. FINANCIAL CHECK (Margin Integrity)
-        const margin = d.totalRevenue - d.totalCost;
-        const marginPercent = d.totalRevenue > 0 ? (margin / d.totalRevenue) : 0;
-        
-        if (marginPercent < 0.10 && d.totalRevenue > 0) {
-            alerts.push({
-                id: 'fin-1', type: 'WARNING', 
-                message: `Low Margin Warning (${(marginPercent*100).toFixed(1)}%)`,
-                actionRequired: 'Review costs or request manager approval'
-            });
-        }
-        if (margin < 0) {
-            alerts.push({
-                id: 'fin-2', type: 'BLOCKER',
-                message: 'Negative Profit Detected',
-                actionRequired: 'Hold release until costs verified'
-            });
-        }
+    // Fallback: Return the main demo dossier if ID not found (for smooth dev experience)
+    return { ...MOCK_DOSSIERS[0], id };
+  },
 
-        // 2. DOCUMENTATION & COMPLIANCE
-        if (d.status === 'ON_WATER' && !d.mblNumber) {
-            alerts.push({
-                id: 'doc-1', type: 'BLOCKER',
-                message: 'Missing Master Bill of Lading (MBL)',
-                actionRequired: 'Enter MBL to enable tracking'
-            });
-            nextAction = "Update MBL Number";
-        }
+  async save(dossier: Dossier): Promise<Dossier> {
+    await this.delay(800);
+    console.log("Saved Dossier:", dossier);
+    return dossier;
+  },
 
-        // 3. OPERATIONAL DEADLINES (Demurrage Risk)
-        const today = new Date();
-        if (d.status === 'AT_POD') {
-            const etaDate = new Date(d.eta);
-            const daysAtPort = differenceInDays(today, etaDate);
-            const daysLeft = d.freeTimeDays - daysAtPort;
+  analyzeHealth(dossier: Dossier) {
+     const alerts: any[] = [];
+     
+     // 1. Check Margin
+     const revenue = dossier.totalRevenue || 0;
+     const cost = dossier.totalCost || 0;
+     if (revenue > 0 && (revenue - cost) / revenue < 0.1) {
+        alerts.push({ id: 'al-1', type: 'WARNING', message: 'Low profit margin (<10%)' });
+     }
 
-            if (daysLeft < 0) {
-                alerts.push({
-                    id: 'ops-1', type: 'BLOCKER',
-                    message: `DEMURRAGE ALERT: ${Math.abs(daysLeft)} Days Overdue`,
-                    actionRequired: 'Urgent: Clear Customs & Return Empty'
-                });
-                nextAction = "Expedite Clearance";
-            } else if (daysLeft <= 2) {
-                alerts.push({
-                    id: 'ops-2', type: 'WARNING',
-                    message: `Free Time Critical: ${daysLeft} Days Left`,
-                    actionRequired: 'Prioritize delivery'
-                });
-                nextAction = "Schedule Haulage";
-            }
-        }
+     // 2. Check Dates
+     if (dossier.eta && new Date(dossier.eta) < new Date() && dossier.stage !== ShipmentStage.DELIVERY) {
+        alerts.push({ id: 'al-2', type: 'BLOCKER', message: 'Shipment past ETA but not delivered' });
+     }
 
-        // 4. NEXT BEST ACTION DERIVATION
-        if (d.status === 'BOOKED') nextAction = "Confirm Departure (ETD)";
-        else if (d.status === 'ON_WATER' && alerts.length === 0) nextAction = "Pre-Alert & Invoicing";
-        else if (d.status === 'CUSTOMS') nextAction = "Monitor DUM Status";
-
-        return { alerts, nextAction };
-    }
+     return { 
+        alerts, 
+        nextAction: alerts.length > 0 ? 'Resolve Alerts' : 'Monitor Transit' 
+     };
+  }
 };
