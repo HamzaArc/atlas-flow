@@ -1,12 +1,10 @@
 import { 
   Users, MapPin, Calendar, Tag, 
-  MoreHorizontal, Phone, Mail, Globe, 
+  MoreHorizontal, Mail,
   AlertCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useDossierStore } from "@/store/useDossierStore";
 import { ShipmentParty } from "@/types/index";
@@ -75,7 +73,13 @@ export const DossierRightRail = () => {
          <div className="space-y-1">
             <PartyCard role="Shipper" data={dossier.shipper} />
             <PartyCard role="Consignee" data={dossier.consignee} />
-            {dossier.notify && <PartyCard role="Notify" data={dossier.notify} />}
+            {dossier.notify && (
+                <PartyCard 
+                    role="Notify" 
+                    // FIX: Ensure notify object satisfies ShipmentParty by injecting role
+                    data={{ ...dossier.notify, role: 'Notify' } as ShipmentParty} 
+                />
+            )}
             {/* Map over generic parties array if populated */}
             {dossier.parties?.filter(p => p.role === 'Agent' || p.role === 'Carrier').map((p, i) => (
                <PartyCard key={i} role={p.role} data={p} />

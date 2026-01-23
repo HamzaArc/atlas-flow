@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Search, Plus, Filter, MoreHorizontal, 
   Building2, ArrowUpRight, AlertCircle, 
@@ -6,7 +7,7 @@ import {
 } from "lucide-react";
 
 import { useClientStore } from "@/store/useClientStore";
-import { Client } from "@/types/index"; // FIXED IMPORT
+import { Client } from "@/types/index"; 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,11 +24,8 @@ import {
 } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-interface ClientListPageProps {
-    onNavigate: (view: 'list' | 'details') => void;
-}
-
-export default function ClientListPage({ onNavigate }: ClientListPageProps) {
+export default function ClientListPage() {
+  const navigate = useNavigate();
   const { 
       clients, fetchClients, isLoading, 
       filters, setSearch, setFilterStatus,
@@ -54,12 +52,12 @@ export default function ClientListPage({ onNavigate }: ClientListPageProps) {
 
   const handleCreate = () => {
       createClient();
-      onNavigate('details');
+      navigate('/clients/new');
   };
 
   const handleRowClick = (id: string) => {
       loadClient(id);
-      onNavigate('details');
+      navigate(`/clients/${id}`);
   };
 
   const getStatusBadge = (status: string) => {

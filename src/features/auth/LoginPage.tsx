@@ -1,19 +1,26 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom"; // FIX: Added Hook
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Lock, Mail, Globe, AlertCircle, ArrowRight, Loader2 } from "lucide-react";
+import { useUserStore } from "@/store/useUserStore"; 
 
-interface LoginPageProps {
-  onLoginSuccess: () => void;
-}
-
-export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
+export default function LoginPage() {
+  const navigate = useNavigate(); // FIX: Init Hook
+  const { login, isAuthenticated } = useUserStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // FIX: Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard');
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,7 +38,9 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
       }
 
       // Successful login
-      onLoginSuccess();
+      login(); // Update Store
+      navigate('/dashboard'); // FIX: Navigate to system
+      
     } catch (err: any) {
       setError(err.message || "Failed to sign in");
     } finally {
@@ -59,9 +68,6 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
       <div className="w-full max-w-md px-6">
         <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 p-8 rounded-3xl shadow-2xl relative group">
           
-          {/* Decorative border glow */}
-          <div className="absolute -inset-[1px] bg-gradient-to-r from-blue-500/20 via-cyan-500/20 to-indigo-500/20 rounded-3xl -z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold mb-2 text-white">Welcome Back</h1>
             <p className="text-slate-400 text-sm">

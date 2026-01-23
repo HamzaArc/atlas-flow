@@ -6,6 +6,9 @@ export type Incoterm =
   | 'FAS' | 'FOB' | 'CFR' | 'CIF';
 
 export type TransportMode = 'SEA_FCL' | 'SEA_LCL' | 'AIR' | 'ROAD';
+// FIX: Alias ShipmentMode to TransportMode
+export type ShipmentMode = TransportMode;
+
 export type Currency = 'MAD' | 'USD' | 'EUR' | 'GBP';
 export type Probability = 'LOW' | 'MEDIUM' | 'HIGH';
 export type PackagingType = 'PALLETS' | 'CARTONS' | 'CRATES' | 'DRUMS' | 'LOOSE';
@@ -244,9 +247,9 @@ export interface Dossier {
   ata?: Date; 
   
   // Parties (Refactored)
-  // We keep shipper/consignee for backward compat, but use parties[] for the new UI
-  shipper: { name: string; address?: string };
-  consignee: { name: string; address?: string };
+  // FIX: Explicitly type these as ShipmentParty to ensure 'role' exists
+  shipper: ShipmentParty;
+  consignee: ShipmentParty;
   notify?: { name: string; address?: string };
   parties: ShipmentParty[]; // New: Full list for RightRail
   
@@ -267,6 +270,7 @@ export interface Dossier {
   // Finance
   nextAction: string;
   totalRevenue: number;
+  revenue?: number; // FIX: Added for backward compatibility
   totalCost: number;
   currency: Currency;
   
@@ -277,6 +281,9 @@ export interface Dossier {
 
 // --- 4. FINANCE ENGINE ---
 export type ChargeType = 'INCOME' | 'EXPENSE';
+// FIX: Alias ChargeCategory
+export type ChargeCategory = ChargeType;
+
 export type ChargeStatus = 'ESTIMATED' | 'ACCRUED' | 'READY_TO_INVOICE' | 'INVOICED' | 'POSTED' | 'PAID' | 'PARTIAL';
 export type InvoiceStatus = 'DRAFT' | 'ISSUED' | 'SENT' | 'PAID' | 'OVERDUE' | 'CANCELLED';
 export type InvoiceType = 'INVOICE' | 'CREDIT_NOTE' | 'PROFORMA';
@@ -286,6 +293,8 @@ export interface ChargeLine {
     id: string;
     dossierId: string;
     type: ChargeType;
+    // FIX: Added category property
+    category?: ChargeCategory;
     code: string; 
     description: string;
     vendorId?: string; 

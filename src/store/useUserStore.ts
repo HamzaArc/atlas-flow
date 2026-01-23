@@ -8,17 +8,25 @@ interface UserState {
   activeUser: CompanyUser | null; // For editing
   isLoading: boolean;
   
+  // FIX: Added auth state properties
+  isAuthenticated: boolean;
+  
   fetchUsers: () => Promise<void>;
   setActiveUser: (user: CompanyUser | null) => void;
   createNewUser: () => void;
   saveUser: (user: CompanyUser) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
+
+  // FIX: Added Auth actions
+  login: () => void;
+  logout: () => void;
 }
 
 export const useUserStore = create<UserState>((set, get) => ({
   users: [],
   activeUser: null,
   isLoading: false,
+  isAuthenticated: false, // Default state
 
   fetchUsers: async () => {
     set({ isLoading: true });
@@ -70,5 +78,9 @@ export const useUserStore = create<UserState>((set, get) => ({
           set({ isLoading: false });
           useToast.getState().toast(e.message, "error");
       }
-  }
+  },
+
+  // FIX: Implement Auth Actions
+  login: () => set({ isAuthenticated: true }),
+  logout: () => set({ isAuthenticated: false, activeUser: null })
 }));

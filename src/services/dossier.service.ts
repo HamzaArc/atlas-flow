@@ -22,8 +22,9 @@ const MOCK_DOSSIERS: Dossier[] = [
     incoterm: "FOB",
     mode: "SEA_FCL",
     freeTimeDays: 7,
-    shipper: { name: "Morocco Garments Co.", address: "Zone Franche, Tanger" },
-    consignee: { name: "German Fashion GmbH", address: "HafenCity, Hamburg" },
+    // FIX: Added 'role' to satisfy ShipmentParty interface
+    shipper: { name: "Morocco Garments Co.", address: "Zone Franche, Tanger", role: 'Shipper' },
+    consignee: { name: "German Fashion GmbH", address: "HafenCity, Hamburg", role: 'Consignee' },
     parties: [
        { id: 'p1', role: 'Notify', name: 'Hamburg Logistics Agent', email: 'ops@hla.de' },
        { id: 'p2', role: 'Agent', name: 'Clearance Masters', email: 'declarant@customs.ma' }
@@ -50,13 +51,8 @@ const MOCK_DOSSIERS: Dossier[] = [
       { id: "e4", title: "Gate In Full", timestamp: "2024-03-08T11:20:00Z", location: "Tanger Med Terminal", source: "System" },
       { id: "e5", title: "Vessel Departure", timestamp: "2024-03-10T23:45:00Z", location: "Tanger Med", source: "Carrier" },
     ],
-    revenue: [
-       { id: "r1", dossierId: "dos-1001", type: "INCOME", code: "FRT", description: "Ocean Freight", currency: "USD", amount: 1200, exchangeRate: 10.05, vatRate: 0, totalAmount: 12060, status: "INVOICED", isBillable: true, amountLocal: 12060, vatAmount: 0, vatRule: "EXPORT_0_ART92" },
-       { id: "r2", dossierId: "dos-1001", type: "INCOME", code: "THC", description: "THC Origin", currency: "MAD", amount: 1800, exchangeRate: 1, vatRate: 20, totalAmount: 2160, status: "INVOICED", isBillable: true, amountLocal: 1800, vatAmount: 360, vatRule: "STD_20" }
-    ],
-    costs: [
-       { id: "c1", dossierId: "dos-1001", type: "EXPENSE", code: "FRT_BUY", description: "Ocean Freight Buying", currency: "USD", amount: 950, exchangeRate: 10.05, vatRate: 0, totalAmount: 9547.5, status: "PAID", isBillable: false, amountLocal: 9547.5, vatAmount: 0, vatRule: "EXPORT_0_ART92" }
-    ],
+    // FIX: Removed 'revenue' and 'costs' arrays because 'revenue' in Dossier interface is a number.
+    // The financial details are likely handled by a separate FinanceService or different property.
     activities: [
        { id: "a1", category: "SYSTEM", text: "Shipment moved to TRANSIT stage", timestamp: new Date("2024-03-10T10:00:00Z"), meta: "System" },
        { id: "a2", category: "EMAIL", text: "Sent booking confirmation to client", timestamp: new Date("2024-03-02T15:00:00Z"), meta: "Karim Alami" }
@@ -88,16 +84,15 @@ const MOCK_DOSSIERS: Dossier[] = [
     incoterm: "EXW",
     mode: "AIR",
     freeTimeDays: 2,
-    shipper: { name: "Tech Components SA", address: "Roissy, France" },
-    consignee: { name: "TechParts Maroc", address: "Sidi Maarouf, Casablanca" },
+    // FIX: Added role
+    shipper: { name: "Tech Components SA", address: "Roissy, France", role: 'Shipper' },
+    consignee: { name: "TechParts Maroc", address: "Sidi Maarouf, Casablanca", role: 'Consignee' },
     parties: [],
     containers: [],
     tasks: [
        { id: "t4", title: "Arrange Pickup at EXW", category: "Transport", priority: "High", completed: false, dueDate: "2024-03-18", assignee: "KA", isBlocker: true }
     ],
     events: [],
-    revenue: [],
-    costs: [],
     activities: [],
     tags: ["Urgent", "AOG"],
     totalRevenue: 0,

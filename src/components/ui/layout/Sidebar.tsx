@@ -1,4 +1,5 @@
-import React from 'react'; // Removed useState
+import React from 'react'; 
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   FileText, 
   Ship, 
@@ -25,69 +26,63 @@ import {
 } from "@/components/ui/tooltip";
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
-    currentView: string;
-    onNavigate: (view: 'dashboard' | 'dossier' | 'crm' | 'finance' | 'tariffs' | 'users') => void;
     onLogout?: () => void;
-    // New Control Props
     isCollapsed: boolean;
     onToggleCollapse: () => void;
 }
 
 export function Sidebar({ 
   className, 
-  currentView, 
-  onNavigate, 
   onLogout,
-  isCollapsed,        // Received from parent
-  onToggleCollapse    // Received from parent
+  isCollapsed,        
+  onToggleCollapse    
 }: SidebarProps) {
   
+  const navigate = useNavigate();
+  const location = useLocation();
   const expanded = !isCollapsed;
 
+  // Helper to check active route
+  const isActive = (path: string) => {
+     if (path === '/dashboard' && location.pathname === '/dashboard') return true;
+     if (path !== '/dashboard' && location.pathname.startsWith(path)) return true;
+     return false;
+  };
+
   const NavItem = ({ 
+      path, 
       icon: Icon, 
       label, 
-      active = false, 
-      onClick,
-      status,       // 'beta' | 'soon' | 'new'
+      status,      
       statusText
   }: { 
-      id: string, 
+      path: string, 
       icon: any, 
       label: string, 
-      active?: boolean, 
-      onClick: () => void,
       status?: 'beta' | 'soon' | 'new',
       statusText?: string
   }) => {
       const isSoon = status === 'soon';
+      const active = isActive(path);
 
       // Base Button Content
       const content = (
         <Button 
           variant="ghost" 
-          onClick={isSoon ? undefined : onClick}
+          onClick={isSoon ? undefined : () => navigate(path)}
           disabled={isSoon}
           className={cn(
               "relative group w-full flex items-center justify-start p-0 overflow-hidden", 
-              // Shared Transition Physics
               "transition-all duration-300 ease-in-out",
-              
-              // Height
               "h-12", 
-              
-              // Active / Hover Styles
               active 
                   ? "bg-blue-50/80 text-blue-700"
                   : "text-slate-500 hover:bg-slate-50 hover:text-slate-900",
-              
               isSoon && "opacity-50 cursor-not-allowed hover:bg-transparent"
           )}
         >
-          {/* FIXED ICON CONTAINER - Anchors the visuals to the 72px grid */}
+          {/* FIXED ICON CONTAINER */}
           <div className="min-w-[72px] w-[72px] h-full flex items-center justify-center shrink-0 relative z-20">
-             
-             {/* Active Indicator */}
              <div className={cn(
                "absolute left-0 top-1/2 -translate-y-1/2 w-1 bg-blue-600 rounded-r-full transition-all duration-300 ease-in-out",
                active ? "h-8 opacity-100" : "h-0 opacity-0"
@@ -99,7 +94,7 @@ export function Sidebar({
              )} />
           </div>
           
-          {/* TEXT CONTAINER - Reveal */}
+          {/* TEXT CONTAINER */}
           <div className={cn(
             "flex items-center flex-1 overflow-hidden whitespace-nowrap pl-2", 
             "transition-all duration-300 ease-in-out",
@@ -109,7 +104,6 @@ export function Sidebar({
               {label}
             </span>
             
-            {/* Status Flag */}
             {status && statusText && (
                 <span className={cn(
                     "ml-auto text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border",
@@ -121,7 +115,6 @@ export function Sidebar({
                 </span>
             )}
 
-            {/* Chevron */}
             {!isSoon && (
               <ChevronRight className={cn(
                 "h-3 w-3 ml-2 text-slate-300 transition-all duration-300 ease-in-out",
@@ -166,10 +159,7 @@ export function Sidebar({
         "transition-all duration-300 ease-in-out",
         expanded ? "h-10 opacity-100 mt-2 mb-1" : "h-0 opacity-0 mt-0 mb-0"
       )}>
-        {/* EXACT ALIGNMENT SPACER: Matches the 72px Icon Column */}
         <div className="min-w-[0px] w-[20px] shrink-0" />
-        
-        {/* Content Area - Aligned with NavItem text */}
         <div className="flex-1 flex items-center pr-4 pl-2">
             <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
               {title}
@@ -182,7 +172,6 @@ export function Sidebar({
 
   return (
     <TooltipProvider>
-      {/* SIDEBAR CONTAINER */}
       <div 
         className={cn(
           "fixed left-0 top-0 z-50 h-screen bg-white border-r border-slate-200/60",
@@ -193,10 +182,9 @@ export function Sidebar({
         )}
       >
         
-        {/* HEADER / LOGO AREA */}
+        {/* HEADER / LOGO */}
         <div className="flex items-center h-[70px] shrink-0 relative overflow-hidden">
             <div className="flex items-center w-full">
-                {/* Fixed Logo Container */}
                 <div className="min-w-[72px] w-[72px] flex items-center justify-center z-20 bg-white">
                    <div className={cn(
                     "h-9 w-9 rounded-xl flex items-center justify-center transition-colors duration-300 ease-in-out",
@@ -206,7 +194,6 @@ export function Sidebar({
                    </div>
                 </div>
                 
-                {/* Title Reveal */}
                 <div className={cn(
                   "flex flex-col justify-center whitespace-nowrap pl-1",
                   "transition-all duration-300 ease-in-out",
@@ -218,7 +205,7 @@ export function Sidebar({
             </div>
         </div>
 
-        {/* SEPARATOR (Visible only when collapsed) */}
+        {/* SEPARATOR */}
         <div className={cn(
           "w-10 mx-auto h-px bg-slate-100 my-2 transition-all duration-300 ease-in-out",
           expanded ? "opacity-0 h-0 my-0" : "opacity-100"
@@ -228,82 +215,31 @@ export function Sidebar({
         <div className="flex-1 py-2 overflow-y-auto overflow-x-hidden scrollbar-none space-y-1">
           
           <SectionHeader title="Operations" />
-          <NavItem 
-              id="dashboard" 
-              icon={FileText} 
-              label="Quotes (Devis)" 
-              active={currentView === 'dashboard' || currentView === 'create'}
-              onClick={() => onNavigate('dashboard')} 
-          />
-          <NavItem 
-              id="tariffs" 
-              icon={Banknote} 
-              label="Tariff Manager" 
-              active={currentView === 'tariffs'}
-              onClick={() => onNavigate('tariffs')} 
-          />
-          <NavItem 
-              id="dossier" 
-              icon={Ship} 
-              label="Shipment Dossiers" 
-              active={currentView === 'dossier'}
-              onClick={() => onNavigate('dossier')} 
-          />
+          <NavItem path="/quotes" icon={FileText} label="Quotes (Devis)" />
+          <NavItem path="/tariffs" icon={Banknote} label="Tariff Manager" />
+          <NavItem path="/dossiers" icon={Ship} label="Shipment Dossiers" />
 
           <SectionHeader title="Relations" />
-          <NavItem 
-              id="crm" 
-              icon={Users} 
-              label="Customers (Clients)" 
-              active={currentView === 'crm'} 
-              onClick={() => onNavigate('crm')} 
-          />
-          <NavItem 
-              id="finance" 
-              icon={Briefcase} 
-              label="Finance Hub" 
-              active={currentView === 'finance'} 
-              onClick={() => onNavigate('finance')} 
-              status="soon" statusText="In Dev"
-          />
+          <NavItem path="/clients" icon={Users} label="Customers (Clients)" />
+          <NavItem path="/finance" icon={Briefcase} label="Finance Hub" status="soon" statusText="In Dev" />
 
           <SectionHeader title="Configuration" />
-          <NavItem 
-              id="users" 
-              icon={UserCog} 
-              label="Team Directory" 
-              active={currentView === 'users'} 
-              onClick={() => onNavigate('users')} 
-          />
-           <NavItem 
-              id="analytics" 
-              icon={LayoutDashboard} 
-              label="Analytics" 
-              onClick={() => {}} 
-              status="soon" statusText="In Dev"
-          />
-          <NavItem 
-              id="settings" 
-              icon={Settings} 
-              label="Settings" 
-              onClick={() => {}} 
-              status="soon" statusText="In Dev"
-          />
+          <NavItem path="/users" icon={UserCog} label="Team Directory" />
+          <NavItem path="/analytics" icon={LayoutDashboard} label="Analytics" status="soon" statusText="In Dev" />
+          <NavItem path="/settings" icon={Settings} label="Settings" status="soon" statusText="In Dev" />
         </div>
 
-        {/* TOGGLE BUTTON AREA */}
+        {/* TOGGLE BUTTON */}
         <div className="shrink-0 p-3 bg-white border-t border-slate-50 z-20">
              <Button
                 variant="ghost"
-                onClick={onToggleCollapse} // Uses prop
+                onClick={onToggleCollapse}
                 className="w-full flex items-center justify-start h-10 px-0 text-slate-500 hover:text-slate-900 hover:bg-slate-50"
              >
-                 {/* Icon Container */}
                  <div className="min-w-[48px] flex justify-center items-center">
                     {expanded ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeftOpen className="h-5 w-5" />}
                  </div>
                  
-                 {/* Label */}
                  <div className={cn(
                     "whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out pl-1 text-sm font-medium",
                     expanded ? "opacity-100 w-auto" : "opacity-0 w-0"
@@ -313,7 +249,7 @@ export function Sidebar({
              </Button>
         </div>
 
-        {/* FOOTER - USER PROFILE */}
+        {/* FOOTER */}
         <div className="shrink-0 p-3 bg-white border-t border-slate-50 z-20">
             <div 
               onClick={onLogout}
@@ -353,3 +289,5 @@ export function Sidebar({
     </TooltipProvider>
   );
 }
+
+export default Sidebar;

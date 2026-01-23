@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { 
   Anchor, Clock, MapPin, Plus, Calendar, 
-  AlertTriangle, CheckCircle2, Box, Share2, 
-  ExternalLink, Copy, Activity
+  AlertTriangle, Share2, 
+  Copy, Activity
 } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
 import { ShipmentEvent } from "@/types/index";

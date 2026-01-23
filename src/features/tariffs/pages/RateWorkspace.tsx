@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useNavigate } from "react-router-dom"; // FIX: Added Hook
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,11 +16,9 @@ const INCOTERMS = [
     "EXW", "FCA", "FAS","FOB", "CPT","CFR", "CIF" , "CIP", "DAP", "DPU", "DDP"
 ];
 
-interface RateWorkspaceProps {
-    onBack: () => void;
-}
-
-export default function RateWorkspace({ onBack }: RateWorkspaceProps) {
+// FIX: Removed Props Interface
+export default function RateWorkspace() {
+    const navigate = useNavigate(); // FIX: Init Hook
     const { activeRate, updateRateField, saveRate, isLoading } = useTariffStore();
 
     if (!activeRate) return <div>Loading...</div>;
@@ -78,7 +77,10 @@ export default function RateWorkspace({ onBack }: RateWorkspaceProps) {
             {/* Header */}
             <div className="px-6 py-4 bg-white border-b border-slate-200 flex justify-between items-center shadow-sm z-20 shrink-0">
                 <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={onBack}><ArrowLeft className="h-5 w-5 text-slate-500" /></Button>
+                    {/* FIX: Use navigate instead of onBack prop */}
+                    <Button variant="ghost" size="icon" onClick={() => navigate('/tariffs')}>
+                        <ArrowLeft className="h-5 w-5 text-slate-500" />
+                    </Button>
                     <div>
                         <div className="flex items-center gap-2">
                             {/* CHANGED: Editable Input instead of static H1 */}

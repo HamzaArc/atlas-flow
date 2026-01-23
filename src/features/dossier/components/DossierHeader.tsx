@@ -1,7 +1,7 @@
 import { 
-  ArrowLeft, Copy, MoreHorizontal, 
+  ArrowLeft, Copy, 
   Anchor, Plane, Truck, Edit, 
-  CheckCircle2, AlertCircle, ChevronRight 
+  CheckCircle2, ChevronRight 
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { useDossierStore } from "@/store/useDossierStore";
-import { ShipmentMode, ShipmentStage } from "@/types/index";
+import { ShipmentStage } from "@/types/index";
 
 export const DossierHeader = () => {
   const navigate = useNavigate();

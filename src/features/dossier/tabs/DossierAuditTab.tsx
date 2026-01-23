@@ -1,6 +1,6 @@
 import { 
-  History, User, Search, Download, 
-  Mail, FileText, CheckSquare, AlertCircle,
+  History, Search, Download, 
+  Mail, FileText, AlertCircle,
   Clock
 } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useClientStore } from "@/store/useClientStore";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
@@ -8,14 +9,10 @@ import { Coins } from "lucide-react";
 import { ClientHeader } from "../components/ClientHeader";
 import { ClientOverview } from "../components/ClientOverview";
 import { ClientDocuments } from "../components/ClientDocuments";
-// ClientLogistics import removed as it is now integrated into Overview
 import { ClientBillingConfig } from "../components/ClientBillingConfig"; 
 
-interface ClientDetailsPageProps {
-    onNavigate: (view: 'list' | 'details') => void;
-}
-
-export default function ClientDetailsPage({ onNavigate }: ClientDetailsPageProps) {
+export default function ClientDetailsPage() {
+  const navigate = useNavigate();
   const { activeClient, saveClient } = useClientStore();
   const [isEditing, setIsEditing] = useState(false);
   const { toast } = useToast();
@@ -46,7 +43,7 @@ export default function ClientDetailsPage({ onNavigate }: ClientDetailsPageProps
           isEditing={isEditing} 
           setIsEditing={setIsEditing} 
           onSave={handleSave} 
-          onBack={() => onNavigate('list')} 
+          onBack={() => navigate('/clients')} 
       />
 
       {/* 2. Tabs & Workspace */}

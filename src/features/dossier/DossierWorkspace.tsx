@@ -8,6 +8,9 @@ import {
    Wallet, CheckSquare, History 
 } from "lucide-react";
 
+// FIX: Added missing import
+import { Button } from "@/components/ui/button";
+
 // --- Tab Components ---
 import { DossierOperationsTab } from "./tabs/DossierOperationsTab";
 import { DossierTrackingTab } from "./tabs/DossierTrackingTab";

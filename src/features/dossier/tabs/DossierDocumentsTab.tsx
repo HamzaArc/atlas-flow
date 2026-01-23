@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { 
   FileText, Upload, Download, Eye, Trash2, 
-  CheckCircle2, AlertCircle, File
+  CheckCircle2, File
 } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ClientDocument } from "@/types/index";
 
 // Mock Checklist
 const REQUIRED_DOCS = [

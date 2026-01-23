@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { 
-  TrendingUp, TrendingDown, Plus, MoreHorizontal, 
-  Edit2, Trash2, Printer, FileCheck, Mail,
-  DollarSign, Euro, Percent
+  TrendingUp, TrendingDown, Plus,  
+  Edit2, Trash2, Printer, FileCheck, 
+  DollarSign
 } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
-import { ChargeLine, Currency, ChargeCategory, ChargeStatus } from "@/types/index";
+import { ChargeLine, Currency } from "@/types/index";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

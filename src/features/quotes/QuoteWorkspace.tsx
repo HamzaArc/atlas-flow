@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom"; // Hook integration
 import { 
   Ship, Plane, Truck, Copy, Trash2, 
   Plus, MoreHorizontal, 
@@ -22,11 +23,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-interface QuoteWorkspaceProps {
-    onBack: () => void;
-}
-
-export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
+export default function QuoteWorkspace() {
+  const navigate = useNavigate(); // Hook
   const { 
       // Financials
       totalSellTarget, totalTTCTarget, totalTaxTarget,
@@ -122,7 +120,7 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
 
   return (
     <div className="h-screen flex flex-col bg-slate-50/50 overflow-hidden font-sans">
-      <QuoteHeader onBack={onBack} />
+      <QuoteHeader onBack={() => navigate('/quotes')} />
 
       {/* --- TOP BAR: OPTIONS & VIEW TOGGLE --- */}
       <div className="bg-white border-b border-slate-200 px-6 py-2 flex items-center justify-between shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.02)] z-10">
@@ -182,11 +180,6 @@ export default function QuoteWorkspace({ onBack }: QuoteWorkspaceProps) {
                   <ArrowRightLeft className="h-3.5 w-3.5 mr-2" />
                   Compare
               </Button>
-          </div>
-
-          {/* RIGHT ACTIONS */}
-          <div className="flex items-center gap-2">
-             {/* PDF Button removed as requested */}
           </div>
       </div>
 

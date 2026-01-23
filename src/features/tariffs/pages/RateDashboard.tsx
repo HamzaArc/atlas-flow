@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom"; // FIX: Added Hook
 import { 
     Search, Plus, Layers, AlertCircle, FileSpreadsheet
 } from "lucide-react";
@@ -8,10 +9,12 @@ import { useTariffStore } from "@/store/useTariffStore";
 import { TradeLaneMatrix } from "../components/TradeLaneMatrix";
 import { ExpiryRadar } from "../components/ExpiryRadar";
 import { SupplierRate } from "@/types/tariff";
-import { useToast } from "@/components/ui/use-toast"; // Using your existing hook
-import { cn } from "@/lib/utils"; // FIXED: Added missing import
+import { useToast } from "@/components/ui/use-toast"; 
+import { cn } from "@/lib/utils"; 
 
-export default function RateDashboard({ onNavigate }: { onNavigate: (page: 'dashboard' | 'workspace') => void }) {
+// FIX: Removed Props Interface
+export default function RateDashboard() {
+    const navigate = useNavigate(); // FIX: Init Hook
     const { rates, fetchRates, loadRate, createRate, isLoading } = useTariffStore();
     const { toast } = useToast();
     
@@ -38,7 +41,7 @@ export default function RateDashboard({ onNavigate }: { onNavigate: (page: 'dash
 
     const handleCreate = () => {
         createRate();
-        onNavigate('workspace');
+        navigate('/tariffs/new'); // FIX: Router Navigation
     };
 
     const handleLaneSelect = (pol: string, pod: string) => {
@@ -48,15 +51,14 @@ export default function RateDashboard({ onNavigate }: { onNavigate: (page: 'dash
             // Sort by newness
             const newest = laneRates.sort((a,b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
             loadRate(newest.id);
-            onNavigate('workspace');
+            navigate('/tariffs/new'); // FIX: Router Navigation
         }
     };
 
     const handleRenew = (rate: SupplierRate) => {
         loadRate(rate.id);
-        // FIXED: Toast signature matches your use-toast.tsx (message, type)
         toast(`Renewal Mode: Loaded ${rate.reference}. Update validity dates and Save to renew.`, 'info');
-        onNavigate('workspace');
+        navigate('/tariffs/new'); // FIX: Router Navigation
     };
 
     const handleImportClick = () => {
@@ -65,7 +67,6 @@ export default function RateDashboard({ onNavigate }: { onNavigate: (page: 'dash
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
-            // FIXED: Toast signature match
             toast(`Import Processing: Analyzing ${e.target.files[0].name}...`, 'info');
         }
     };
@@ -190,7 +191,7 @@ export default function RateDashboard({ onNavigate }: { onNavigate: (page: 'dash
                                     <tr 
                                         key={rate.id} 
                                         className="hover:bg-slate-50 cursor-pointer transition-colors"
-                                        onClick={() => { loadRate(rate.id); onNavigate('workspace'); }}
+                                        onClick={() => { loadRate(rate.id); navigate('/tariffs/new'); }}
                                     >
                                         <td className="p-3 font-medium text-slate-700">{rate.reference}</td>
                                         <td className="p-3 text-slate-600">{rate.pol.split('(')[0]} → {rate.pod.split('(')[0]}</td>

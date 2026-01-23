@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom"; // Hook
 import { 
   Search, Filter, MoreHorizontal, 
   FileText, Clock, CheckCircle2, 
@@ -27,13 +28,11 @@ import { format, differenceInDays, addDays, isValid } from "date-fns";
 import { cn } from "@/lib/utils";
 
 // --- TYPES ---
-type PageType = 'dashboard' | 'create';
 type SortField = 'reference' | 'clientName' | 'validityDate' | 'totalTTCTarget' | 'probability';
 type SortOrder = 'asc' | 'desc';
 type TabView = 'ALL' | 'DRAFT' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'EXPIRING' | 'ARCHIVED';
 
 // --- COMPONENTS ---
-
 const KpiCard = ({ title, value, subtext, icon: Icon, colorClass, trend, trendValue, bgClass }: any) => (
     <Card className="shadow-sm border-slate-200 bg-white relative overflow-hidden group hover:shadow-md transition-all duration-300">
         <div className={cn("absolute right-0 top-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity", colorClass)}>
@@ -96,7 +95,6 @@ const ValidityIndicator = ({ date }: { date: Date | string }) => {
     );
 };
 
-// Helper for Mode Icons
 const ModeIcon = ({ mode }: { mode: string | undefined }) => {
     switch(mode) {
         case 'AIR': return <Plane className="h-3.5 w-3.5 text-sky-500" />;
@@ -107,7 +105,8 @@ const ModeIcon = ({ mode }: { mode: string | undefined }) => {
     }
 };
 
-export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: PageType) => void }) {
+export default function QuoteDashboard() {
+  const navigate = useNavigate(); // Hook integration
   const { quotes, fetchQuotes, isLoading, createNewQuote, setEditorMode, deleteQuote, loadQuote } = useQuoteStore();
   
   // Local State
@@ -123,18 +122,18 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
   const handleQuickEntry = () => {
       createNewQuote();
       setEditorMode('EXPRESS');
-      onNavigate('create');
+      navigate('/quotes/create'); // Router nav
   };
 
   const handleExpertEntry = () => {
       createNewQuote();
       setEditorMode('EXPERT');
-      onNavigate('create');
+      navigate('/quotes/create'); // Router nav
   };
 
   const handleEdit = (id: string) => {
       loadQuote(id);
-      onNavigate('create');
+      navigate(`/quotes/${id}`); // Router nav
   };
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
@@ -160,12 +159,8 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
       const accepted = quotes.filter(q => q.status === 'ACCEPTED').length;
       const validation = quotes.filter(q => q.status === 'VALIDATION').length;
       
-      // Helper to robustly get the quote value
       const getQuoteValue = (quote: any) => {
-        // Prioritize the explicitly stored target value
         if (quote.totalTTCTarget && quote.totalTTCTarget > 0) return quote.totalTTCTarget;
-        
-        // Fallback to active option logic (same as Table display)
         const activeOption = quote.options?.find((o: any) => o.id === quote.activeOptionId) || quote.options?.[0];
         return activeOption?.totalTTC || 0;
       };
@@ -189,7 +184,6 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
   const filteredQuotes = useMemo(() => {
       let data = quotes;
 
-      // TAB FILTERS
       if (currentTab !== 'ALL') {
           if (currentTab === 'ARCHIVED') {
               data = data.filter(q => ['ACCEPTED', 'REJECTED'].includes(q.status));
@@ -236,7 +230,6 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
       });
   }, [quotes, searchTerm, currentTab, sortField, sortOrder]);
 
-  // --- RENDER HELPERS ---
   const renderTableBody = () => {
     if (isLoading) {
         return (
@@ -270,22 +263,14 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
     }
 
     return filteredQuotes.map((quote: any) => {
-        // --- DATA RESOLUTION ---
-        // Fallback to active option if top-level quote properties are missing
         const activeOption = quote.options?.find((o: any) => o.id === quote.activeOptionId) || quote.options?.[0];
         const optionsCount = quote.options?.length || 0;
         
-        // 1. Resolve Mode & Incoterm
         const displayMode = quote.mode || activeOption?.mode || 'N/A';
         const displayIncoterm = quote.incoterm || activeOption?.incoterm || 'N/A';
         const displayPOL = quote.pol || activeOption?.pol || '---';
         const displayPOD = quote.pod || activeOption?.pod || '---';
-
-        // 2. Resolve Financials
-        // If Target TTC is 0, use the Calculated TTC from the active option
         const ttc = quote.totalTTCTarget || activeOption?.totalTTC || 0;
-
-        // 3. Resolve Dates
         const reqDepDate = quote.requestedDepartureDate 
             ? new Date(quote.requestedDepartureDate) 
             : null;
@@ -377,7 +362,6 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
                     </div>
                 </TableCell>
 
-                 {/* NEW COLUMN: Options Count */}
                  <TableCell className="align-top py-4">
                     <div className="flex flex-col gap-0.5">
                         <span className="text-[10px] text-slate-400 font-medium">Options</span>
@@ -437,7 +421,6 @@ export default function QuoteDashboard({ onNavigate }: { onNavigate: (page: Page
             </div>
             
             <div className="flex items-center gap-3">
-                 {/* REFACTORED ACTIONS: Express is MAIN, Expert is secondary/side */}
                  <Button 
                     variant="ghost" 
                     size="sm"

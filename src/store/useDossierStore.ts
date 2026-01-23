@@ -63,8 +63,9 @@ const DEFAULT_DOSSIER: Dossier = {
     incoterm: 'FOB', 
     mode: 'SEA_FCL', 
     freeTimeDays: 7,
-    shipper: { name: '' }, 
-    consignee: { name: '' },
+    // FIX: Updated shipper/consignee to match ShipmentParty (added role)
+    shipper: { name: '', role: 'Shipper' }, 
+    consignee: { name: '', role: 'Consignee' },
     parties: [], // New
     containers: [], 
     activities: [], 

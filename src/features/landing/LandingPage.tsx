@@ -1,27 +1,17 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useUserStore } from '@/store/useUserStore'; // Import Store
 import { 
-  ArrowRight, 
-  Globe, 
-  Users, 
-  FileText, 
-  Ship, 
-  CreditCard, 
-  BarChart3, 
-  Settings, 
-  Anchor,
-  Box,
-  CheckCircle2,
-  Lock,
-  UserCog
+  ArrowRight, Globe, Users, FileText, Ship, 
+  CreditCard, BarChart3, Settings, Box, 
+  CheckCircle2, Lock
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-interface LandingPageProps {
-  onEnterApp: () => void;
-}
-
-export default function LandingPage({ onEnterApp }: LandingPageProps) {
+export default function LandingPage() {
+  const navigate = useNavigate();
+  const { isAuthenticated } = useUserStore(); // Get auth state
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -31,8 +21,16 @@ export default function LandingPage({ onEnterApp }: LandingPageProps) {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+  
+  // LOGIC: Check auth before routing
+  const onEnterApp = () => {
+    if (isAuthenticated) {
+      navigate('/dashboard');
+    } else {
+      navigate('/login');
+    }
+  };
 
-  // Reusable component for the 'Under Construction' overlay to ensure 100% consistency
   const ConstructionOverlay = () => (
     <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-[2px] z-20 flex items-center justify-center">
       <div className="bg-yellow-500/10 border border-yellow-500/20 px-4 py-2 rounded-full flex items-center gap-2">
@@ -370,3 +368,6 @@ export default function LandingPage({ onEnterApp }: LandingPageProps) {
     </div>
   );
 }
+
+// Add UserCog import if not present
+import { UserCog, Anchor } from 'lucide-react';

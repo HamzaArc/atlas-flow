@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { 
   CheckSquare, AlertCircle, Clock, Plus, 
-  Search, Filter, Trash2, Edit2, Check, AlertTriangle
+  Search, Trash2, Edit2, AlertTriangle
 } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
 import { DossierTask, TaskCategory, TaskPriority } from "@/types/index";

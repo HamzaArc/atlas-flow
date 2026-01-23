@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { 
-   MapPin, Calendar, Box, Anchor, 
-   Plus, Trash2, MoreHorizontal, User,
-   Truck, Ship, Plane
+   MapPin, Box, 
+   Plus, Trash2, User
 } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
 import { Button } from "@/components/ui/button";
@@ -11,14 +10,13 @@ import { Label } from "@/components/ui/label";
 import { 
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { ShipmentParty, DossierContainer } from "@/types/index";
+import { ShipmentParty } from "@/types/index";
 
 export const DossierOperationsTab = () => {
   const { 
-     dossier, updateDossier, updateParty,
+     dossier, updateDossier,
      addContainer, updateContainer, removeContainer 
   } = useDossierStore();
 
