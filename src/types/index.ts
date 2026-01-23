@@ -1,5 +1,6 @@
 // src/types/index.ts
 
+
 // --- 1. CORE LOGISTICS ENUMS ---
 export type Incoterm = 
   | 'EXW' | 'FCA' | 'CPT' | 'CIP' | 'DAP' | 'DPU' | 'DDP' 
@@ -21,6 +22,14 @@ export enum ShipmentStage {
   DELIVERY = 'Delivery',
   FINANCE = 'Finance',
   CLOSED = 'Closed'
+}
+
+export enum DocStatus {
+  MISSING = 'Missing',
+  REQUESTED = 'Requested',
+  RECEIVED = 'Received',
+  ISSUED = 'Issued',
+  APPROVED = 'Approved'
 }
 
 export type TaskCategory = 'General' | 'Booking' | 'Documents' | 'Customs' | 'Transport' | 'Finance';
@@ -190,6 +199,16 @@ export interface DossierContainer {
   returnDate?: string;
 }
 
+export interface Document {
+  id: string;
+  name: string;
+  type: string;
+  status: DocStatus;
+  isInternal: boolean;
+  url?: string;
+  updatedAt: string;
+}
+
 export interface DossierAlert {
     id: string;
     type: 'BLOCKER' | 'WARNING' | 'INFO';
@@ -260,7 +279,8 @@ export interface Dossier {
   docCutOff?: Date;
   
   containers: DossierContainer[];
-  cargoItems: CargoItem[]; // New Field
+  cargoItems: CargoItem[];
+  documents: Document[]; // Added field
   
   activities: ActivityItem[];
   alerts: DossierAlert[];

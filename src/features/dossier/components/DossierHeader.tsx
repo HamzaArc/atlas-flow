@@ -3,16 +3,17 @@ import { useNavigate } from "react-router-dom";
 import { 
   ArrowLeft, Copy, Printer, 
   ChevronRight, Anchor, Plane, Truck, Box,
-  AlertCircle, Archive
+  AlertCircle, Archive, Save
 } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
 import { ShipmentStage, Dossier } from "@/types/index";
 import { ShipmentProgress } from "./ShipmentProgress";
 import { WorkflowModal } from "./modals/WorkflowModal";
+import { Button } from "@/components/ui/button";
 
 export const DossierHeader = () => {
   const navigate = useNavigate();
-  const { dossier, setStage, updateDossier } = useDossierStore();
+  const { dossier, setStage, updateDossier, saveDossier, isLoading } = useDossierStore();
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const [isWorkflowOpen, setIsWorkflowOpen] = useState(false);
 
@@ -39,6 +40,10 @@ export const DossierHeader = () => {
 
     // 2. Advance the stage
     setStage(nextStage);
+  };
+
+  const handleSave = async () => {
+      await saveDossier();
   };
 
   const isLastStage = dossier.stage === ShipmentStage.CLOSED;
@@ -93,6 +98,17 @@ export const DossierHeader = () => {
          </div>
 
          <div className="flex items-center gap-3">
+            <Button 
+                variant="outline"
+                size="sm"
+                onClick={handleSave}
+                disabled={isLoading}
+                className="hidden md:flex items-center gap-2 text-slate-600 hover:text-slate-900 border-slate-200"
+            >
+                <Save className="h-4 w-4" />
+                {isLoading ? 'Saving...' : 'Save Job'}
+            </Button>
+
             <button className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
                <Printer className="h-4.5 w-4.5" />
             </button>

@@ -18,7 +18,9 @@ import FinanceDashboard from './features/finance/pages/FinanceDashboard';
 import ClientListPage from './features/crm/pages/ClientListPage';
 import ClientDetailsPage from './features/crm/pages/ClientDetailsPage';
 import DossierDashboard from './features/dossier/pages/DossierDashboard';
-import DossierWorkspace from './features/dossier/DossierWorkspace';
+
+// FIX: Changed to named import to match the component export
+import { DossierWorkspace } from './features/dossier/DossierWorkspace';
 
 // --- LAYOUT WRAPPER FOR AUTHENTICATED ROUTES ---
 const ProtectedLayout = () => {

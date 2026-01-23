@@ -68,6 +68,7 @@ const DEFAULT_DOSSIER: Dossier = {
     parties: [], 
     containers: [],
     cargoItems: [], // New default
+    documents: [], // Fixed: Added missing property
     activities: [], 
     tasks: [], 
     events: [], 
@@ -110,6 +111,7 @@ export const useDossierStore = create<DossierState>((set, get) => ({
           if (!safeCopy.tags) safeCopy.tags = [];
           if (!safeCopy.containers) safeCopy.containers = [];
           if (!safeCopy.cargoItems) safeCopy.cargoItems = [];
+          if (!safeCopy.documents) safeCopy.documents = []; // Fixed: Safety check
           if (!safeCopy.stage) safeCopy.stage = ShipmentStage.INTAKE;
 
           set({ dossier: safeCopy, isEditing: false });
