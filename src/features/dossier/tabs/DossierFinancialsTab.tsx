@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { 
   TrendingUp, TrendingDown, Plus,  
   Edit2, Trash2, Printer, FileCheck, 
@@ -7,7 +7,7 @@ import {
   Activity
 } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
-import { ChargeLine, Currency, ChargeStatus, ChargeCategory } from "@/types/index";
+import { ChargeLine, Currency, ChargeStatus } from "@/types/index";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

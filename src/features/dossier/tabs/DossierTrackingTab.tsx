@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Checkbox } from "@/components/ui/checkbox";
 
 export const DossierTrackingTab = () => {
-  const { dossier, updateDossier } = useDossierStore();
+  const { dossier, updateDossier, saveDossier, isLoading } = useDossierStore();
   const [isAddingEvent, setIsAddingEvent] = useState(false);
   
   // Local form state
@@ -31,11 +31,11 @@ export const DossierTrackingTab = () => {
     new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
 
-  const handleAddEvent = () => {
+  const handleAddEvent = async () => {
     if (!newEvent.title) return;
 
     const eventToAdd: ShipmentEvent = {
-      id: `evt-${Date.now()}`,
+      id: `evt-${Date.now()}`, // Temporary ID
       title: newEvent.title!,
       location: newEvent.location,
       timestamp: newEvent.timestamp || new Date().toISOString(),
@@ -44,7 +44,12 @@ export const DossierTrackingTab = () => {
       source: 'Manual'
     };
 
+    // 1. Update local state
     updateDossier('events', [...(dossier.events || []), eventToAdd]);
+    
+    // 2. Persist immediately to DB
+    await saveDossier();
+
     setIsAddingEvent(false);
     setNewEvent({ title: '', location: '', timestamp: new Date().toISOString().slice(0, 16) });
   };
@@ -256,7 +261,9 @@ export const DossierTrackingTab = () => {
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setIsAddingEvent(false)}>Cancel</Button>
-            <Button onClick={handleAddEvent}>Save Event</Button>
+            <Button onClick={handleAddEvent} disabled={isLoading}>
+                {isLoading ? 'Saving...' : 'Save Event'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

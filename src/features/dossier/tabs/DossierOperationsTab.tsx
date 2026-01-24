@@ -559,11 +559,7 @@ export const DossierOperationsTab = () => {
           <Shield className="h-4 w-4 text-green-500 mr-2" />
           All changes saved locally
         </span>
-        <button className="bg-slate-900 text-white px-10 py-3 rounded-xl font-bold shadow-lg shadow-slate-200 hover:shadow-xl hover:bg-slate-800 transition-all transform hover:-translate-y-0.5 active:translate-y-0 text-sm tracking-wide">
-          Save Changes
-        </button>
       </div>
-
     </div>
   );
 };

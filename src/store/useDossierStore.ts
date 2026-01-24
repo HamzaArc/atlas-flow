@@ -1,4 +1,3 @@
-// src/store/useDossierStore.ts
 import { create } from 'zustand';
 import { Dossier, DossierContainer, ShipmentStatus, ActivityCategory, ShipmentStage, DossierTask } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
@@ -10,11 +9,12 @@ interface DossierState {
   dossier: Dossier; // The Active/Selected Dossier
   isLoading: boolean;
   isEditing: boolean;
+  error: string | null;
 
   // Actions
   fetchDossiers: () => Promise<void>;
   createDossier: () => void;
-  loadDossier: (id: string) => void;
+  loadDossier: (id: string) => Promise<void>;
   saveDossier: () => Promise<void>;
   deleteDossier: (id: string) => Promise<void>;
   
@@ -32,11 +32,11 @@ interface DossierState {
   updateContainer: <K extends keyof DossierContainer>(id: string, field: K, value: DossierContainer[K]) => void;
   removeContainer: (id: string) => void;
 
-  // Task Actions (New)
+  // Task Actions
   addTask: (task: DossierTask) => void;
   toggleTask: (taskId: string) => void;
 
-  // Collaboration
+  // Activity/Collaboration
   addActivity: (text: string, category: ActivityCategory, tone?: 'success' | 'neutral' | 'warning' | 'destructive') => void;
   
   // Internal Logic
@@ -48,7 +48,7 @@ const DEFAULT_DOSSIER: Dossier = {
     ref: 'NEW-FILE', 
     bookingRef: '', 
     status: 'BOOKED',
-    stage: ShipmentStage.INTAKE, // New Default
+    stage: ShipmentStage.INTAKE,
     clientId: '', 
     clientName: '',
     mblNumber: '', 
@@ -67,8 +67,8 @@ const DEFAULT_DOSSIER: Dossier = {
     consignee: { name: '', role: 'Consignee' },
     parties: [], 
     containers: [],
-    cargoItems: [], // New default
-    documents: [], // Fixed: Added missing property
+    cargoItems: [],
+    documents: [],
     activities: [], 
     tasks: [], 
     events: [], 
@@ -85,37 +85,52 @@ export const useDossierStore = create<DossierState>((set, get) => ({
   dossier: DEFAULT_DOSSIER,
   isLoading: false,
   isEditing: false,
+  error: null,
 
   fetchDossiers: async () => {
-      set({ isLoading: true });
+      set({ isLoading: true, error: null });
       try {
           const dossiers = await DossierService.fetchAll();
           set({ dossiers, isLoading: false });
-      } catch (e) {
-          set({ isLoading: false });
+      } catch (e: any) {
+          console.error("Failed to fetch dossiers", e);
+          set({ isLoading: false, error: e.message || 'Failed to fetch dossiers' });
+          // FIXED: Correct toast signature
+          useToast.getState().toast("Connection Error: Could not retrieve shipments.", "error");
       }
   },
 
   createDossier: () => {
-      set({ dossier: { ...DEFAULT_DOSSIER, id: `new-${Date.now()}` }, isEditing: true });
+      set({ 
+          dossier: { ...DEFAULT_DOSSIER, id: `new-${Date.now()}` }, 
+          isEditing: true,
+          error: null
+      });
   },
 
-  loadDossier: (id) => {
-      const found = get().dossiers.find(d => d.id === id);
-      if (found) {
-          const safeCopy = JSON.parse(JSON.stringify(found));
+  loadDossier: async (id) => {
+      set({ isLoading: true, error: null });
+      try {
+          let found = get().dossiers.find(d => d.id === id);
           
-          if (!safeCopy.tasks) safeCopy.tasks = [];
-          if (!safeCopy.events) safeCopy.events = [];
-          if (!safeCopy.parties) safeCopy.parties = [];
-          if (!safeCopy.tags) safeCopy.tags = [];
-          if (!safeCopy.containers) safeCopy.containers = [];
-          if (!safeCopy.cargoItems) safeCopy.cargoItems = [];
-          if (!safeCopy.documents) safeCopy.documents = []; // Fixed: Safety check
-          if (!safeCopy.stage) safeCopy.stage = ShipmentStage.INTAKE;
+          if (!found) {
+             const fromDb = await DossierService.getById(id);
+             if (fromDb) found = fromDb;
+          }
 
-          set({ dossier: safeCopy, isEditing: false });
-          get().runSmartChecks();
+          if (found) {
+              const safeCopy = JSON.parse(JSON.stringify(found));
+              // Restore Date objects
+              if (safeCopy.etd) safeCopy.etd = new Date(safeCopy.etd);
+              if (safeCopy.eta) safeCopy.eta = new Date(safeCopy.eta);
+              
+              set({ dossier: safeCopy, isEditing: false, isLoading: false });
+              get().runSmartChecks();
+          } else {
+              set({ isLoading: false, error: 'Shipment not found' });
+          }
+      } catch (e) {
+          set({ isLoading: false, error: 'Failed to load shipment details' });
       }
   },
 
@@ -125,7 +140,7 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       set((state) => ({
           dossier: { ...state.dossier, [field]: value }
       }));
-      if (['eta', 'etd', 'status', 'mblNumber', 'totalRevenue', 'totalCost'].includes(field as string)) {
+      if (['eta', 'etd', 'status', 'mblNumber'].includes(field as string)) {
           get().runSmartChecks();
       }
   },
@@ -201,25 +216,54 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       set({ isLoading: true });
       get().runSmartChecks(); 
       
-      const state = get();
-      await DossierService.save(state.dossier);
+      const { dossier, dossiers } = get();
       
-      let newDossiers = [...state.dossiers];
-      const index = newDossiers.findIndex(d => d.id === state.dossier.id);
-      
-      if (index >= 0) {
-          newDossiers[index] = state.dossier;
-      } else {
-          newDossiers.unshift(state.dossier);
-      }
+      try {
+          const savedDossier = await DossierService.save(dossier);
+          
+          const index = dossiers.findIndex(d => d.id === dossier.id);
+          let newDossiers = [...dossiers];
+          
+          if (index >= 0) {
+              newDossiers[index] = savedDossier;
+          } else {
+              // Handle new ID replacement
+              const tempIndex = dossiers.findIndex(d => d.id === dossier.id);
+              if (tempIndex >= 0) {
+                  newDossiers[tempIndex] = savedDossier;
+              } else {
+                  newDossiers.unshift(savedDossier);
+              }
+          }
 
-      set({ dossiers: newDossiers, isLoading: false, isEditing: false });
-      useToast.getState().toast("Shipment data saved securely.", "success");
+          set({ 
+              dossier: savedDossier, 
+              dossiers: newDossiers, 
+              isLoading: false, 
+              isEditing: false 
+          });
+          
+          useToast.getState().toast("Shipment data saved securely.", "success");
+      } catch (e: any) {
+          set({ isLoading: false });
+          useToast.getState().toast("Save failed: " + e.message, "error");
+          console.error("Save failed", e);
+      }
   },
 
   deleteDossier: async (id) => {
-      set({ dossiers: get().dossiers.filter(d => d.id !== id) });
-      useToast.getState().toast("Shipment file archived.", "info");
+      set({ isLoading: true });
+      try {
+          await DossierService.delete(id);
+          set((state) => ({ 
+              dossiers: state.dossiers.filter(d => d.id !== id),
+              isLoading: false
+          }));
+          useToast.getState().toast("Shipment deleted.", "info");
+      } catch (e) {
+          set({ isLoading: false });
+          useToast.getState().toast("Failed to delete shipment.", "error");
+      }
   },
 
   addActivity: (text, category, tone = 'neutral') => set((state) => ({

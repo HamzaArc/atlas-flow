@@ -1,31 +1,25 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Activity, Calendar, Truck, AlertTriangle, 
   Search, ArrowRight, ChevronRight, Plus,
-  Anchor, Plane, Box, FileText, CheckCircle2
+  Anchor, Plane, Box, FileText, CheckCircle2, RefreshCw
 } from "lucide-react";
-import { DossierService } from "@/services/dossier.service";
-import { Dossier, ShipmentStage } from "@/types/index";
+import { useDossierStore } from "@/store/useDossierStore";
+import { ShipmentStage } from "@/types/index";
 import { NewDossierDialog } from "../components/dialogs/NewDossierDialog";
 import { Badge } from "@/components/ui/badge";
 
 export default function DossierDashboard() {
   const navigate = useNavigate();
-  const [dossiers, setDossiers] = useState<Dossier[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { dossiers, fetchDossiers, isLoading, error } = useDossierStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<string>('All');
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
 
   useEffect(() => {
-    const loadData = async () => {
-       const data = await DossierService.fetchAll();
-       setDossiers(data);
-       setIsLoading(false);
-    };
-    loadData();
-  }, []);
+    fetchDossiers();
+  }, [fetchDossiers]);
 
   // --- Statistics ---
   const totalShipments = dossiers.length;
@@ -36,7 +30,14 @@ export default function DossierDashboard() {
   // --- Filtering ---
   const filteredDossiers = dossiers.filter(s => {
     if (filterMode !== 'All' && s.mode !== filterMode) return false;
-    if (searchQuery && !s.clientName.toLowerCase().includes(searchQuery.toLowerCase()) && !s.ref.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        return (
+            (s.clientName && s.clientName.toLowerCase().includes(query)) || 
+            (s.ref && s.ref.toLowerCase().includes(query)) ||
+            (s.bookingRef && s.bookingRef.toLowerCase().includes(query))
+        );
+    }
     return true;
   });
 
@@ -52,10 +53,12 @@ export default function DossierDashboard() {
     switch(stage) {
       case 'Intake': return 'bg-slate-100 text-slate-600 border-slate-200';
       case 'Booking': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'Origin': return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'Transit': return 'bg-indigo-50 text-indigo-700 border-indigo-200';
       case 'Customs': return 'bg-orange-50 text-orange-700 border-orange-200';
       case 'Delivery': return 'bg-green-50 text-green-700 border-green-200';
       case 'Finance': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'Closed': return 'bg-slate-200 text-slate-800 border-slate-300';
       default: return 'bg-slate-50 text-slate-500 border-slate-200';
     }
   };
@@ -85,12 +88,21 @@ export default function DossierDashboard() {
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Operations Dashboard</h1>
               <p className="text-sm text-slate-500 mt-1">Welcome back. You have <span className="font-bold text-slate-900">{exceptions} critical items</span> requiring attention.</p>
            </div>
-           <button 
-             onClick={() => setIsNewDialogOpen(true)}
-             className="bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg hover:bg-slate-800 transition-transform hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2"
-           >
-              <Plus size={16} /> New Booking
-           </button>
+           <div className="flex gap-2">
+             <button 
+                onClick={() => fetchDossiers()}
+                className="bg-white text-slate-600 border border-slate-200 px-3 py-2.5 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-50 transition-colors"
+                title="Refresh Data"
+             >
+                <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
+             </button>
+             <button 
+                onClick={() => setIsNewDialogOpen(true)}
+                className="bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg hover:bg-slate-800 transition-transform hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2"
+             >
+                <Plus size={16} /> New Booking
+             </button>
+           </div>
         </div>
 
         {/* Stats Grid */}
@@ -100,7 +112,7 @@ export default function DossierDashboard() {
               value={totalShipments} 
               icon={Activity} 
               color="bg-blue-500"
-              subtext="+12% vs last month"
+              subtext="Total database records"
            />
            <StatCard 
               title="Pending Bookings" 
@@ -172,7 +184,11 @@ export default function DossierDashboard() {
                     </thead>
                     <tbody className="divide-y divide-slate-50 bg-white">
                        {isLoading ? (
-                          <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-400">Loading data...</td></tr>
+                          <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-400">Loading live data...</td></tr>
+                       ) : error ? (
+                          <tr><td colSpan={5} className="px-6 py-12 text-center text-red-500">{error}</td></tr>
+                       ) : filteredDossiers.length === 0 ? (
+                          <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-400">No active shipments found.</td></tr>
                        ) : filteredDossiers.map(file => (
                           <tr 
                              key={file.id} 
@@ -222,7 +238,7 @@ export default function DossierDashboard() {
            {/* Right: Insights & Tasks (1/3 width) */}
            <div className="space-y-6">
               
-              {/* Volume Chart (Mock) */}
+              {/* Volume Chart (Mock Visual) */}
               <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-6">Monthly Volume (TEUs)</h3>
                  <div className="flex items-end justify-between h-40 gap-2">
