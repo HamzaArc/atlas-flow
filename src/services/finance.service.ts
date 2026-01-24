@@ -123,6 +123,19 @@ export const FinanceService = {
         if (error) throw error;
     },
 
+    // --- NEW: Sync Financials to Dossier Registry ---
+    syncDossierFinancials: async (dossierId: string, revenue: number, cost: number): Promise<void> => {
+        const { error } = await supabase
+            .from('dossiers')
+            .update({ 
+                total_revenue: revenue, 
+                total_cost: cost
+            })
+            .eq('id', dossierId);
+        
+        if (error) throw error;
+    },
+
     fetchInvoices: async (dossierId: string): Promise<Invoice[]> => {
         // FIXED: Use 'dossierId' (camelCase) to query the invoices table
         const { data: invData, error: invError } = await supabase

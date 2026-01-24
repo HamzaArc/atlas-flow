@@ -43,12 +43,23 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
 
             let rev = 0;
             let cost = 0;
+            
+            // Calculate totals based on 'amountLocal' (Net amount in base currency)
             dossierLines.forEach(l => {
                 if(l.type === 'INCOME') rev += l.amountLocal;
                 else cost += l.amountLocal;
             });
             const margin = rev - cost;
             const marginPercent = rev > 0 ? (margin / rev) * 100 : 0;
+
+            // --- CRITICAL FIX: Persist calculated financials to Dossier Registry ---
+            // This ensures the Dashboard sees the updated values immediately
+            try {
+                await FinanceService.syncDossierFinancials(dossierId, rev, cost);
+            } catch (syncErr) {
+                console.error("Failed to sync financials to dossier", syncErr);
+                // We do not block the UI for this background sync
+            }
 
             set({ 
                 ledger: dossierLines,
@@ -161,6 +172,10 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
 
         try {
             await FinanceService.deleteCharge(id);
+             // Also refresh ledger to trigger sync (if dossierId available)
+             if (line.dossierId) {
+                await get().loadLedger(line.dossierId);
+             }
         } catch (e) {
              useToast.getState().toast("Deletion failed.", "error");
              set(state => ({ ledger: [...state.ledger, line] }));
