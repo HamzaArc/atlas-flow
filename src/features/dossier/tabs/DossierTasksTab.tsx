@@ -243,7 +243,8 @@ export const DossierTasksTab = () => {
                   </div>
                   <div>
                      <Label>Assignee</Label>
-                     <Input value={editingTask.assignee} onChange={e => setEditingTask({...editingTask, assignee: e.target.value})} />
+                     {/* FIXED: Handle potential null value for assignee */}
+                     <Input value={editingTask.assignee || ''} onChange={e => setEditingTask({...editingTask, assignee: e.target.value})} />
                   </div>
                </div>
                <div className="flex items-center space-x-2 pt-2">

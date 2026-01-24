@@ -1,45 +1,42 @@
 import { create } from 'zustand';
-import { Dossier, DossierContainer, ShipmentStatus, ActivityCategory, ShipmentStage, DossierTask } from '@/types/index';
+import { Dossier, DossierContainer, ShipmentStatus, ActivityCategory, ShipmentStage, DossierTask, Document } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 import { DossierService } from '@/services/dossier.service';
+import { generateUUID } from '@/lib/utils';
 
 interface DossierState {
-  // Collection State
   dossiers: Dossier[];
-  dossier: Dossier; // The Active/Selected Dossier
+  dossier: Dossier;
   isLoading: boolean;
   isEditing: boolean;
   error: string | null;
 
-  // Actions
   fetchDossiers: () => Promise<void>;
   createDossier: () => void;
   loadDossier: (id: string) => Promise<void>;
   saveDossier: () => Promise<void>;
   deleteDossier: (id: string) => Promise<void>;
   
-  // Active Dossier Edits
   setEditing: (isEditing: boolean) => void;
-  
-  // STRICT TYPING GENERIC
   updateDossier: <K extends keyof Dossier>(field: K, value: Dossier[K]) => void;
   updateParty: (party: 'shipper' | 'consignee' | 'notify', field: string, value: string) => void;
   setStatus: (status: ShipmentStatus) => void;
   setStage: (stage: ShipmentStage) => void;
   
-  // Container Actions
   addContainer: (container?: DossierContainer) => void;
   updateContainer: <K extends keyof DossierContainer>(id: string, field: K, value: DossierContainer[K]) => void;
   removeContainer: (id: string) => void;
 
-  // Task Actions
   addTask: (task: DossierTask) => void;
   toggleTask: (taskId: string) => void;
 
-  // Activity/Collaboration
   addActivity: (text: string, category: ActivityCategory, tone?: 'success' | 'neutral' | 'warning' | 'destructive') => void;
   
-  // Internal Logic
+  // Document Actions
+  uploadFile: (file: File, type: string, isInternal: boolean, nameOverride?: string) => Promise<void>;
+  updateFile: (id: string, updates: Partial<Document>) => Promise<void>;
+  deleteFile: (id: string) => Promise<void>;
+
   runSmartChecks: () => void;
 }
 
@@ -95,7 +92,6 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       } catch (e: any) {
           console.error("Failed to fetch dossiers", e);
           set({ isLoading: false, error: e.message || 'Failed to fetch dossiers' });
-          // FIXED: Correct toast signature
           useToast.getState().toast("Connection Error: Could not retrieve shipments.", "error");
       }
   },
@@ -120,7 +116,6 @@ export const useDossierStore = create<DossierState>((set, get) => ({
 
           if (found) {
               const safeCopy = JSON.parse(JSON.stringify(found));
-              // Restore Date objects
               if (safeCopy.etd) safeCopy.etd = new Date(safeCopy.etd);
               if (safeCopy.eta) safeCopy.eta = new Date(safeCopy.eta);
               
@@ -169,7 +164,7 @@ export const useDossierStore = create<DossierState>((set, get) => ({
 
   addContainer: (container) => {
       const newContainer: DossierContainer = container || {
-          id: Math.random().toString(36).substr(2,9),
+          id: generateUUID(),
           number: '', 
           type: '40HC', 
           seal: '', 
@@ -212,6 +207,72 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       }
   })),
 
+  // --- Document Actions ---
+  
+  uploadFile: async (file, type, isInternal, nameOverride) => {
+      const { dossier } = get();
+      if (!dossier.id || dossier.id.startsWith('new-')) {
+          useToast.getState().toast("Please save the dossier before uploading documents.", "warning");
+          return;
+      }
+
+      set({ isLoading: true });
+      
+      // If user provided a name in the form, create a renamed File object, otherwise use original
+      const fileToUpload = nameOverride ? new File([file], nameOverride + '.' + file.name.split('.').pop(), { type: file.type }) : file;
+
+      try {
+          const newDoc = await DossierService.uploadDocument(dossier.id, fileToUpload, { type, isInternal });
+          set(state => ({
+              dossier: {
+                  ...state.dossier,
+                  documents: [newDoc, ...state.dossier.documents]
+              },
+              isLoading: false
+          }));
+          useToast.getState().toast("Document uploaded.", "success");
+      } catch (e: any) {
+          set({ isLoading: false });
+          useToast.getState().toast("Upload failed: " + e.message, "error");
+      }
+  },
+
+  updateFile: async (id, updates) => {
+      set({ isLoading: true });
+      try {
+          const updatedDoc = await DossierService.updateDocument(id, updates);
+          set(state => ({
+              dossier: {
+                  ...state.dossier,
+                  documents: state.dossier.documents.map(d => d.id === id ? updatedDoc : d)
+              },
+              isLoading: false
+          }));
+          useToast.getState().toast("Document updated.", "success");
+      } catch (e: any) {
+          set({ isLoading: false });
+          useToast.getState().toast("Update failed.", "error");
+      }
+  },
+
+  deleteFile: async (id) => {
+      set({ isLoading: true });
+      try {
+          await DossierService.deleteDocument(id);
+          set(state => ({
+              dossier: {
+                  ...state.dossier,
+                  documents: state.dossier.documents.filter(d => d.id !== id)
+              },
+              isLoading: false
+          }));
+          useToast.getState().toast("Document deleted.", "info");
+      } catch (e: any) {
+          set({ isLoading: false });
+          useToast.getState().toast("Deletion failed.", "error");
+      }
+  },
+
   saveDossier: async () => {
       set({ isLoading: true });
       get().runSmartChecks(); 
@@ -227,7 +288,6 @@ export const useDossierStore = create<DossierState>((set, get) => ({
           if (index >= 0) {
               newDossiers[index] = savedDossier;
           } else {
-              // Handle new ID replacement
               const tempIndex = dossiers.findIndex(d => d.id === dossier.id);
               if (tempIndex >= 0) {
                   newDossiers[tempIndex] = savedDossier;
@@ -270,7 +330,7 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       dossier: {
           ...state.dossier,
           activities: [{ 
-              id: Math.random().toString(36), 
+              id: generateUUID(), 
               category, 
               text, 
               tone, 

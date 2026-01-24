@@ -201,12 +201,14 @@ export interface DossierContainer {
 
 export interface Document {
   id: string;
+  dossierId?: string;
   name: string;
-  type: string;
-  status: DocStatus;
+  type: string; // e.g. "MBL", "INV"
+  status: DocStatus | string;
   isInternal: boolean;
-  url?: string;
-  updatedAt: string;
+  url: string;
+  size?: string;
+  updatedAt: Date;
 }
 
 export interface DossierAlert {
@@ -221,7 +223,7 @@ export interface DossierTask {
   title: string;
   description?: string;
   dueDate: string;
-  assignee: string; 
+  assignee: string | null; 
   completed: boolean;
   isBlocker: boolean;
   category: TaskCategory;
@@ -270,7 +272,7 @@ export interface Dossier {
   
   shipper: ShipmentParty;
   consignee: ShipmentParty;
-  notify?: { name: string; address?: string };
+  notify?: ShipmentParty; 
   parties: ShipmentParty[]; 
   
   freeTimeDays: number; 
@@ -280,7 +282,7 @@ export interface Dossier {
   
   containers: DossierContainer[];
   cargoItems: CargoItem[];
-  documents: Document[]; // Added field
+  documents: Document[];
   
   activities: ActivityItem[];
   alerts: DossierAlert[];

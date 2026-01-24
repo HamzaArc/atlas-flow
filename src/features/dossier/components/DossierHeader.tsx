@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/button";
 
 export const DossierHeader = () => {
   const navigate = useNavigate();
-  const { dossier, setStage, updateDossier, saveDossier, isLoading } = useDossierStore();
+  // ADDED: addActivity to destructuring
+  const { dossier, setStage, updateDossier, saveDossier, isLoading, addActivity } = useDossierStore();
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const [isWorkflowOpen, setIsWorkflowOpen] = useState(false);
 
@@ -31,15 +32,23 @@ export const DossierHeader = () => {
   };
 
   // Handler for the Workflow Modal
-  const handleWorkflowAdvance = (updates: Partial<Dossier>, nextStage: ShipmentStage) => {
+  const handleWorkflowAdvance = (updates: Partial<Dossier>, nextStage: ShipmentStage, summary: string) => {
     // 1. Update specific fields captured in modal (e.g. mblNumber, etd)
     Object.entries(updates).forEach(([key, value]) => {
       // @ts-ignore - dynamic update based on key
       updateDossier(key as keyof Dossier, value);
     });
 
-    // 2. Advance the stage
+    // 2. Add Audit Log for specific data changes
+    if (summary) {
+        addActivity(summary, 'SYSTEM', 'neutral');
+    }
+
+    // 3. Advance the stage
     setStage(nextStage);
+
+    // 4. Persist everything (updates, stage change, and new activity) to DB
+    saveDossier();
   };
 
   const handleSave = async () => {

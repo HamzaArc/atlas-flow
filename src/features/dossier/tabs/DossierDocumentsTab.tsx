@@ -1,13 +1,12 @@
-// src/features/dossier/tabs/DossierDocumentsTab.tsx
-
 import { useState } from 'react';
 import { 
   FileText, UploadCloud, Download, Eye, Trash2, 
-  Check, Search, Shield, Share2} from "lucide-react";
+  Check, Search, Shield, Share2
+} from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
 import { DocStatus, Document } from "@/types/index";
 
-// UI Components from Atlas Flow (Shadcn/UI)
+// UI Components
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +14,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 
-// Requirements checklist (mock logic based on stage)
 const COMPLIANCE_CHECKLIST = [
   { id: 'req1', label: 'Booking Confirmation', key: 'Booking' },
   { id: 'req2', label: 'Master Bill of Lading', key: 'MBL' },
@@ -25,11 +23,12 @@ const COMPLIANCE_CHECKLIST = [
 ];
 
 export const DossierDocumentsTab = () => {
-  const { dossier, updateDossier } = useDossierStore();
+  const { dossier, uploadFile, updateFile, deleteFile } = useDossierStore();
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState<Partial<Document> | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // Grouping logic
   const categories = ['All', 'Shipping', 'Customs', 'Financial'];
@@ -40,7 +39,6 @@ export const DossierDocumentsTab = () => {
     return 'Customs';
   };
 
-  // Safe access to documents array
   const documents = dossier.documents || [];
 
   const filteredDocs = documents.filter(d => {
@@ -64,54 +62,66 @@ export const DossierDocumentsTab = () => {
       type: 'Other', 
       status: DocStatus.RECEIVED, 
       isInternal: false,
-      updatedAt: new Date().toISOString().split('T')[0] 
+      updatedAt: new Date()
     });
+    setSelectedFile(null); // Reset file
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (doc: Document) => {
     setEditingDoc({ ...doc });
+    setSelectedFile(null);
     setIsModalOpen(true);
   };
 
-  const handleSave = () => {
-    if (!editingDoc || !editingDoc.name || !editingDoc.type) return;
+  const handleSave = async () => {
+    if (!editingDoc || !editingDoc.type) return;
 
     if (editingDoc.id) {
-      // Edit existing
-      const updatedDocs = documents.map(d => d.id === editingDoc.id ? { ...d, ...editingDoc } as Document : d);
-      updateDossier('documents', updatedDocs);
+      // Edit existing (Metadata update)
+      await updateFile(editingDoc.id, {
+          name: editingDoc.name,
+          type: editingDoc.type,
+          status: editingDoc.status as DocStatus,
+          isInternal: editingDoc.isInternal
+      });
     } else {
-      // Add new
-      const newDoc: Document = {
-        ...editingDoc as Document,
-        id: `doc-${Date.now()}`,
-      };
-      updateDossier('documents', [...documents, newDoc]);
+      // Add new (Upload)
+      if (!selectedFile) {
+          alert("Please select a file to upload.");
+          return;
+      }
+      await uploadFile(
+          selectedFile, 
+          editingDoc.type, 
+          editingDoc.isInternal || false,
+          editingDoc.name // Use the custom name input if provided
+      );
     }
     setIsModalOpen(false);
     setEditingDoc(null);
+    setSelectedFile(null);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this document?')) {
-      updateDossier('documents', documents.filter(d => d.id !== id));
+      await deleteFile(id);
     }
   };
 
-  const handleToggleShare = (doc: Document) => {
-    const updatedDocs = documents.map(d => 
-      d.id === doc.id ? { ...d, isInternal: !d.isInternal } : d
-    );
-    updateDossier('documents', updatedDocs);
+  const handleToggleShare = async (doc: Document) => {
+    await updateFile(doc.id, { isInternal: !doc.isInternal });
   };
 
   const handleDownload = (doc: Document) => {
-    alert(`Downloading ${doc.name}...`);
+    // Open the Supabase URL in a new tab
+    if (doc.url) {
+        window.open(doc.url, '_blank');
+    }
   };
 
-  const getStatusBadge = (status: DocStatus) => {
-    const styles = {
+  const getStatusBadge = (status: string) => {
+    const styles: Record<string, string> = {
       [DocStatus.MISSING]: 'bg-red-50 text-red-700 border-red-100',
       [DocStatus.REQUESTED]: 'bg-orange-50 text-orange-700 border-orange-100',
       [DocStatus.RECEIVED]: 'bg-blue-50 text-blue-700 border-blue-100',
@@ -119,7 +129,7 @@ export const DossierDocumentsTab = () => {
       [DocStatus.APPROVED]: 'bg-green-50 text-green-700 border-green-100',
     };
     return (
-      <Badge variant="outline" className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${styles[status]}`}>
+      <Badge variant="outline" className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${styles[status] || styles[DocStatus.RECEIVED]}`}>
         {status}
       </Badge>
     );
@@ -169,7 +179,7 @@ export const DossierDocumentsTab = () => {
                           </span>
                        </div>
                        {item.isMissing && (
-                          <button className="text-[10px] font-bold text-blue-600 hover:text-blue-800 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={handleOpenAdd} className="text-[10px] font-bold text-blue-600 hover:text-blue-800 opacity-0 group-hover:opacity-100 transition-opacity">
                              Upload
                           </button>
                        )}
@@ -237,8 +247,8 @@ export const DossierDocumentsTab = () => {
                                <FileText size={20} />
                             </div>
                             <div>
-                               <div className="text-sm font-bold text-gray-900 hover:text-blue-600 cursor-pointer">{doc.name}</div>
-                               <div className="text-xs text-gray-400 mt-0.5">PDF • 2.4 MB</div>
+                               <div className="text-sm font-bold text-gray-900 hover:text-blue-600 cursor-pointer" onClick={() => handleDownload(doc)}>{doc.name}</div>
+                               <div className="text-xs text-gray-400 mt-0.5">PDF • {doc.size || '?? MB'}</div>
                             </div>
                           </div>
                         </td>
@@ -292,7 +302,7 @@ export const DossierDocumentsTab = () => {
 
       </div>
 
-      {/* Add/Edit Document Modal (Using Shadcn Dialog) */}
+      {/* Add/Edit Document Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -300,75 +310,89 @@ export const DossierDocumentsTab = () => {
           </DialogHeader>
           
           <div className="space-y-4 py-2">
-           {!editingDoc?.id && (
-             <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 flex flex-col items-center justify-center text-center bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer">
-                <UploadCloud size={32} className="text-gray-400 mb-2" />
-                <p className="text-sm font-medium text-gray-700">Click to select file</p>
-                <p className="text-xs text-gray-400">PDF, PNG, JPG up to 10MB</p>
-             </div>
-           )}
+            {!editingDoc?.id && (
+              <div className="relative">
+                  <input 
+                    type="file" 
+                    onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if(file) {
+                            setSelectedFile(file);
+                            // Auto-fill name if empty
+                            if(!editingDoc?.name) setEditingDoc(prev => ({...prev, name: file.name}));
+                        }
+                    }}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className={`border-2 border-dashed ${selectedFile ? 'border-green-400 bg-green-50' : 'border-gray-300 bg-gray-50'} rounded-xl p-6 flex flex-col items-center justify-center text-center hover:bg-gray-100 transition-colors`}>
+                    <UploadCloud size={32} className={selectedFile ? "text-green-500 mb-2" : "text-gray-400 mb-2"} />
+                    <p className="text-sm font-medium text-gray-700">{selectedFile ? selectedFile.name : "Click to select file"}</p>
+                    <p className="text-xs text-gray-400">{selectedFile ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB` : "PDF, PNG, JPG up to 10MB"}</p>
+                  </div>
+              </div>
+            )}
 
-           <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                 <Label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Document Name</Label>
-                 <Input 
-                   placeholder="e.g. Commercial Invoice #1234"
-                   value={editingDoc?.name || ''}
-                   onChange={e => setEditingDoc({...editingDoc!, name: e.target.value})}
-                 />
-              </div>
-              
-              <div>
-                 <Label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Document Type</Label>
-                 <Select 
-                    value={editingDoc?.type || 'Other'}
-                    onValueChange={v => setEditingDoc({...editingDoc!, type: v})}
-                 >
-                    <SelectTrigger>
-                        <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="Booking">Booking Confirmation</SelectItem>
-                        <SelectItem value="MBL">Master Bill of Lading</SelectItem>
-                        <SelectItem value="HBL">House Bill of Lading</SelectItem>
-                        <SelectItem value="Invoice">Commercial Invoice</SelectItem>
-                        <SelectItem value="PL">Packing List</SelectItem>
-                        <SelectItem value="Customs">Customs Declaration</SelectItem>
-                        <SelectItem value="Other">Other</SelectItem>
-                    </SelectContent>
-                 </Select>
-              </div>
+            <div className="grid grid-cols-2 gap-4">
+               <div className="col-span-2">
+                  <Label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Document Name</Label>
+                  <Input 
+                    placeholder="e.g. Commercial Invoice #1234"
+                    value={editingDoc?.name || ''}
+                    onChange={e => setEditingDoc({...editingDoc!, name: e.target.value})}
+                  />
+               </div>
+               
+               <div>
+                  <Label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Document Type</Label>
+                  <Select 
+                     value={editingDoc?.type || 'Other'}
+                     onValueChange={v => setEditingDoc({...editingDoc!, type: v})}
+                  >
+                     <SelectTrigger>
+                         <SelectValue placeholder="Select type" />
+                     </SelectTrigger>
+                     <SelectContent>
+                         <SelectItem value="Booking">Booking Confirmation</SelectItem>
+                         <SelectItem value="MBL">Master Bill of Lading</SelectItem>
+                         <SelectItem value="HBL">House Bill of Lading</SelectItem>
+                         <SelectItem value="Invoice">Commercial Invoice</SelectItem>
+                         <SelectItem value="PL">Packing List</SelectItem>
+                         <SelectItem value="Customs">Customs Declaration</SelectItem>
+                         <SelectItem value="Other">Other</SelectItem>
+                     </SelectContent>
+                  </Select>
+               </div>
 
-              <div>
-                 <Label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Status</Label>
-                 <Select 
-                    value={editingDoc?.status || DocStatus.RECEIVED}
-                    onValueChange={v => setEditingDoc({...editingDoc!, status: v as DocStatus})}
-                 >
-                    <SelectTrigger>
-                        <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {Object.values(DocStatus).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                    </SelectContent>
-                 </Select>
-              </div>
-              
-              <div className="col-span-2 mt-2">
-                 <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl bg-gray-50 hover:bg-white transition-colors cursor-pointer">
-                    <input 
-                      type="checkbox"
-                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                      checked={editingDoc?.isInternal || false}
-                      onChange={e => setEditingDoc({...editingDoc!, isInternal: e.target.checked})}
-                    />
-                    <div>
-                       <div className="text-sm font-bold text-gray-900">Mark as Internal</div>
-                       <div className="text-xs text-gray-500">Only visible to team members, hidden from customer.</div>
-                    </div>
-                 </label>
-              </div>
-           </div>
+               <div>
+                  <Label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Status</Label>
+                  <Select 
+                     value={editingDoc?.status || DocStatus.RECEIVED}
+                     onValueChange={v => setEditingDoc({...editingDoc!, status: v as DocStatus})}
+                  >
+                     <SelectTrigger>
+                         <SelectValue placeholder="Status" />
+                     </SelectTrigger>
+                     <SelectContent>
+                         {Object.values(DocStatus).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                     </SelectContent>
+                  </Select>
+               </div>
+               
+               <div className="col-span-2 mt-2">
+                  <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl bg-gray-50 hover:bg-white transition-colors cursor-pointer">
+                     <input 
+                       type="checkbox"
+                       className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                       checked={editingDoc?.isInternal || false}
+                       onChange={e => setEditingDoc({...editingDoc!, isInternal: e.target.checked})}
+                     />
+                     <div>
+                        <div className="text-sm font-bold text-gray-900">Mark as Internal</div>
+                        <div className="text-xs text-gray-500">Only visible to team members, hidden from customer.</div>
+                     </div>
+                  </label>
+               </div>
+            </div>
           </div>
 
           <DialogFooter>

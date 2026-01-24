@@ -9,7 +9,8 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   dossier: Dossier;
-  onAdvance: (updates: Partial<Dossier>, nextStage: ShipmentStage) => void;
+  // Updated signature to accept a summary string
+  onAdvance: (updates: Partial<Dossier>, nextStage: ShipmentStage, summary: string) => void;
 }
 
 export const WorkflowModal: React.FC<Props> = ({ isOpen, onClose, dossier, onAdvance }) => {
@@ -40,6 +41,27 @@ export const WorkflowModal: React.FC<Props> = ({ isOpen, onClose, dossier, onAdv
     ? STAGES_ORDER[currentIndex + 1] 
     : null;
 
+  // Helper to generate a human-readable summary of what changed
+  const generateChangeSummary = (updates: Partial<Dossier>) => {
+      const parts: string[] = [];
+      
+      if (updates.bookingRef) parts.push(`Booking Ref: ${updates.bookingRef}`);
+      if (updates.mblNumber) parts.push(`MBL: ${updates.mblNumber}`);
+      if (updates.vesselName) parts.push(`Vessel: ${updates.vesselName}`);
+      
+      if (updates.etd) parts.push(`Departure Confirmed: ${new Date(updates.etd as Date).toLocaleDateString()}`);
+      if (updates.eta) parts.push(`ETA Updated: ${new Date(updates.eta as Date).toLocaleDateString()}`);
+      if (updates.ata) parts.push(`Delivery Confirmed: ${new Date(updates.ata as Date).toLocaleDateString()}`);
+      
+      // Fallback for stages with no specific data inputs (like Finance close)
+      if (parts.length === 0) {
+          if (dossier.stage === ShipmentStage.FINANCE) return "Financial Reconciliation Completed";
+          return "Stage Advanced";
+      }
+      
+      return parts.join(" | ");
+  };
+
   const handleConfirm = () => {
     if (!nextStage) return;
 
@@ -61,7 +83,9 @@ export const WorkflowModal: React.FC<Props> = ({ isOpen, onClose, dossier, onAdv
             ...(dossier.stage === ShipmentStage.DELIVERY && formData.ata ? { ata: new Date(formData.ata) } : {}),
         };
 
-        onAdvance(updates, nextStage);
+        const summary = generateChangeSummary(updates);
+
+        onAdvance(updates, nextStage, summary);
         setIsLoading(false);
         onClose();
     }, 800);

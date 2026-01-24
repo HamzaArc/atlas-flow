@@ -1,5 +1,11 @@
 import { supabase } from '@/lib/supabase';
-import { Dossier, DossierAlert, ShipmentStage, DossierContainer, ShipmentEvent, DossierTask, ActivityItem } from '@/types/index';
+import { Dossier, DossierAlert, ShipmentStage, DossierContainer, ShipmentEvent, DossierTask, ActivityItem, Document } from '@/types/index';
+import { generateUUID } from '@/lib/utils';
+
+// --- Helpers ---
+const isValidUuid = (id?: string) => {
+    return id && id.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+};
 
 // --- Mappers ---
 
@@ -34,6 +40,7 @@ const mapDossierFromDb = (row: any): Dossier => {
     shipper: row.shipper || { name: '', role: 'Shipper' },
     consignee: row.consignee || { name: '', role: 'Consignee' },
     notify: row.notify,
+    parties: row.parties || [], 
     cargoItems: row.cargo_items || [],
     tags: row.tags || [],
     
@@ -42,10 +49,9 @@ const mapDossierFromDb = (row: any): Dossier => {
     events: (row.dossier_events || []).map(mapEventFromDb),
     tasks: (row.dossier_tasks || []).map(mapTaskFromDb),
     activities: (row.dossier_activities || []).map(mapActivityFromDb),
+    documents: (row.dossier_documents || []).map(mapDocumentFromDb),
     
-    // Defaults/Computed to satisfy strict interface
-    parties: [], 
-    documents: [], 
+    // Defaults
     alerts: [], 
     
     // Dates & Operations
@@ -61,28 +67,20 @@ const mapDossierFromDb = (row: any): Dossier => {
     currency: row.currency || 'MAD',
     
     createdDate: row.created_at,
-    owner: row.owner || '' // FIX: Map the owner from the database
+    owner: row.owner || ''
   };
 };
 
 const mapDossierToDb = (dossier: Dossier) => {
-  // Destructure to remove fields that don't exist in the 'dossiers' table
   const { 
-      id, 
-      containers, 
-      events, 
-      tasks, 
-      documents, 
-      activities, 
-      alerts, 
-      parties, // Exclude from DB payload
+      id, containers, events, tasks, documents, activities, alerts, 
       ...rest 
   } = dossier;
   
-  const isNew = id.startsWith('new-');
+  const dbId = isValidUuid(id) ? id : undefined;
 
   return {
-    ...(isNew ? {} : { id }),
+    ...(dbId ? { id: dbId } : {}),
     ref: rest.ref,
     booking_ref: rest.bookingRef,
     status: rest.status,
@@ -103,10 +101,14 @@ const mapDossierToDb = (dossier: Dossier) => {
     etd: rest.etd,
     eta: rest.eta,
     ata: rest.ata,
+    
+    // JSONB Fields
     shipper: rest.shipper,
     consignee: rest.consignee,
     notify: rest.notify,
+    parties: rest.parties,
     cargo_items: rest.cargoItems,
+    
     free_time_days: rest.freeTimeDays,
     vgm_cut_off: rest.vgmCutOff,
     port_cut_off: rest.portCutOff,
@@ -116,7 +118,7 @@ const mapDossierToDb = (dossier: Dossier) => {
     total_revenue: rest.totalRevenue,
     total_cost: rest.totalCost,
     currency: rest.currency,
-    owner: rest.owner // FIX: Include owner in the payload sent to Supabase
+    owner: rest.owner 
   };
 };
 
@@ -166,6 +168,18 @@ const mapActivityFromDb = (row: any): ActivityItem => ({
     timestamp: new Date(row.created_at)
 });
 
+const mapDocumentFromDb = (row: any): Document => ({
+    id: row.id,
+    dossierId: row.dossier_id,
+    name: row.name,
+    type: row.type,
+    url: row.url,
+    size: row.size,
+    status: row.status,
+    isInternal: row.is_internal,
+    updatedAt: new Date(row.updated_at || row.created_at)
+});
+
 // --- Service ---
 
 export const DossierService = {
@@ -177,7 +191,8 @@ export const DossierService = {
                 dossier_containers(*),
                 dossier_events(*),
                 dossier_tasks(*),
-                dossier_activities(*)
+                dossier_activities(*),
+                dossier_documents(*)
             `)
             .order('created_at', { ascending: false });
 
@@ -196,7 +211,8 @@ export const DossierService = {
                 dossier_containers(*),
                 dossier_events(*),
                 dossier_tasks(*),
-                dossier_activities(*)
+                dossier_activities(*),
+                dossier_documents(*)
             `)
             .eq('id', id)
             .single();
@@ -206,7 +222,6 @@ export const DossierService = {
     },
 
     save: async (dossier: Dossier): Promise<Dossier> => {
-        // 1. Save Main Dossier
         const dbPayload = mapDossierToDb(dossier);
         
         const { data: savedDossier, error: mainError } = await supabase
@@ -218,56 +233,112 @@ export const DossierService = {
         if (mainError) throw mainError;
         const dossierId = savedDossier.id;
 
-        // 2. Sync Containers
-        if (dossier.containers.length > 0) {
-            const containersPayload = dossier.containers.map(c => ({
-                id: c.id.length < 10 ? undefined : c.id, // ID check for temp IDs
-                dossier_id: dossierId,
-                container_number: c.number,
-                type: c.type,
-                seal_number: c.seal,
-                weight: c.weight,
-                package_count: c.packages,
-                package_type: c.packageType,
-                volume: c.volume,
-                status: c.status,
-                pickup_date: c.pickupDate,
-                return_date: c.returnDate
-            }));
+        // Sync Containers
+        const validContainers = dossier.containers.map(c => ({
+            ...c,
+            id: isValidUuid(c.id) ? c.id : generateUUID()
+        }));
+        const containerIdsToKeep: string[] = [];
+        if (validContainers.length > 0) {
+            const containersPayload = validContainers.map(c => {
+                containerIdsToKeep.push(c.id);
+                return {
+                    id: c.id, 
+                    dossier_id: dossierId,
+                    container_number: c.number,
+                    type: c.type,
+                    seal_number: c.seal,
+                    weight: c.weight,
+                    package_count: c.packages,
+                    package_type: c.packageType,
+                    volume: c.volume,
+                    status: c.status,
+                    pickup_date: c.pickupDate,
+                    return_date: c.returnDate
+                };
+            });
             await supabase.from('dossier_containers').upsert(containersPayload);
         }
-
-        // 3. Sync Events
-        if (dossier.events.length > 0) {
-            const eventsPayload = dossier.events.map(e => ({
-                id: e.id.startsWith('evt-') ? undefined : e.id,
-                dossier_id: dossierId,
-                title: e.title,
-                location: e.location,
-                occurred_at: e.timestamp,
-                is_exception: e.isException,
-                exception_reason: e.exceptionReason,
-                source: e.source
-            }));
-            await supabase.from('dossier_events').upsert(eventsPayload);
+        if (containerIdsToKeep.length > 0) {
+            await supabase.from('dossier_containers').delete().eq('dossier_id', dossierId).not('id', 'in', `(${containerIdsToKeep.join(',')})`);
+        } else {
+            await supabase.from('dossier_containers').delete().eq('dossier_id', dossierId);
         }
 
-        // 4. Sync Tasks
-        if (dossier.tasks.length > 0) {
-            const tasksPayload = dossier.tasks.map(t => ({
-                id: t.id.length < 10 ? undefined : t.id,
-                dossier_id: dossierId,
-                title: t.title,
-                description: t.description,
-                due_date: t.dueDate,
-                assignee_id: t.assignee,
-                is_completed: t.completed,
-                is_blocker: t.isBlocker,
-                category: t.category,
-                priority: t.priority,
-                stage: t.stage
-            }));
+        // Sync Events
+        const validEvents = dossier.events.map(e => ({
+            ...e,
+            id: isValidUuid(e.id) ? e.id : generateUUID()
+        }));
+        const eventIdsToKeep: string[] = [];
+        if (validEvents.length > 0) {
+            const eventsPayload = validEvents.map(e => {
+                eventIdsToKeep.push(e.id);
+                return {
+                    id: e.id,
+                    dossier_id: dossierId,
+                    title: e.title,
+                    location: e.location,
+                    occurred_at: e.timestamp,
+                    is_exception: e.isException,
+                    exception_reason: e.exceptionReason,
+                    source: e.source
+                };
+            });
+            await supabase.from('dossier_events').upsert(eventsPayload);
+        }
+        if (eventIdsToKeep.length > 0) {
+            await supabase.from('dossier_events').delete().eq('dossier_id', dossierId).not('id', 'in', `(${eventIdsToKeep.join(',')})`);
+        } else {
+            await supabase.from('dossier_events').delete().eq('dossier_id', dossierId);
+        }
+
+        // Sync Tasks
+        const validTasks = dossier.tasks.map(t => ({
+            ...t,
+            id: isValidUuid(t.id) ? t.id : generateUUID()
+        }));
+        const taskIdsToKeep: string[] = [];
+        if (validTasks.length > 0) {
+            const tasksPayload = validTasks.map(t => {
+                taskIdsToKeep.push(t.id);
+                let safeAssigneeId: string | null = t.assignee;
+                if (!safeAssigneeId || !isValidUuid(safeAssigneeId)) safeAssigneeId = null;
+
+                return {
+                    id: t.id,
+                    dossier_id: dossierId,
+                    title: t.title,
+                    description: t.description,
+                    due_date: t.dueDate,
+                    assignee_id: safeAssigneeId,
+                    is_completed: t.completed,
+                    is_blocker: t.isBlocker,
+                    category: t.category,
+                    priority: t.priority,
+                    stage: t.stage
+                };
+            });
             await supabase.from('dossier_tasks').upsert(tasksPayload);
+        }
+        if (taskIdsToKeep.length > 0) {
+            await supabase.from('dossier_tasks').delete().eq('dossier_id', dossierId).not('id', 'in', `(${taskIdsToKeep.join(',')})`);
+        } else {
+            await supabase.from('dossier_tasks').delete().eq('dossier_id', dossierId);
+        }
+
+        // Sync Activities
+        if (dossier.activities.length > 0) {
+            const activitiesPayload = dossier.activities.map(a => ({
+                id: isValidUuid(a.id) ? a.id : generateUUID(),
+                dossier_id: dossierId,
+                category: a.category,
+                tone: a.tone,
+                text: a.text,
+                meta: a.meta,
+                created_at: a.timestamp
+            }));
+            await supabase.from('dossier_activities').upsert(activitiesPayload);
         }
 
         return await DossierService.getById(dossierId) as Dossier;
@@ -278,11 +349,74 @@ export const DossierService = {
         if (error) throw error;
     },
 
+    // --- Documents API ---
+    
+    uploadDocument: async (dossierId: string, file: File, meta: { type: string, isInternal: boolean }): Promise<Document> => {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${dossierId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        
+        // 1. Upload file
+        const { error: uploadError } = await supabase.storage
+            .from('dossier-documents')
+            .upload(fileName, file);
+
+        if (uploadError) throw uploadError;
+
+        // 2. Get URL
+        const { data: { publicUrl } } = supabase.storage
+            .from('dossier-documents')
+            .getPublicUrl(fileName);
+
+        // 3. Save Record
+        const docPayload = {
+            dossier_id: dossierId,
+            name: file.name,
+            type: meta.type,
+            size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
+            url: publicUrl,
+            status: 'ISSUED', // Default
+            is_internal: meta.isInternal
+        };
+
+        const { data, error: dbError } = await supabase
+            .from('dossier_documents')
+            .insert(docPayload)
+            .select()
+            .single();
+
+        if (dbError) throw dbError;
+
+        return mapDocumentFromDb(data);
+    },
+
+    updateDocument: async (id: string, updates: Partial<Document>): Promise<Document> => {
+        // Map UI fields to DB fields
+        const payload = {
+            name: updates.name,
+            type: updates.type,
+            status: updates.status,
+            is_internal: updates.isInternal
+        };
+
+        const { data, error } = await supabase
+            .from('dossier_documents')
+            .update(payload)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return mapDocumentFromDb(data);
+    },
+
+    deleteDocument: async (id: string): Promise<void> => {
+        const { error } = await supabase.from('dossier_documents').delete().eq('id', id);
+        if (error) throw error;
+    },
+
     analyzeHealth: (dossier: Dossier): { alerts: DossierAlert[], nextAction: string } => {
         const alerts: DossierAlert[] = [];
         let nextAction = 'Monitor Shipment';
-        
-        // Client-side logic for alerts
         if (dossier.eta) {
             const daysToEta = Math.ceil((new Date(dossier.eta).getTime() - Date.now()) / (1000 * 3600 * 24));
             if (dossier.status === 'ON_WATER' && daysToEta < 2) {

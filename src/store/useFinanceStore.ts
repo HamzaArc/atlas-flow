@@ -2,35 +2,27 @@ import { create } from 'zustand';
 import { ChargeLine, Invoice, InvoiceStatus, VatRule } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 import { FinanceService } from '@/services/finance.service';
+import { generateUUID } from '@/lib/utils';
 
 interface FinanceState {
     ledger: ChargeLine[];
     invoices: Invoice[];
-    
-    // Dossier-Specific KPIs
     dossierStats: {
         revenue: number;
         cost: number;
         margin: number;
         marginPercent: number;
     };
-
-    // Global KPIs
     globalRevenue: number;
     globalOverdue: number;
     globalMargin: number;
     
-    // Actions
-    loadLedger: (dossierId: string) => void;
+    loadLedger: (dossierId: string) => Promise<void>;
     fetchGlobalStats: () => void;
-    
-    addCharge: (charge: Partial<ChargeLine>) => void;
-    updateCharge: (id: string, updates: Partial<ChargeLine>) => void;
-    deleteCharge: (id: string) => void;
-    
-    // Updated: Returns the Invoice object. PDF Generation must be handled by the UI.
+    addCharge: (charge: Partial<ChargeLine>) => Promise<void>;
+    updateCharge: (id: string, updates: Partial<ChargeLine>) => Promise<void>;
+    deleteCharge: (id: string) => Promise<void>;
     generateInvoice: (dossierId: string, lineIds: string[], type?: 'INVOICE' | 'CREDIT_NOTE') => Promise<Invoice | null>;
-    
     createManualInvoice: (invoice: Partial<Invoice>) => Promise<void>;
     updateInvoiceStatus: (id: string, status: InvoiceStatus) => void;
     createCreditNote: (invoiceId: string) => void;
@@ -45,22 +37,28 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     globalMargin: 0,
 
     loadLedger: async (dossierId) => {
-        const dossierLines = await FinanceService.fetchLedger(dossierId);
-        
-        // Recalc Stats
-        let rev = 0;
-        let cost = 0;
-        dossierLines.forEach(l => {
-            if(l.type === 'INCOME') rev += l.amountLocal;
-            else cost += l.amountLocal;
-        });
-        const margin = rev - cost;
-        const marginPercent = rev > 0 ? (margin / rev) * 100 : 0;
+        try {
+            const dossierLines = await FinanceService.fetchLedger(dossierId);
+            const dossierInvoices = await FinanceService.fetchInvoices(dossierId);
 
-        set({ 
-            ledger: dossierLines,
-            dossierStats: { revenue: rev, cost, margin, marginPercent: parseFloat(marginPercent.toFixed(1)) }
-        });
+            let rev = 0;
+            let cost = 0;
+            dossierLines.forEach(l => {
+                if(l.type === 'INCOME') rev += l.amountLocal;
+                else cost += l.amountLocal;
+            });
+            const margin = rev - cost;
+            const marginPercent = rev > 0 ? (margin / rev) * 100 : 0;
+
+            set({ 
+                ledger: dossierLines,
+                invoices: dossierInvoices,
+                dossierStats: { revenue: rev, cost, margin, marginPercent: parseFloat(marginPercent.toFixed(1)) }
+            });
+        } catch (e) {
+            console.error("Failed to load finance data", e);
+            useToast.getState().toast("Failed to load financials.", "error");
+        }
     },
 
     fetchGlobalStats: () => {
@@ -71,14 +69,20 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         });
     },
 
-    addCharge: (charge) => {
+    addCharge: async (charge) => {
         const vatRule = (charge.vatRule as VatRule) || 'STD_20';
         const vatAmt = FinanceService.calculateVat(charge.amount || 0, vatRule);
         const exRate = charge.exchangeRate || 1;
         
-        const newLine: ChargeLine = {
-            id: Math.random().toString(36).substr(2,9),
-            dossierId: '1', 
+        // FIX: Use provided rate if available, otherwise get default from rule (which now returns 20, 14, etc)
+        const finalRate = charge.vatRate !== undefined ? charge.vatRate : FinanceService.getVatRate(vatRule);
+
+        const safeId = generateUUID();
+
+        const newLine: Partial<ChargeLine> = {
+            ...charge,
+            id: safeId,
+            dossierId: charge.dossierId, 
             type: charge.type || 'EXPENSE',
             code: charge.code || 'MISC',
             description: charge.description || 'New Charge',
@@ -88,101 +92,108 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
             exchangeRate: exRate,
             amountLocal: (charge.amount || 0) * exRate,
             vatRule: vatRule,
-            vatRate: FinanceService.getVatRate(vatRule),
+            vatRate: finalRate, // Uses the percentage
             vatAmount: vatAmt, 
             totalAmount: ((charge.amount || 0) + vatAmt) * exRate,
             status: charge.type === 'EXPENSE' ? 'ACCRUED' : 'ESTIMATED',
             isBillable: true,
-            createdAt: new Date(),
-            ...charge
+            createdAt: new Date()
         };
         
-        const newLedger = [...get().ledger, newLine];
-        set({ ledger: newLedger });
-        get().loadLedger('1');
-        useToast.getState().toast("Charge accrued successfully.", "success");
+        // Optimistic
+        const tempLine = newLine as ChargeLine;
+        set(state => ({ ledger: [tempLine, ...state.ledger] }));
+
+        try {
+            await FinanceService.upsertCharge(newLine);
+            useToast.getState().toast("Charge saved.", "success");
+            
+            if (charge.dossierId) {
+                await get().loadLedger(charge.dossierId);
+            }
+        } catch (e: any) {
+             useToast.getState().toast("Failed to save charge: " + e.message, "error");
+             set(state => ({ ledger: state.ledger.filter(l => l.id !== safeId) }));
+        }
     },
 
-    updateCharge: (id, updates) => {
-        const newLedger = get().ledger.map(l => {
-            if (l.id !== id) return l;
-            
-            // Recalculate logic if amounts changed
-            const newAmount = updates.amount !== undefined ? updates.amount : l.amount;
-            const newRate = updates.exchangeRate !== undefined ? updates.exchangeRate : l.exchangeRate;
-            const newVatRule = (updates.vatRule as VatRule) !== undefined ? (updates.vatRule as VatRule) : l.vatRule;
-            
-            const vatAmt = FinanceService.calculateVat(newAmount, newVatRule);
-            
-            return { 
-                ...l, 
-                ...updates,
-                amount: newAmount,
-                exchangeRate: newRate,
-                amountLocal: newAmount * newRate,
-                vatAmount: vatAmt,
-                totalAmount: (newAmount + vatAmt) * newRate 
-            };
-        });
+    updateCharge: async (id, updates) => {
+        const currentLine = get().ledger.find(l => l.id === id);
+        if (!currentLine) return;
+
+        const newAmount = updates.amount !== undefined ? updates.amount : currentLine.amount;
+        const newRate = updates.exchangeRate !== undefined ? updates.exchangeRate : currentLine.exchangeRate;
+        const newVatRule = (updates.vatRule as VatRule) !== undefined ? (updates.vatRule as VatRule) : currentLine.vatRule;
         
-        set({ ledger: newLedger });
-        get().loadLedger('1');
-        useToast.getState().toast("Ledger updated.", "info");
+        // FIX: Respect incoming rate update
+        const newVatPercent = updates.vatRate !== undefined ? updates.vatRate : currentLine.vatRate;
+
+        const vatAmt = FinanceService.calculateVat(newAmount, newVatRule);
+        
+        const merged: Partial<ChargeLine> = { 
+            ...currentLine, 
+            ...updates,
+            amount: newAmount,
+            exchangeRate: newRate,
+            amountLocal: newAmount * newRate,
+            vatRule: newVatRule,
+            vatRate: newVatPercent,
+            vatAmount: vatAmt,
+            totalAmount: (newAmount + vatAmt) * newRate 
+        };
+        
+        try {
+            await FinanceService.upsertCharge(merged);
+            useToast.getState().toast("Ledger updated.", "info");
+             if (currentLine.dossierId) {
+                await get().loadLedger(currentLine.dossierId);
+            }
+        } catch (e) {
+            useToast.getState().toast("Update failed.", "error");
+        }
     },
 
-    deleteCharge: (id) => {
-        set({ ledger: get().ledger.filter(l => l.id !== id) });
-        get().loadLedger('1');
+    deleteCharge: async (id) => {
+        const line = get().ledger.find(l => l.id === id);
+        if (!line) return;
+        
+        set(state => ({ ledger: state.ledger.filter(l => l.id !== id) }));
+
+        try {
+            await FinanceService.deleteCharge(id);
+        } catch (e) {
+             useToast.getState().toast("Deletion failed.", "error");
+             set(state => ({ ledger: [...state.ledger, line] }));
+        }
     },
 
     generateInvoice: async (dossierId, lineIds, type = 'INVOICE') => {
         const selectedLines = get().ledger.filter(l => lineIds.includes(l.id));
         if (selectedLines.length === 0) return null;
 
-        // Validation: Ensure all lines have same currency
         const currency = selectedLines[0].currency;
         if(selectedLines.some(l => l.currency !== currency)) {
             useToast.getState().toast("Error: Cannot invoice mixed currencies.", "error");
             return null;
         }
 
-        const newInvoice = FinanceService.buildInvoiceObject(dossierId, selectedLines, type);
-
-        set(state => ({ invoices: [newInvoice, ...state.invoices] }));
-        
-        // Lock lines and link to invoice
-        const newLedger = get().ledger.map(l => 
-            lineIds.includes(l.id) ? { ...l, status: 'INVOICED' as const, invoiceId: newInvoice.id } : l
-        );
-        set({ ledger: newLedger });
-        
-        useToast.getState().toast(`${type === 'CREDIT_NOTE' ? 'Credit Note' : 'Invoice'} generated`, "success");
-        
-        // Return the object so the UI can handle PDF generation
-        return newInvoice;
+        try {
+            const invoiceObj = FinanceService.buildInvoiceObject(dossierId, selectedLines, type);
+            
+            const savedInvoice = await FinanceService.createInvoice(invoiceObj);
+            
+            useToast.getState().toast(`${type === 'CREDIT_NOTE' ? 'Credit Note' : 'Invoice'} generated`, "success");
+            
+            await get().loadLedger(dossierId);
+            return savedInvoice;
+        } catch (e: any) {
+            useToast.getState().toast("Invoice generation failed: " + e.message, "error");
+            return null;
+        }
     },
 
-    createManualInvoice: async (data) => {
-        const subTotal = data.lines?.reduce((acc: number, l: any) => acc + l.amount, 0) || 0;
-        const newInvoice: Invoice = {
-            id: Math.random().toString(36),
-            type: 'INVOICE',
-            reference: `MAN-24-${Math.floor(Math.random() * 1000)}`,
-            dossierId: 'GENERAL', 
-            clientId: data.clientId || 'UNKNOWN',
-            clientName: data.clientName || 'Cash Client',
-            date: new Date(),
-            dueDate: new Date(),
-            status: 'ISSUED',
-            currency: 'MAD',
-            exchangeRate: 1,
-            subTotal,
-            taxTotal: subTotal * 0.2, 
-            total: subTotal * 1.2,
-            balanceDue: subTotal * 1.2,
-            lines: data.lines || []
-        };
-        set(state => ({ invoices: [newInvoice, ...state.invoices] }));
+    createManualInvoice: async (_data) => {
+        useToast.getState().toast("Manual Invoice creation not fully implemented yet.", "warning");
     },
 
     updateInvoiceStatus: (id, status) => {
@@ -192,24 +203,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         get().fetchGlobalStats(); 
     },
 
-    createCreditNote: (invoiceId) => {
-        const targetInv = get().invoices.find(i => i.id === invoiceId);
-        if(!targetInv) return;
-
-        // Uses Service logic implicitly via data cloning, but we can extract if needed.
-        // For now, keeping simple logic here is fine as it's state manipulation.
-        const cn: Invoice = {
-            ...targetInv,
-            id: Math.random().toString(36),
-            type: 'CREDIT_NOTE',
-            reference: `CN-${targetInv.reference}`,
-            status: 'PAID', 
-            total: -targetInv.total, 
-            balanceDue: 0,
-            lines: targetInv.lines.map(l => ({...l, amount: -l.amount}))
-        };
-
-        set(state => ({ invoices: [cn, ...state.invoices] }));
-        useToast.getState().toast("Credit Note created.", "warning");
+    createCreditNote: (_invoiceId) => {
+        useToast.getState().toast("Please select lines and use 'Generate Credit Note'", "info");
     }
 }));
