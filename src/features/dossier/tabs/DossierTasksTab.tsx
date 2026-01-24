@@ -28,11 +28,19 @@ export const DossierTasksTab = () => {
   const criticalCount = tasks.filter(t => t.isBlocker && !t.completed).length;
   const overdueCount = tasks.filter(t => !t.completed && new Date(t.dueDate) < new Date()).length;
 
-  const filteredTasks = tasks.filter(t => {
-    if (filter === 'critical') return t.isBlocker && !t.completed;
-    if (filter === 'completed') return t.completed;
-    return !t.completed;
-  });
+  // FIX: Updated filter logic to keep completed tasks visible in 'all' view
+  // Added sorting to push completed tasks to the bottom
+  const filteredTasks = tasks
+    .filter(t => {
+      if (filter === 'critical') return t.isBlocker && !t.completed;
+      if (filter === 'completed') return t.completed;
+      return true; // Show everything for 'all'
+    })
+    .sort((a, b) => {
+      // Sort: Pending first, Completed last
+      if (a.completed === b.completed) return 0;
+      return a.completed ? 1 : -1;
+    });
 
   const handleOpenAdd = () => {
     setEditingTask({
@@ -51,8 +59,7 @@ export const DossierTasksTab = () => {
     if (!editingTask.title) return;
     
     if (editingTask.id) {
-       // Edit existing logic would go here if we implemented full updateTask in store
-       // For now, simple add for new, or manual update via map
+       // Edit existing logic
        const updated = tasks.map(t => t.id === editingTask.id ? { ...t, ...editingTask } as DossierTask : t);
        updateDossier('tasks', updated);
     } else {
@@ -130,7 +137,7 @@ export const DossierTasksTab = () => {
                </div>
             ) : (
                filteredTasks.map(task => (
-                  <div key={task.id} className="group p-4 hover:bg-slate-50 transition-colors flex items-start gap-4">
+                  <div key={task.id} className={`group p-4 hover:bg-slate-50 transition-colors flex items-start gap-4 ${task.completed ? 'bg-slate-50/50' : ''}`}>
                      <Checkbox 
                         checked={task.completed} 
                         onCheckedChange={() => toggleTask(task.id)}
@@ -144,6 +151,9 @@ export const DossierTasksTab = () => {
                               </span>
                               {task.isBlocker && !task.completed && (
                                  <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">BLOCKER</Badge>
+                              )}
+                              {task.completed && (
+                                <Badge variant="secondary" className="h-5 px-1.5 text-[10px] bg-slate-200 text-slate-600">DONE</Badge>
                               )}
                            </div>
                            <div className="flex items-center gap-2">

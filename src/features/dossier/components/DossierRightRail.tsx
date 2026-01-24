@@ -1,16 +1,47 @@
+import { useEffect } from "react";
 import { 
   Users, MapPin, Calendar, Tag, 
   MoreHorizontal, Mail,
-  AlertCircle
+  AlertCircle, ChevronDown, Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useDossierStore } from "@/store/useDossierStore";
-import { ShipmentParty } from "@/types/index";
+import { useUserStore } from "@/store/useUserStore";
+import { ShipmentParty, CompanyUser } from "@/types/index";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const DossierRightRail = () => {
-  const { dossier } = useDossierStore();
+  const { dossier, updateDossier, saveDossier } = useDossierStore();
+  const { users, fetchUsers } = useUserStore();
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  // Filter for Operations Team (KAM/OPS)
+  const opsTeam = users.filter(u => u.department === 'OPERATIONS');
+  
+  // Resolve current owner object
+  // FIX: Added avatarUrl to fallback object to satisfy TypeScript union type
+  const currentOwner = users.find(u => u.fullName === dossier.owner) || { 
+      fullName: 'Unassigned', 
+      jobTitle: 'Pending Assignment',
+      avatarUrl: undefined 
+  };
+
+  const handleOwnerChange = (user: CompanyUser) => {
+     updateDossier('owner', user.fullName);
+     saveDossier(); 
+  };
 
   const PartyCard = ({ role, data }: { role: string; data: ShipmentParty }) => (
     <div className="group flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer border border-transparent hover:border-slate-100">
@@ -76,7 +107,6 @@ export const DossierRightRail = () => {
             {dossier.notify && (
                 <PartyCard 
                     role="Notify" 
-                    // FIX: Ensure notify object satisfies ShipmentParty by injecting role
                     data={{ ...dossier.notify, role: 'Notify' } as ShipmentParty} 
                 />
             )}
@@ -107,20 +137,57 @@ export const DossierRightRail = () => {
             </div>
          </div>
 
-         {/* 4. Internal Ownership */}
+         {/* 4. Internal Ownership (Updated) */}
          <div>
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2">
                <AlertCircle className="h-4 w-4 text-slate-400" /> Ownership
             </h3>
-            <div className="flex items-center gap-3">
-               <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-blue-100 text-blue-700 text-xs font-bold">KA</AvatarFallback>
-               </Avatar>
-               <div>
-                  <p className="text-sm font-bold text-slate-900">Karim Alami</p>
-                  <p className="text-xs text-slate-500">Operations Manager</p>
-               </div>
-            </div>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors group">
+                   <Avatar className="h-9 w-9 border border-slate-200">
+                      <AvatarImage src={currentOwner.avatarUrl} />
+                      <AvatarFallback className="bg-blue-100 text-blue-700 text-xs font-bold">
+                        {currentOwner.fullName?.substring(0,2).toUpperCase() || 'NA'}
+                      </AvatarFallback>
+                   </Avatar>
+                   <div className="flex-1">
+                      <p className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        {currentOwner.fullName}
+                        <ChevronDown className="h-3 w-3 text-slate-300 group-hover:text-slate-500" />
+                      </p>
+                      <p className="text-xs text-slate-500">{currentOwner.jobTitle || 'No Role Assigned'}</p>
+                   </div>
+                </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="text-xs font-bold text-slate-500 uppercase">Operations Team</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {opsTeam.length > 0 ? opsTeam.map((user) => (
+                  <DropdownMenuItem 
+                    key={user.id} 
+                    onClick={() => handleOwnerChange(user)}
+                    className="cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-6 w-6">
+                        <AvatarImage src={user.avatarUrl} />
+                        <AvatarFallback className="text-[10px]">{user.fullName.substring(0,2)}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col">
+                         <span className="text-sm font-medium">{user.fullName}</span>
+                         <span className="text-[10px] text-slate-400">{user.jobTitle}</span>
+                      </div>
+                      {dossier.owner === user.fullName && <Check className="ml-auto h-3 w-3 text-blue-600" />}
+                    </div>
+                  </DropdownMenuItem>
+                )) : (
+                  <div className="p-2 text-xs text-slate-400 text-center">No OPS agents found</div>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
          </div>
       </div>
 

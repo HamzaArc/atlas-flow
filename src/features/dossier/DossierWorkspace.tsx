@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDossierStore } from '@/store/useDossierStore';
 
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 
 // Feature Components
 import { DossierHeader } from './components/DossierHeader';
-import { DossierRightRail } from './components/DossierRightRail'; // RESTORED
+import { DossierRightRail } from './components/DossierRightRail';
 
 import { DossierTrackingTab } from './tabs/DossierTrackingTab';
 import { DossierTasksTab } from './tabs/DossierTasksTab';
@@ -22,6 +22,9 @@ export const DossierWorkspace = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { loadDossier, dossier, isLoading } = useDossierStore();
+  
+  // FIX: Controlled State for Tabs to prevent reset on re-render
+  const [activeTab, setActiveTab] = useState("operations");
 
   useEffect(() => {
     if (id) {
@@ -65,7 +68,7 @@ export const DossierWorkspace = () => {
         {/* Center Content: Tabs & View */}
         <div className="flex-1 flex flex-col min-w-0 bg-slate-50/50">
           
-          <Tabs defaultValue="operations" className="flex flex-col h-full">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
             
             {/* Sticky Tabs Header */}
             <div className="flex-none sticky top-0 z-20 bg-white/90 backdrop-blur-sm border-b border-slate-200 shadow-sm">

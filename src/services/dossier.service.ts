@@ -44,7 +44,7 @@ const mapDossierFromDb = (row: any): Dossier => {
     activities: (row.dossier_activities || []).map(mapActivityFromDb),
     
     // Defaults/Computed to satisfy strict interface
-    parties: [], // Fixed: Added missing required property
+    parties: [], 
     documents: [], 
     alerts: [], 
     
@@ -61,7 +61,7 @@ const mapDossierFromDb = (row: any): Dossier => {
     currency: row.currency || 'MAD',
     
     createdDate: row.created_at,
-    owner: '' 
+    owner: row.owner || '' // FIX: Map the owner from the database
   };
 };
 
@@ -116,6 +116,7 @@ const mapDossierToDb = (dossier: Dossier) => {
     total_revenue: rest.totalRevenue,
     total_cost: rest.totalCost,
     currency: rest.currency,
+    owner: rest.owner // FIX: Include owner in the payload sent to Supabase
   };
 };
 

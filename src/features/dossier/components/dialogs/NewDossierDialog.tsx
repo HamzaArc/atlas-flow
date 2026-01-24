@@ -1,14 +1,53 @@
+//
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Anchor, Plane, Truck, Loader2
-} from 'lucide-react';
+  Anchor, Plane, Truck, Loader2, Check, ChevronsUpDown, MapPin} from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useDossierStore } from "@/store/useDossierStore";
+import { useClientStore } from "@/store/useClientStore"; // Integration with CRM
 import { TransportMode, Incoterm } from "@/types/index";
+import { cn } from "@/lib/utils";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+
+// --- SHARED DATA (Replicated from RouteSelector for consistency) ---
+export type PortData = { 
+  id: string; 
+  country: string;
+  code: string;
+  tier?: boolean;
+};
+
+export const PORT_DB: PortData[] = [
+  { id: "CASABLANCA (MAP)", country: "Morocco", code: "MACAS" },
+  { id: "TANGER MED (MAP)", country: "Morocco", code: "MAPTM", tier: true },
+  { id: "AGADIR (MAP)", country: "Morocco", code: "MAAGA" },
+  { id: "ROTTERDAM (NL)", country: "Netherlands", code: "NLRTM", tier: true },
+  { id: "HAMBURG (DE)", country: "Germany", code: "DEHAM" },
+  { id: "VALENCIA (ES)", country: "Spain", code: "ESVLC" },
+  { id: "MARSEILLE (FR)", country: "France", code: "FRMRS" },
+  { id: "SHANGHAI (CN)", country: "China", code: "CNSHA", tier: true },
+  { id: "NINGBO (CN)", country: "China", code: "CNNGB" },
+  { id: "DUBAI (AE)", country: "UAE", code: "AEDXB", tier: true },
+  { id: "SINGAPORE (SG)", country: "Singapore", code: "SGSIN", tier: true },
+  { id: "NEW YORK (US)", country: "USA", code: "USNYC", tier: true },
+  { id: "LOS ANGELES (US)", country: "USA", code: "USLAX" },
+  { id: "SANTOS (BR)", country: "Brazil", code: "BRSSZ" },
+];
 
 interface Props {
   isOpen: boolean;
@@ -18,7 +57,12 @@ interface Props {
 export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
   const navigate = useNavigate();
   const { createDossier, updateDossier, saveDossier, isLoading } = useDossierStore();
+  const { clients, fetchClients } = useClientStore();
   
+  const [clientOpen, setClientOpen] = useState(false);
+  const [polOpen, setPolOpen] = useState(false);
+  const [podOpen, setPodOpen] = useState(false);
+
   // Generate a unique reference: BKG-YYYY-XXXX
   const generateRef = () => {
     const year = new Date().getFullYear();
@@ -29,6 +73,7 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
   // Local form state before committing to store
   const [formData, setFormData] = useState({
     ref: '',
+    clientId: '',
     clientName: '',
     mode: 'SEA_FCL' as TransportMode,
     incoterm: 'FOB' as Incoterm,
@@ -41,12 +86,14 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
     if (isOpen) {
       setFormData({
         ref: generateRef(),
+        clientId: '',
         clientName: '',
         mode: 'SEA_FCL',
         incoterm: 'FOB',
         pol: '',
         pod: ''
       });
+      fetchClients(); // Fetch CRM data
     }
   }, [isOpen]);
 
@@ -58,11 +105,12 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
     if (!formData.clientName) return;
 
     try {
-      // 1. Initialize empty dossier in store (sets id to 'new-...')
+      // 1. Initialize empty dossier in store
       createDossier();
       
       // 2. Hydrate the store state with form data
       updateDossier('ref', formData.ref);
+      updateDossier('clientId', formData.clientId);
       updateDossier('clientName', formData.clientName);
       updateDossier('mode', formData.mode);
       updateDossier('incoterm', formData.incoterm);
@@ -76,7 +124,6 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
       await saveDossier();
       
       // 4. Get the new ID and Navigate
-      // We access getState() directly to ensure we get the fresh ID after the await resolves
       const newDossierId = useDossierStore.getState().dossier.id;
       
       if (newDossierId && !newDossierId.startsWith('new-')) {
@@ -149,36 +196,123 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
 
            {/* Core Details */}
            <div className="grid grid-cols-2 gap-6">
-              <div className="col-span-2">
-                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Client Name</Label>
-                 <Input 
-                   className="mt-1.5" 
-                   placeholder="e.g. Atlas Textiles SARL"
-                   value={formData.clientName}
-                   onChange={e => setFormData({...formData, clientName: e.target.value})}
-                 />
+              
+              {/* CRM Client Selector */}
+              <div className="col-span-2 space-y-1.5">
+                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Client (CRM)</Label>
+                 <Popover open={clientOpen} onOpenChange={setClientOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={clientOpen}
+                        className="w-full justify-between h-10 text-sm bg-white border-slate-200"
+                      >
+                        {formData.clientName || "Select customer..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search clients..." />
+                        <CommandList>
+                          <CommandEmpty>No client found.</CommandEmpty>
+                          <CommandGroup heading="Active Clients">
+                            {clients.map((client) => (
+                              <CommandItem
+                                key={client.id}
+                                value={client.entityName}
+                                onSelect={() => {
+                                  setFormData({ ...formData, clientName: client.entityName, clientId: client.id });
+                                  setClientOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    formData.clientId === client.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {client.entityName}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                 </Popover>
               </div>
 
-              <div>
+              {/* POL Selector */}
+              <div className="space-y-1.5">
                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Origin (POL)</Label>
-                 <div className="relative mt-1.5">
-                    <Input 
-                      placeholder="City or Port..."
-                      value={formData.pol}
-                      onChange={e => setFormData({...formData, pol: e.target.value})} 
-                    />
-                 </div>
+                 <Popover open={polOpen} onOpenChange={setPolOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" aria-expanded={polOpen} className="w-full justify-between h-10 text-sm bg-white border-slate-200">
+                         <div className="flex items-center gap-2 truncate">
+                           <MapPin className="h-4 w-4 text-slate-400" />
+                           {formData.pol ? formData.pol : <span className="text-slate-400 font-normal">Select Origin...</span>}
+                         </div>
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[280px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search ports..." />
+                        <CommandList>
+                           <CommandEmpty>No port found.</CommandEmpty>
+                           <CommandGroup>
+                              {PORT_DB.map((port) => (
+                                 <CommandItem key={port.id} value={port.id} 
+                                    onSelect={(currentValue) => {
+                                       setFormData({...formData, pol: currentValue});
+                                       setPolOpen(false);
+                                    }}
+                                 >
+                                    <Check className={cn("mr-2 h-4 w-4", formData.pol === port.id ? "opacity-100" : "opacity-0")}/>
+                                    {port.id} <span className="ml-1 text-slate-400 text-xs">({port.code})</span>
+                                 </CommandItem>
+                              ))}
+                           </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                 </Popover>
               </div>
 
-              <div>
+              {/* POD Selector */}
+              <div className="space-y-1.5">
                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Destination (POD)</Label>
-                 <div className="relative mt-1.5">
-                    <Input 
-                      placeholder="City or Port..."
-                      value={formData.pod}
-                      onChange={e => setFormData({...formData, pod: e.target.value})} 
-                    />
-                 </div>
+                 <Popover open={podOpen} onOpenChange={setPodOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" aria-expanded={podOpen} className="w-full justify-between h-10 text-sm bg-white border-slate-200">
+                         <div className="flex items-center gap-2 truncate">
+                           <Anchor className="h-4 w-4 text-slate-400" />
+                           {formData.pod ? formData.pod : <span className="text-slate-400 font-normal">Select Dest...</span>}
+                         </div>
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[280px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search ports..." />
+                        <CommandList>
+                           <CommandEmpty>No port found.</CommandEmpty>
+                           <CommandGroup>
+                              {PORT_DB.map((port) => (
+                                 <CommandItem key={port.id} value={port.id} 
+                                    onSelect={(currentValue) => {
+                                       setFormData({...formData, pod: currentValue});
+                                       setPodOpen(false);
+                                    }}
+                                 >
+                                    <Check className={cn("mr-2 h-4 w-4", formData.pod === port.id ? "opacity-100" : "opacity-0")}/>
+                                    {port.id} <span className="ml-1 text-slate-400 text-xs">({port.code})</span>
+                                 </CommandItem>
+                              ))}
+                           </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                 </Popover>
               </div>
            </div>
 
