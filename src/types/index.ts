@@ -162,7 +162,7 @@ export interface Quote {
 }
 
 // --- 3. DOSSIER MODELS (ENHANCED) ---
-export type ShipmentStatus = 'BOOKED' | 'PICKUP' | 'AT_POL' | 'ON_WATER' | 'AT_POD' | 'CUSTOMS' | 'DELIVERED' | 'COMPLETED';
+export type ShipmentStatus = 'BOOKED' | 'PICKUP' | 'AT_POL' | 'ON_WATER' | 'AT_POD' | 'CUSTOMS' | 'DELIVERED' | 'COMPLETED' | 'CANCELLED';
 
 export interface ShipmentParty {
     id?: string;

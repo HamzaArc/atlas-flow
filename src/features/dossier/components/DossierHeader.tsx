@@ -6,15 +6,14 @@ import {
   AlertCircle, Archive, Save
 } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
-import { ShipmentStage, Dossier } from "@/types/index";
+import { ShipmentStage, Dossier, ShipmentStatus } from "@/types/index";
 import { ShipmentProgress } from "./ShipmentProgress";
 import { WorkflowModal } from "./modals/WorkflowModal";
 import { Button } from "@/components/ui/button";
 
 export const DossierHeader = () => {
   const navigate = useNavigate();
-  // ADDED: addActivity to destructuring
-  const { dossier, setStage, updateDossier, saveDossier, isLoading, addActivity } = useDossierStore();
+  const { dossier, setStage, setStatus, updateDossier, saveDossier, duplicateDossier, isLoading, addActivity } = useDossierStore();
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const [isWorkflowOpen, setIsWorkflowOpen] = useState(false);
 
@@ -31,6 +30,20 @@ export const DossierHeader = () => {
     }
   };
 
+  // Helper: Auto-map Stage to Status
+  const getStatusForStage = (stage: ShipmentStage): ShipmentStatus => {
+      switch (stage) {
+          case ShipmentStage.INTAKE: return 'BOOKED';
+          case ShipmentStage.BOOKING: return 'PICKUP'; // or BOOKED
+          case ShipmentStage.ORIGIN: return 'AT_POL';
+          case ShipmentStage.TRANSIT: return 'ON_WATER';
+          case ShipmentStage.DELIVERY: return 'AT_POD';
+          case ShipmentStage.FINANCE: return 'DELIVERED';
+          case ShipmentStage.CLOSED: return 'COMPLETED';
+          default: return 'BOOKED';
+      }
+  };
+
   // Handler for the Workflow Modal
   const handleWorkflowAdvance = (updates: Partial<Dossier>, nextStage: ShipmentStage, summary: string) => {
     // 1. Update specific fields captured in modal (e.g. mblNumber, etd)
@@ -44,10 +57,17 @@ export const DossierHeader = () => {
         addActivity(summary, 'SYSTEM', 'neutral');
     }
 
-    // 3. Advance the stage
+    // 3. Update Status based on the new Stage
+    // We only update status automatically if the job is NOT cancelled.
+    if (dossier.status !== 'CANCELLED') {
+        const newStatus = getStatusForStage(nextStage);
+        setStatus(newStatus);
+    }
+
+    // 4. Advance the stage
     setStage(nextStage);
 
-    // 4. Persist everything (updates, stage change, and new activity) to DB
+    // 5. Persist everything (updates, stage change, and new activity) to DB
     saveDossier();
   };
 
@@ -55,13 +75,48 @@ export const DossierHeader = () => {
       await saveDossier();
   };
 
+  // Handle Duplicate
+  const handleDuplicate = async () => {
+      setIsActionsOpen(false);
+      const newId = await duplicateDossier();
+      if (newId) {
+          navigate(`/dossiers/${newId}`);
+      }
+  };
+
+  // Handle Cancel
+  const handleCancel = async () => {
+      setIsActionsOpen(false);
+      if (confirm('Are you sure you want to cancel this job? This action cannot be undone easily.')) {
+          setStatus('CANCELLED');
+          setStage(ShipmentStage.CLOSED); // Close it out
+          addActivity('Job was cancelled by the user.', 'SYSTEM', 'destructive');
+          await saveDossier();
+      }
+  };
+
   const isLastStage = dossier.stage === ShipmentStage.CLOSED;
+  const isCancelled = dossier.status === 'CANCELLED';
 
   const ModeIcon = () => {
      if (dossier.mode?.includes('SEA')) return <Anchor className="h-6 w-6 text-blue-600" />;
      if (dossier.mode?.includes('AIR')) return <Plane className="h-6 w-6 text-orange-600" />;
      if (dossier.mode?.includes('ROAD')) return <Truck className="h-6 w-6 text-emerald-600" />;
      return <Box className="h-6 w-6 text-slate-600" />;
+  };
+
+  // Helper for Status Badge Color
+  const getStatusColor = (status: string) => {
+      switch (status) {
+          case 'CANCELLED': return 'bg-red-50 text-red-700 border-red-200';
+          case 'COMPLETED': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+          case 'ON_WATER': return 'bg-blue-50 text-blue-700 border-blue-200';
+          case 'AT_POL': return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+          case 'AT_POD': return 'bg-purple-50 text-purple-700 border-purple-200';
+          case 'DELIVERED': return 'bg-green-50 text-green-700 border-green-200';
+          case 'BOOKED': return 'bg-slate-100 text-slate-600 border-slate-200';
+          default: return 'bg-slate-50 text-slate-700 border-slate-200';
+      }
   };
 
   return (
@@ -87,6 +142,11 @@ export const DossierHeader = () => {
             <div>
                <div className="flex items-center gap-3">
                   <h1 className="text-xl font-bold text-slate-900 tracking-tight">{dossier.ref}</h1>
+                  {/* Status Badge */}
+                  <span className={`px-2.5 py-0.5 rounded text-xs font-bold border uppercase tracking-wider ${getStatusColor(dossier.status)}`}>
+                      {dossier.status.replace('_', ' ')}
+                  </span>
+
                   {dossier.mode && (
                     <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-wider">
                        {dossier.mode}
@@ -133,12 +193,22 @@ export const DossierHeader = () => {
                     <>
                     <div className="fixed inset-0 z-10" onClick={() => setIsActionsOpen(false)}></div>
                     <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 z-20 animate-in fade-in zoom-in-95 duration-100">
-                        <button className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+                        {/* Duplicate Action */}
+                        <button 
+                            onClick={handleDuplicate}
+                            className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                        >
                             <Copy className="h-3.5 w-3.5" /> Duplicate Job
                         </button>
-                        <button className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                        
+                        {/* Cancel Action */}
+                        <button 
+                            onClick={handleCancel}
+                            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                        >
                             <AlertCircle className="h-3.5 w-3.5" /> Cancel Job
                         </button>
+                        
                         <div className="h-px bg-slate-100 my-1"></div>
                         <button className="w-full text-left px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 flex items-center gap-2">
                             <Archive className="h-3.5 w-3.5" /> Archive
@@ -150,17 +220,17 @@ export const DossierHeader = () => {
 
             <button 
                onClick={() => setIsWorkflowOpen(true)}
-               disabled={isLastStage}
+               disabled={isLastStage || isCancelled}
                className={`
                  px-5 py-2.5 text-sm font-semibold text-white rounded-lg shadow-sm transition-all transform flex items-center gap-2
-                 ${isLastStage 
+                 ${(isLastStage || isCancelled)
                     ? 'bg-slate-400 cursor-not-allowed opacity-75' 
                     : 'bg-slate-900 hover:bg-slate-800 hover:-translate-y-0.5 active:translate-y-0'
                  }
                `}
             >
                {getCTA(dossier.stage)}
-               {!isLastStage && <ChevronRight className="h-4 w-4" />}
+               {!isLastStage && !isCancelled && <ChevronRight className="h-4 w-4" />}
             </button>
          </div>
       </div>

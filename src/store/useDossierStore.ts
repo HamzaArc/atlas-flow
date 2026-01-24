@@ -17,6 +17,9 @@ interface DossierState {
   saveDossier: () => Promise<void>;
   deleteDossier: (id: string) => Promise<void>;
   
+  // NEW: Duplicate Capability
+  duplicateDossier: () => Promise<string | null>;
+  
   setEditing: (isEditing: boolean) => void;
   updateDossier: <K extends keyof Dossier>(field: K, value: Dossier[K]) => void;
   updateParty: (party: 'shipper' | 'consignee' | 'notify', field: string, value: string) => void;
@@ -273,6 +276,70 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       }
   },
 
+  duplicateDossier: async () => {
+      const { dossier } = get();
+      if (!dossier) return null;
+
+      set({ isLoading: true });
+      try {
+          // Create deep copy
+          const newDossier: Dossier = JSON.parse(JSON.stringify(dossier));
+          
+          // Reset identifiers and status
+          newDossier.id = generateUUID(); // Temporary ID until saved? Or utilize backend gen.
+          newDossier.ref = `${dossier.ref}-COPY`;
+          newDossier.bookingRef = '';
+          newDossier.status = 'BOOKED';
+          newDossier.stage = ShipmentStage.INTAKE;
+          newDossier.createdDate = new Date().toISOString();
+          
+          // Reset operational data
+          newDossier.mblNumber = '';
+          newDossier.hblNumber = '';
+          newDossier.activities = [{ 
+              id: generateUUID(), 
+              category: 'SYSTEM', 
+              text: `Job duplicated from ${dossier.ref}`, 
+              meta: 'System', 
+              timestamp: new Date() 
+          }];
+          newDossier.documents = []; // Do not copy docs
+          newDossier.events = [];
+          
+          // Reset Container Execution but keep structure if needed? 
+          // Default decision: Clear containers for a clean slate on a new job
+          newDossier.containers = []; 
+          
+          // Tasks: Reset completion
+          newDossier.tasks = newDossier.tasks.map(t => ({
+              ...t,
+              id: generateUUID(),
+              completed: false,
+              assignee: null // Reset assignee
+          }));
+
+          // Save immediately to persist
+          const savedDossier = await DossierService.save(newDossier);
+          
+          // Update state
+          const { dossiers } = get();
+          set({
+              dossiers: [savedDossier, ...dossiers],
+              dossier: savedDossier,
+              isLoading: false,
+              isEditing: false
+          });
+
+          useToast.getState().toast("Job duplicated successfully.", "success");
+          return savedDossier.id;
+      } catch (e: any) {
+          console.error("Duplicate failed", e);
+          set({ isLoading: false });
+          useToast.getState().toast("Failed to duplicate job.", "error");
+          return null;
+      }
+  },
+
   saveDossier: async () => {
       set({ isLoading: true });
       get().runSmartChecks(); 
@@ -280,6 +347,7 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       const { dossier, dossiers } = get();
       
       try {
+          // If ID is 'new' or generated client-side temp, ensure service handles it
           const savedDossier = await DossierService.save(dossier);
           
           const index = dossiers.findIndex(d => d.id === dossier.id);
@@ -288,6 +356,8 @@ export const useDossierStore = create<DossierState>((set, get) => ({
           if (index >= 0) {
               newDossiers[index] = savedDossier;
           } else {
+              // Handle case where we were editing a "new-timestamp" ID that is now a real UUID from DB if needed
+              // or simply if it wasn't in the list yet
               const tempIndex = dossiers.findIndex(d => d.id === dossier.id);
               if (tempIndex >= 0) {
                   newDossiers[tempIndex] = savedDossier;
