@@ -1,6 +1,5 @@
 // src/types/index.ts
 
-
 // --- 1. CORE LOGISTICS ENUMS ---
 export type Incoterm = 
   | 'EXW' | 'FCA' | 'CPT' | 'CIP' | 'DAP' | 'DPU' | 'DDP' 
@@ -162,6 +161,7 @@ export interface Quote {
 }
 
 // --- 3. DOSSIER MODELS (ENHANCED) ---
+// Added 'CANCELLED' to the status union type
 export type ShipmentStatus = 'BOOKED' | 'PICKUP' | 'AT_POL' | 'ON_WATER' | 'AT_POD' | 'CUSTOMS' | 'DELIVERED' | 'COMPLETED' | 'CANCELLED';
 
 export interface ShipmentParty {
@@ -174,7 +174,6 @@ export interface ShipmentParty {
     phone?: string;
 }
 
-// New: Cargo Item Interface matching the reference
 export interface CargoItem {
   id: string;
   description: string;
@@ -203,7 +202,7 @@ export interface Document {
   id: string;
   dossierId?: string;
   name: string;
-  type: string; // e.g. "MBL", "INV"
+  type: string; 
   status: DocStatus | string;
   isInternal: boolean;
   url: string;
@@ -255,7 +254,7 @@ export interface Dossier {
   
   mblNumber: string; 
   hblNumber: string; 
-  customerReference?: string;
+  customerReference?: string; 
   
   carrier: string;
   vesselName: string;
@@ -276,6 +275,7 @@ export interface Dossier {
   parties: ShipmentParty[]; 
   
   freeTimeDays: number; 
+  transitTime?: number; 
   vgmCutOff?: Date;
   portCutOff?: Date;
   docCutOff?: Date;

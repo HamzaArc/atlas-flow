@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { 
   Users, MapPin, Calendar, Tag, 
   MoreHorizontal, Mail,
-  AlertCircle, ChevronDown, Check
+  AlertCircle, ChevronDown, Check, Clock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,11 +27,8 @@ export const DossierRightRail = () => {
     fetchUsers();
   }, [fetchUsers]);
 
-  // Filter for Operations Team (KAM/OPS)
   const opsTeam = users.filter(u => u.department === 'OPERATIONS');
   
-  // Resolve current owner object
-  // FIX: Added avatarUrl to fallback object to satisfy TypeScript union type
   const currentOwner = users.find(u => u.fullName === dossier.owner) || { 
       fullName: 'Unassigned', 
       jobTitle: 'Pending Assignment',
@@ -53,7 +50,6 @@ export const DossierRightRail = () => {
       <div className="flex-1 min-w-0">
         <div className="flex justify-between items-start">
            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">{role}</p>
-           {/* Quick Action Hover */}
            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
               <button className="text-slate-400 hover:text-blue-600"><Mail className="h-3 w-3" /></button>
            </div>
@@ -70,7 +66,6 @@ export const DossierRightRail = () => {
   return (
     <div className="w-80 border-l border-slate-200 bg-white flex flex-col h-full overflow-y-auto custom-scrollbar">
       
-      {/* 1. Quick Stats / Key Dates */}
       <div className="p-5 border-b border-slate-100 space-y-4">
          <div>
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -86,14 +81,18 @@ export const DossierRightRail = () => {
                   <span className="font-bold text-blue-600">{dossier.eta ? new Date(dossier.eta).toLocaleDateString() : '—'}</span>
                </div>
                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-500">Demurrage Free</span>
+                  <span className="text-slate-500 flex items-center gap-1"><Clock className="h-3 w-3" /> Est. Transit</span>
+                  {/* @ts-ignore */}
+                  <span className="font-bold text-slate-900">{dossier.transitTime || 0} Days</span>
+               </div>
+               <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-500">Free Time</span>
                   <span className="font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded text-xs">{dossier.freeTimeDays} Days</span>
                </div>
             </div>
          </div>
       </div>
 
-      {/* 2. Stakeholders */}
       <div className="p-2 border-b border-slate-100">
          <div className="px-3 py-3 flex justify-between items-center">
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Stakeholders</h3>
@@ -110,14 +109,12 @@ export const DossierRightRail = () => {
                     data={{ ...dossier.notify, role: 'Notify' } as ShipmentParty} 
                 />
             )}
-            {/* Map over generic parties array if populated */}
             {dossier.parties?.filter(p => p.role === 'Agent' || p.role === 'Carrier').map((p, i) => (
                <PartyCard key={i} role={p.role} data={p} />
             ))}
          </div>
       </div>
 
-      {/* 3. Tags & Metadata */}
       <div className="p-5 space-y-6">
          <div>
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -137,7 +134,6 @@ export const DossierRightRail = () => {
             </div>
          </div>
 
-         {/* 4. Internal Ownership (Updated) */}
          <div>
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2">
                <AlertCircle className="h-4 w-4 text-slate-400" /> Ownership

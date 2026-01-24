@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { 
    MapPin, Box, Plus, Trash2, User, 
    ArrowRight, Mail, Shield,
-   Truck, Check, ChevronsUpDown
+   Truck, Check, ChevronsUpDown, Home, Clock, Calendar
 } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
 import { ShipmentParty, CargoItem, DossierContainer } from "@/types/index";
@@ -41,18 +41,21 @@ const PORT_DB = [
 ];
 
 // Helper Components
-const InputField = ({ label, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label?: string }) => (
+const InputField = ({ label, icon: Icon, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label?: string, icon?: any }) => (
   <div className="flex-1">
     {label && <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{label}</label>}
-    <input
-      {...props}
-      className={`
-        block w-full rounded-lg border-slate-300 bg-white text-sm text-slate-900 shadow-sm 
-        placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 
-        transition-all py-2.5 px-3 hover:border-slate-400 outline-none
-        ${props.className || ''}
-      `}
-    />
+    <div className="relative">
+      <input
+        {...props}
+        className={`
+          block w-full rounded-lg border-slate-300 bg-white text-sm text-slate-900 shadow-sm 
+          placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 
+          transition-all py-2.5 ${Icon ? 'pl-9' : 'px-3'} pr-3 hover:border-slate-400 outline-none
+          ${props.className || ''}
+        `}
+      />
+      {Icon && <Icon className="absolute left-3 top-3 h-4 w-4 text-slate-400" />}
+    </div>
   </div>
 );
 
@@ -97,8 +100,11 @@ export const DossierOperationsTab = () => {
   const [polOpen, setPolOpen] = useState(false);
   const [podOpen, setPodOpen] = useState(false);
 
+  // --- Logic Helpers ---
+  const isEXW = dossier.incoterm === 'EXW';
+  const isDeliveryInco = ['DAP', 'DPU', 'DDP'].includes(dossier.incoterm);
+
   // --- Handlers ---
-  
   const handleAddParty = () => {
      if (!newParty.name) return;
      const partyToAdd: ShipmentParty = {
@@ -109,7 +115,6 @@ export const DossierOperationsTab = () => {
         contact: newParty.contact
      };
      
-     // Handle fixed roles vs generic parties
      if (partyToAdd.role === 'Shipper') {
          updateDossier('shipper', partyToAdd);
      } else if (partyToAdd.role === 'Consignee') {
@@ -185,127 +190,181 @@ export const DossierOperationsTab = () => {
         {/* LEFT COLUMN */}
         <div className="flex flex-col gap-6 h-full">
           
-          {/* CARD 1: Route & Schedule */}
+          {/* CARD 1: Route & Schedule (ENHANCED) */}
           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative z-20">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3 bg-white rounded-t-2xl">
-              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg ring-1 ring-blue-100"><MapPin className="h-5 w-5" /></div>
-              <h3 className="text-base font-bold text-slate-900">Route & Schedule</h3>
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                 <div className="p-2 bg-blue-50 text-blue-600 rounded-lg ring-1 ring-blue-100"><MapPin className="h-5 w-5" /></div>
+                 <h3 className="text-base font-bold text-slate-900">Route & Schedule</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded border border-slate-100">
+                    {dossier.incoterm}
+                 </span>
+              </div>
             </div>
             
             <div className="p-6 relative flex-1">
               <div className="absolute left-[26px] top-20 bottom-12 w-0.5 bg-slate-100 hidden md:block z-0"></div>
 
               <div className="space-y-8 relative z-10">
-                {/* POL */}
+                {/* POL SECTION */}
                 <div className="flex flex-col md:flex-row gap-4 items-start">
                    <div className="hidden md:flex flex-col items-center mt-2 min-w-[50px]">
                       <div className="h-4 w-4 rounded-full border-4 border-white bg-blue-500 shadow-md ring-1 ring-blue-100"></div>
                    </div>
                    <div className="flex-1 w-full bg-slate-50/50 p-5 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
-                      <h4 className="text-[11px] font-bold text-blue-600 uppercase tracking-widest mb-4 flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Port of Loading</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        
-                        {/* POL Dropdown */}
-                        <div className="flex-1">
-                           <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Location</label>
-                           <Popover open={polOpen} onOpenChange={setPolOpen}>
-                              <PopoverTrigger asChild>
-                                <Button variant="outline" role="combobox" aria-expanded={polOpen} className="w-full justify-between h-[42px] text-sm bg-white border-slate-300 hover:border-slate-400 text-slate-900">
-                                   <div className="flex items-center gap-2 truncate">
-                                     <MapPin className="h-4 w-4 text-slate-400" />
-                                     {dossier.pol ? dossier.pol : <span className="text-slate-400 font-normal">Select Origin...</span>}
-                                   </div>
-                                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-[300px] p-0" align="start">
-                                <Command>
-                                  <CommandInput placeholder="Search ports..." />
-                                  <CommandList>
-                                     <CommandEmpty>No port found.</CommandEmpty>
-                                     <CommandGroup>
-                                        {PORT_DB.map((port) => (
-                                           <CommandItem key={port.id} value={port.id} 
-                                              onSelect={(currentValue) => {
-                                                 updateDossier('pol', currentValue);
-                                                 setPolOpen(false);
-                                              }}
-                                           >
-                                              <Check className={cn("mr-2 h-4 w-4", dossier.pol === port.id ? "opacity-100" : "opacity-0")}/>
-                                              {port.id} <span className="ml-1 text-slate-400 text-xs">({port.code})</span>
-                                           </CommandItem>
-                                        ))}
-                                     </CommandGroup>
-                                  </CommandList>
-                                </Command>
-                              </PopoverContent>
-                           </Popover>
-                        </div>
+                      <h4 className="text-[11px] font-bold text-blue-600 uppercase tracking-widest mb-4 flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Origin & Loading</h4>
+                      
+                      <div className="grid grid-cols-1 gap-5">
+                        {isEXW && (
+                            <div className="animate-in slide-in-from-top-1">
+                                <InputField 
+                                    label="Pickup Address (EXW)" 
+                                    icon={Home}
+                                    placeholder="Factory address details..."
+                                    value={dossier.incotermPlace || ''}
+                                    onChange={(e) => updateDossier('incotermPlace', e.target.value)}
+                                    className="border-amber-200 bg-amber-50/10"
+                                />
+                            </div>
+                        )}
 
-                        <InputField 
-                           label="Departure Date"
-                           type="date"
-                           value={dossier.etd ? new Date(dossier.etd).toISOString().split('T')[0] : ''}
-                           onChange={(e) => updateDossier('etd', new Date(e.target.value))}
-                        />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                           <div className="flex-1">
+                              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Port of Loading (POL)</label>
+                              <Popover open={polOpen} onOpenChange={setPolOpen}>
+                                 <PopoverTrigger asChild>
+                                   <Button variant="outline" className="w-full justify-between h-[42px] text-sm bg-white border-slate-300 hover:border-slate-400 text-slate-900 shadow-sm">
+                                      <div className="flex items-center gap-2 truncate">
+                                        <MapPin className="h-4 w-4 text-slate-400" />
+                                        {dossier.pol ? dossier.pol : <span className="text-slate-400 font-normal">Select POL...</span>}
+                                      </div>
+                                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                   </Button>
+                                 </PopoverTrigger>
+                                 <PopoverContent className="w-[300px] p-0" align="start">
+                                   <Command>
+                                     <CommandInput placeholder="Search ports..." />
+                                     <CommandList>
+                                        <CommandEmpty>No port found.</CommandEmpty>
+                                        <CommandGroup>
+                                           {PORT_DB.map((port) => (
+                                              <CommandItem key={port.id} value={port.id} 
+                                                 onSelect={(v) => { updateDossier('pol', v); setPolOpen(false); }}
+                                              >
+                                                 <Check className={cn("mr-2 h-4 w-4", dossier.pol === port.id ? "opacity-100" : "opacity-0")}/>
+                                                 {port.id} <span className="ml-1 text-slate-400 text-xs">({port.code})</span>
+                                              </CommandItem>
+                                           ))}
+                                        </CommandGroup>
+                                     </CommandList>
+                                   </Command>
+                                 </PopoverContent>
+                              </Popover>
+                           </div>
+
+                           <InputField 
+                              label="Departure Date (ETD)"
+                              icon={Calendar}
+                              type="date"
+                              value={dossier.etd ? new Date(dossier.etd).toISOString().split('T')[0] : ''}
+                              onChange={(e) => updateDossier('etd', new Date(e.target.value))}
+                           />
+                        </div>
                       </div>
                    </div>
                 </div>
 
-                {/* POD */}
+                {/* POD SECTION */}
                 <div className="flex flex-col md:flex-row gap-4 items-start">
                    <div className="hidden md:flex flex-col items-center mt-2 min-w-[50px]">
                       <div className="h-4 w-4 rounded-full border-4 border-white bg-green-500 shadow-md ring-1 ring-green-100"></div>
                    </div>
                    <div className="flex-1 w-full bg-slate-50/50 p-5 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
-                      <h4 className="text-[11px] font-bold text-green-600 uppercase tracking-widest mb-4 flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Port of Discharge</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        
-                        {/* POD Dropdown */}
-                        <div className="flex-1">
-                           <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Location</label>
-                           <Popover open={podOpen} onOpenChange={setPodOpen}>
-                              <PopoverTrigger asChild>
-                                <Button variant="outline" role="combobox" aria-expanded={podOpen} className="w-full justify-between h-[42px] text-sm bg-white border-slate-300 hover:border-slate-400 text-slate-900">
-                                   <div className="flex items-center gap-2 truncate">
-                                     <MapPin className="h-4 w-4 text-slate-400" />
-                                     {dossier.pod ? dossier.pod : <span className="text-slate-400 font-normal">Select Dest...</span>}
-                                   </div>
-                                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-[300px] p-0" align="start">
-                                <Command>
-                                  <CommandInput placeholder="Search ports..." />
-                                  <CommandList>
-                                     <CommandEmpty>No port found.</CommandEmpty>
-                                     <CommandGroup>
-                                        {PORT_DB.map((port) => (
-                                           <CommandItem key={port.id} value={port.id} 
-                                              onSelect={(currentValue) => {
-                                                 updateDossier('pod', currentValue);
-                                                 setPodOpen(false);
-                                              }}
-                                           >
-                                              <Check className={cn("mr-2 h-4 w-4", dossier.pod === port.id ? "opacity-100" : "opacity-0")}/>
-                                              {port.id} <span className="ml-1 text-slate-400 text-xs">({port.code})</span>
-                                           </CommandItem>
-                                        ))}
-                                     </CommandGroup>
-                                  </CommandList>
-                                </Command>
-                              </PopoverContent>
-                           </Popover>
+                      <h4 className="text-[11px] font-bold text-green-600 uppercase tracking-widest mb-4 flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Discharge & Delivery</h4>
+                      
+                      <div className="grid grid-cols-1 gap-5">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                           <div className="flex-1">
+                              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Port of Discharge (POD)</label>
+                              <Popover open={podOpen} onOpenChange={setPodOpen}>
+                                 <PopoverTrigger asChild>
+                                   <Button variant="outline" className="w-full justify-between h-[42px] text-sm bg-white border-slate-300 hover:border-slate-400 text-slate-900 shadow-sm">
+                                      <div className="flex items-center gap-2 truncate">
+                                        <MapPin className="h-4 w-4 text-slate-400" />
+                                        {dossier.pod ? dossier.pod : <span className="text-slate-400 font-normal">Select POD...</span>}
+                                      </div>
+                                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                   </Button>
+                                 </PopoverTrigger>
+                                 <PopoverContent className="w-[300px] p-0" align="start">
+                                   <Command>
+                                     <CommandInput placeholder="Search ports..." />
+                                     <CommandList>
+                                        <CommandEmpty>No port found.</CommandEmpty>
+                                        <CommandGroup>
+                                           {PORT_DB.map((port) => (
+                                              <CommandItem key={port.id} value={port.id} 
+                                                 onSelect={(v) => { updateDossier('pod', v); setPodOpen(false); }}
+                                              >
+                                                 <Check className={cn("mr-2 h-4 w-4", dossier.pod === port.id ? "opacity-100" : "opacity-0")}/>
+                                                 {port.id} <span className="ml-1 text-slate-400 text-xs">({port.code})</span>
+                                              </CommandItem>
+                                           ))}
+                                        </CommandGroup>
+                                     </CommandList>
+                                   </Command>
+                                 </PopoverContent>
+                              </Popover>
+                           </div>
+
+                           <InputField 
+                              label="Arrival Date (ETA)"
+                              icon={Calendar}
+                              type="date"
+                              value={dossier.eta ? new Date(dossier.eta).toISOString().split('T')[0] : ''}
+                              onChange={(e) => updateDossier('eta', new Date(e.target.value))}
+                           />
                         </div>
 
-                        <InputField 
-                           label="Arrival Date"
-                           type="date"
-                           value={dossier.eta ? new Date(dossier.eta).toISOString().split('T')[0] : ''}
-                           onChange={(e) => updateDossier('eta', new Date(e.target.value))}
-                        />
+                        {isDeliveryInco && (
+                           <div className="animate-in slide-in-from-top-1">
+                               <InputField 
+                                   label="Final Delivery Address" 
+                                   icon={MapPin}
+                                   placeholder="Warehouse/Store address..."
+                                   value={dossier.incotermPlace || ''}
+                                   onChange={(e) => updateDossier('incotermPlace', e.target.value)}
+                                   className="border-blue-200 bg-blue-50/10"
+                               />
+                           </div>
+                        )}
                       </div>
                    </div>
+                </div>
+
+                {/* LOGISTICAL PARAMS */}
+                <div className="grid grid-cols-2 gap-5 px-5 md:px-0">
+                    <div className="hidden md:block min-w-[50px]"></div>
+                    <div className="flex-1 grid grid-cols-2 gap-5">
+                        <InputField 
+                           label="Free Time (Days)"
+                           icon={Clock}
+                           type="number"
+                           value={dossier.freeTimeDays || 0}
+                           onChange={(e) => updateDossier('freeTimeDays', parseInt(e.target.value) || 0)}
+                        />
+                        <InputField 
+                           label="Est. Transit (Days)"
+                           icon={Calendar}
+                           type="number"
+                           // @ts-ignore
+                           value={dossier.transitTime || 0}
+                           // @ts-ignore
+                           onChange={(e) => updateDossier('transitTime', parseInt(e.target.value) || 0)}
+                        />
+                    </div>
                 </div>
               </div>
             </div>
@@ -354,7 +413,6 @@ export const DossierOperationsTab = () => {
                     { role: 'Notify', data: dossier.notify },
                     ...(dossier.parties || [])
                  ].map((p: any, idx) => (
-                    // Only render if it's a generic party OR a fixed role with a name
                     (p.id || p.data?.name) ? (
                         <div key={idx} className="group p-4 border border-slate-100 rounded-xl bg-white hover:border-blue-200 hover:shadow-md transition-all flex justify-between items-center">
                         <div className="flex items-start gap-4">

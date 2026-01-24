@@ -1,13 +1,13 @@
-//
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Anchor, Plane, Truck, Loader2, Check, ChevronsUpDown, MapPin} from 'lucide-react';
+  Anchor, Plane, Truck, Loader2, Check, ChevronsUpDown, MapPin, Calendar, Clock, FileText, Home} from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { useDossierStore } from "@/store/useDossierStore";
-import { useClientStore } from "@/store/useClientStore"; // Integration with CRM
+import { useClientStore } from "@/store/useClientStore"; 
 import { TransportMode, Incoterm } from "@/types/index";
 import { cn } from "@/lib/utils";
 import {
@@ -23,8 +23,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-// --- SHARED DATA (Replicated from RouteSelector for consistency) ---
 export type PortData = { 
   id: string; 
   country: string;
@@ -49,6 +49,10 @@ export const PORT_DB: PortData[] = [
   { id: "SANTOS (BR)", country: "Brazil", code: "BRSSZ" },
 ];
 
+const INCOTERMS: Incoterm[] = [
+    'EXW', 'FCA', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP', 'FAS', 'FOB', 'CFR', 'CIF'
+];
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
@@ -63,37 +67,46 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
   const [polOpen, setPolOpen] = useState(false);
   const [podOpen, setPodOpen] = useState(false);
 
-  // Generate a unique reference: BKG-YYYY-XXXX
   const generateRef = () => {
     const year = new Date().getFullYear();
-    const random = Math.floor(1000 + Math.random() * 9000); // Ensures 4 digits
+    const random = Math.floor(1000 + Math.random() * 9000);
     return `BKG-${year}-${random}`;
   };
 
-  // Local form state before committing to store
   const [formData, setFormData] = useState({
     ref: '',
+    quoteRef: '',
     clientId: '',
     clientName: '',
     mode: 'SEA_FCL' as TransportMode,
     incoterm: 'FOB' as Incoterm,
     pol: '',
-    pod: ''
+    pod: '',
+    etd: new Date().toISOString().split('T')[0],
+    eta: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    freeTime: 7,
+    transitTime: 0,
+    incotermAddress: ''
   });
 
-  // Reset form when dialog opens
   useEffect(() => {
     if (isOpen) {
       setFormData({
         ref: generateRef(),
+        quoteRef: '',
         clientId: '',
         clientName: '',
         mode: 'SEA_FCL',
         incoterm: 'FOB',
         pol: '',
-        pod: ''
+        pod: '',
+        etd: new Date().toISOString().split('T')[0],
+        eta: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        freeTime: 7,
+        transitTime: 0,
+        incotermAddress: ''
       });
-      fetchClients(); // Fetch CRM data
+      fetchClients();
     }
   }, [isOpen]);
 
@@ -105,34 +118,34 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
     if (!formData.clientName) return;
 
     try {
-      // 1. Initialize empty dossier in store
       createDossier();
       
-      // 2. Hydrate the store state with form data
       updateDossier('ref', formData.ref);
+      updateDossier('customerReference', formData.quoteRef);
       updateDossier('clientId', formData.clientId);
       updateDossier('clientName', formData.clientName);
       updateDossier('mode', formData.mode);
       updateDossier('incoterm', formData.incoterm);
       updateDossier('pol', formData.pol);
       updateDossier('pod', formData.pod);
-      // Set default dates
-      updateDossier('etd', new Date());
-      updateDossier('eta', new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)); // +7 days
+      updateDossier('etd', new Date(formData.etd));
+      updateDossier('eta', new Date(formData.eta));
+      updateDossier('freeTimeDays', formData.freeTime);
+      updateDossier('incotermPlace', formData.incotermAddress);
       
-      // 3. Persist to Database
+      // Inject transitTime into the active dossier object
+      const state = useDossierStore.getState();
+      // @ts-ignore
+      if (state.dossier) state.dossier.transitTime = formData.transitTime;
+      
       await saveDossier();
       
-      // 4. Get the new ID and Navigate
       const newDossierId = useDossierStore.getState().dossier.id;
       
       if (newDossierId && !newDossierId.startsWith('new-')) {
           onClose();
           navigate(`/dossiers/${newDossierId}`);
-      } else {
-          console.error("Failed to retrieve valid ID after save");
       }
-      
     } catch (error) {
       console.error("Failed to create booking:", error);
     }
@@ -153,61 +166,43 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
     </div>
   );
 
+  const isEXW = formData.incoterm === 'EXW';
+  const isDeliveryInco = ['DAP', 'DPU', 'DDP'].includes(formData.incoterm);
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl bg-white p-0 overflow-hidden gap-0">
+      <DialogContent className="max-w-3xl bg-white p-0 overflow-hidden gap-0">
         
-        {/* Header */}
         <DialogHeader className="px-8 py-6 border-b border-slate-100 bg-slate-50/50">
           <div className="flex justify-between items-center">
              <div>
                 <DialogTitle className="text-xl font-bold text-slate-900">New Booking</DialogTitle>
                 <p className="text-sm text-slate-500">Initialize a new shipment file.</p>
              </div>
-             <div className="bg-slate-200 px-3 py-1 rounded text-xs font-mono font-bold text-slate-600">
-                {formData.ref}
+             <div className="flex flex-col items-end gap-1">
+                <div className="bg-slate-200 px-3 py-1 rounded text-xs font-mono font-bold text-slate-600">
+                    {formData.ref}
+                </div>
+                {formData.quoteRef && <span className="text-[10px] font-bold text-slate-400">QT: {formData.quoteRef}</span>}
              </div>
           </div>
         </DialogHeader>
 
-        <div className="p-8 space-y-8">
+        <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
            
-           {/* Mode Selection */}
-           <div className="grid grid-cols-3 gap-4">
-              <ModeCard 
-                mode="SEA_FCL" 
-                icon={Anchor} 
-                label="Sea Freight" 
-                active={formData.mode.includes('SEA')} 
-              />
-              <ModeCard 
-                mode="AIR" 
-                icon={Plane} 
-                label="Air Freight" 
-                active={formData.mode === 'AIR'} 
-              />
-              <ModeCard 
-                mode="ROAD" 
-                icon={Truck} 
-                label="Road Freight" 
-                active={formData.mode === 'ROAD'} 
-              />
+           <div className="grid grid-cols-4 gap-4">
+              <ModeCard mode="SEA_FCL" icon={Anchor} label="Sea FCL" active={formData.mode === 'SEA_FCL'} />
+              <ModeCard mode="SEA_LCL" icon={Anchor} label="Sea LCL" active={formData.mode === 'SEA_LCL'} />
+              <ModeCard mode="AIR" icon={Plane} label="Air Freight" active={formData.mode === 'AIR'} />
+              <ModeCard mode="ROAD" icon={Truck} label="Road Freight" active={formData.mode === 'ROAD'} />
            </div>
 
-           {/* Core Details */}
            <div className="grid grid-cols-2 gap-6">
-              
-              {/* CRM Client Selector */}
-              <div className="col-span-2 space-y-1.5">
+              <div className="col-span-1 space-y-1.5">
                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Client (CRM)</Label>
                  <Popover open={clientOpen} onOpenChange={setClientOpen}>
                     <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={clientOpen}
-                        className="w-full justify-between h-10 text-sm bg-white border-slate-200"
-                      >
+                      <Button variant="outline" className="w-full justify-between h-10 text-sm bg-white border-slate-200">
                         {formData.clientName || "Select customer..."}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
@@ -227,12 +222,7 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
                                   setClientOpen(false);
                                 }}
                               >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    formData.clientId === client.id ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
+                                <Check className={cn("mr-2 h-4 w-4", formData.clientId === client.id ? "opacity-100" : "opacity-0")} />
                                 {client.entityName}
                               </CommandItem>
                             ))}
@@ -243,12 +233,24 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
                  </Popover>
               </div>
 
-              {/* POL Selector */}
+              <div className="col-span-1 space-y-1.5">
+                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Quotation Reference</Label>
+                 <div className="relative">
+                    <Input 
+                        placeholder="e.g. QT-2024-001" 
+                        value={formData.quoteRef} 
+                        onChange={(e) => setFormData({...formData, quoteRef: e.target.value})}
+                        className="h-10 pl-9 border-slate-200"
+                    />
+                    <FileText className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                 </div>
+              </div>
+
               <div className="space-y-1.5">
                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Origin (POL)</Label>
                  <Popover open={polOpen} onOpenChange={setPolOpen}>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" role="combobox" aria-expanded={polOpen} className="w-full justify-between h-10 text-sm bg-white border-slate-200">
+                      <Button variant="outline" className="w-full justify-between h-10 text-sm bg-white border-slate-200">
                          <div className="flex items-center gap-2 truncate">
                            <MapPin className="h-4 w-4 text-slate-400" />
                            {formData.pol ? formData.pol : <span className="text-slate-400 font-normal">Select Origin...</span>}
@@ -262,12 +264,7 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
                            <CommandEmpty>No port found.</CommandEmpty>
                            <CommandGroup>
                               {PORT_DB.map((port) => (
-                                 <CommandItem key={port.id} value={port.id} 
-                                    onSelect={(currentValue) => {
-                                       setFormData({...formData, pol: currentValue});
-                                       setPolOpen(false);
-                                    }}
-                                 >
+                                 <CommandItem key={port.id} value={port.id} onSelect={(v) => { setFormData({...formData, pol: v}); setPolOpen(false); }}>
                                     <Check className={cn("mr-2 h-4 w-4", formData.pol === port.id ? "opacity-100" : "opacity-0")}/>
                                     {port.id} <span className="ml-1 text-slate-400 text-xs">({port.code})</span>
                                  </CommandItem>
@@ -279,12 +276,11 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
                  </Popover>
               </div>
 
-              {/* POD Selector */}
               <div className="space-y-1.5">
                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Destination (POD)</Label>
                  <Popover open={podOpen} onOpenChange={setPodOpen}>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" role="combobox" aria-expanded={podOpen} className="w-full justify-between h-10 text-sm bg-white border-slate-200">
+                      <Button variant="outline" className="w-full justify-between h-10 text-sm bg-white border-slate-200">
                          <div className="flex items-center gap-2 truncate">
                            <Anchor className="h-4 w-4 text-slate-400" />
                            {formData.pod ? formData.pod : <span className="text-slate-400 font-normal">Select Dest...</span>}
@@ -298,12 +294,7 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
                            <CommandEmpty>No port found.</CommandEmpty>
                            <CommandGroup>
                               {PORT_DB.map((port) => (
-                                 <CommandItem key={port.id} value={port.id} 
-                                    onSelect={(currentValue) => {
-                                       setFormData({...formData, pod: currentValue});
-                                       setPodOpen(false);
-                                    }}
-                                 >
+                                 <CommandItem key={port.id} value={port.id} onSelect={(v) => { setFormData({...formData, pod: v}); setPodOpen(false); }}>
                                     <Check className={cn("mr-2 h-4 w-4", formData.pod === port.id ? "opacity-100" : "opacity-0")}/>
                                     {port.id} <span className="ml-1 text-slate-400 text-xs">({port.code})</span>
                                  </CommandItem>
@@ -314,11 +305,73 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
                     </PopoverContent>
                  </Popover>
               </div>
-           </div>
 
+              <div className="space-y-1.5">
+                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Incoterm</Label>
+                 <Select value={formData.incoterm} onValueChange={(v: Incoterm) => setFormData({...formData, incoterm: v})}>
+                    <SelectTrigger className="h-10 border-slate-200">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {INCOTERMS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                 </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Free Time (Days)</Label>
+                 <div className="relative">
+                    <Input type="number" value={formData.freeTime} onChange={(e) => setFormData({...formData, freeTime: parseInt(e.target.value) || 0})} className="h-10 pl-9" />
+                    <Clock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                 </div>
+              </div>
+
+              {isEXW && (
+                <div className="col-span-2 space-y-1.5 animate-in slide-in-from-top-1">
+                    <Label className="text-xs font-bold text-amber-600 uppercase tracking-wider">Pickup Address (Origin)</Label>
+                    <div className="relative">
+                        <Input placeholder="Enter factory address..." value={formData.incotermAddress} onChange={(e) => setFormData({...formData, incotermAddress: e.target.value})} className="h-10 pl-9 border-amber-200" />
+                        <Home className="absolute left-3 top-3 h-4 w-4 text-amber-500" />
+                    </div>
+                </div>
+              )}
+
+              {isDeliveryInco && (
+                <div className="col-span-2 space-y-1.5 animate-in slide-in-from-top-1">
+                    <Label className="text-xs font-bold text-blue-600 uppercase tracking-wider">Final Delivery Address</Label>
+                    <div className="relative">
+                        <Input placeholder="Enter warehouse address..." value={formData.incotermAddress} onChange={(e) => setFormData({...formData, incotermAddress: e.target.value})} className="h-10 pl-9 border-blue-200" />
+                        <MapPin className="absolute left-3 top-3 h-4 w-4 text-blue-500" />
+                    </div>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Departure Date (ETD)</Label>
+                 <div className="relative">
+                    <Input type="date" value={formData.etd} onChange={(e) => setFormData({...formData, etd: e.target.value})} className="h-10 pl-9" />
+                    <Calendar className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Arrival Date (ETA)</Label>
+                 <div className="relative">
+                    <Input type="date" value={formData.eta} onChange={(e) => setFormData({...formData, eta: e.target.value})} className="h-10 pl-9" />
+                    <Calendar className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                 </div>
+              </div>
+
+              <div className="space-y-1.5 col-span-2">
+                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Est. Transit (Days)</Label>
+                 <div className="relative">
+                    <Input type="number" value={formData.transitTime} onChange={(e) => setFormData({...formData, transitTime: parseInt(e.target.value) || 0})} className="h-10 pl-9" />
+                    <Clock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                 </div>
+              </div>
+           </div>
         </div>
 
-        {/* Footer */}
         <DialogFooter className="px-8 py-5 border-t border-slate-100 bg-slate-50/50">
           <Button variant="ghost" onClick={onClose} className="text-slate-500 hover:text-slate-800" disabled={isLoading}>Cancel</Button>
           <Button 
@@ -326,16 +379,9 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-8"
             disabled={!formData.clientName || isLoading}
           >
-            {isLoading ? (
-               <>
-                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...
-               </>
-            ) : (
-               'Create Booking'
-            )}
+            {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...</> : 'Create Booking'}
           </Button>
         </DialogFooter>
-
       </DialogContent>
     </Dialog>
   );
