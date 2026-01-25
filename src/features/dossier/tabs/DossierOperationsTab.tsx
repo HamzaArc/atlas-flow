@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { 
    MapPin, Box, Plus, Trash2, User, 
-   ArrowRight, Mail, Shield,
-   Truck, Check, ChevronsUpDown, Home, Clock, Calendar
+   ArrowRight, Shield,
+   Truck, Check, ChevronsUpDown, Home, Calendar,
+   FileText, Scale
 } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
 import { ShipmentParty, CargoItem, DossierContainer } from "@/types/index";
@@ -43,32 +44,32 @@ const PORT_DB = [
 // Helper Components
 const InputField = ({ label, icon: Icon, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label?: string, icon?: any }) => (
   <div className="flex-1">
-    {label && <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{label}</label>}
+    {label && <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{label}</label>}
     <div className="relative">
       <input
         {...props}
         className={`
           block w-full rounded-lg border-slate-300 bg-white text-sm text-slate-900 shadow-sm 
           placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 
-          transition-all py-2.5 ${Icon ? 'pl-9' : 'px-3'} pr-3 hover:border-slate-400 outline-none
+          transition-all py-2 ${Icon ? 'pl-9' : 'px-3'} pr-3 hover:border-slate-400 outline-none
           ${props.className || ''}
         `}
       />
-      {Icon && <Icon className="absolute left-3 top-3 h-4 w-4 text-slate-400" />}
+      {Icon && <Icon className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />}
     </div>
   </div>
 );
 
 const SelectField = ({ label, children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement> & { label?: string }) => (
   <div className="flex-1">
-    {label && <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{label}</label>}
+    {label && <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{label}</label>}
     <div className="relative">
       <select
         {...props}
         className={`
           block w-full appearance-none rounded-lg border-slate-300 bg-white text-sm text-slate-900 shadow-sm 
           focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 
-          transition-all py-2.5 pl-3 pr-10 hover:border-slate-400 outline-none
+          transition-all py-2 pl-3 pr-10 hover:border-slate-400 outline-none
           ${props.className || ''}
         `}
       >
@@ -103,6 +104,30 @@ export const DossierOperationsTab = () => {
   // --- Logic Helpers ---
   const isEXW = dossier.incoterm === 'EXW';
   const isDeliveryInco = ['DAP', 'DPU', 'DDP'].includes(dossier.incoterm);
+
+  // --- Chargeable Weight Logic (Morocco Freight Standard) ---
+  // AIR: 1 CBM = 167 KG
+  // SEA: 1 CBM = 1000 KG
+  // ROAD: 1 CBM = 333 KG (Often)
+  const chargeableWeight = useMemo(() => {
+     if(!dossier.cargoItems) return 0;
+     
+     let totalVol = 0;
+     let totalGross = 0;
+     
+     dossier.cargoItems.forEach(item => {
+         totalVol += item.volume;
+         totalGross += item.weight;
+     });
+
+     let ratio = 1000; // Sea Default
+     if(dossier.mode?.includes('AIR')) ratio = 166.67;
+     if(dossier.mode?.includes('ROAD')) ratio = 333.33;
+
+     const volWeight = totalVol * ratio;
+     return Math.max(totalGross, volWeight);
+  }, [dossier.cargoItems, dossier.mode]);
+
 
   // --- Handlers ---
   const handleAddParty = () => {
@@ -190,52 +215,50 @@ export const DossierOperationsTab = () => {
         {/* LEFT COLUMN */}
         <div className="flex flex-col gap-6 h-full">
           
-          {/* CARD 1: Route & Schedule (ENHANCED) */}
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative z-20">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white rounded-t-2xl">
+          {/* CARD 1: Route & Schedule */}
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative z-20 overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-3">
-                 <div className="p-2 bg-blue-50 text-blue-600 rounded-lg ring-1 ring-blue-100"><MapPin className="h-5 w-5" /></div>
-                 <h3 className="text-base font-bold text-slate-900">Route & Schedule</h3>
+                 <div className="p-1.5 bg-blue-100 text-blue-600 rounded-lg"><MapPin className="h-4 w-4" /></div>
+                 <h3 className="text-sm font-bold text-slate-800 uppercase tracking-tight">Logistics Route</h3>
               </div>
               <div className="flex items-center gap-2">
-                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded border border-slate-100">
-                    {dossier.incoterm}
+                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-white px-2 py-1 rounded border border-slate-200 shadow-sm">
+                    {dossier.incoterm || 'INCOTERM?'}
                  </span>
               </div>
             </div>
             
-            <div className="p-6 relative flex-1">
-              <div className="absolute left-[26px] top-20 bottom-12 w-0.5 bg-slate-100 hidden md:block z-0"></div>
+            <div className="p-5 relative flex-1">
+              <div className="absolute left-[24px] top-16 bottom-10 w-0.5 bg-slate-200 hidden md:block z-0"></div>
 
-              <div className="space-y-8 relative z-10">
+              <div className="space-y-6 relative z-10">
                 {/* POL SECTION */}
                 <div className="flex flex-col md:flex-row gap-4 items-start">
-                   <div className="hidden md:flex flex-col items-center mt-2 min-w-[50px]">
-                      <div className="h-4 w-4 rounded-full border-4 border-white bg-blue-500 shadow-md ring-1 ring-blue-100"></div>
+                   <div className="hidden md:flex flex-col items-center mt-1 min-w-[50px]">
+                      <div className="h-3 w-3 rounded-full border-2 border-white bg-blue-500 shadow ring-1 ring-blue-100"></div>
                    </div>
-                   <div className="flex-1 w-full bg-slate-50/50 p-5 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
-                      <h4 className="text-[11px] font-bold text-blue-600 uppercase tracking-widest mb-4 flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Origin & Loading</h4>
+                   <div className="flex-1 w-full bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:border-blue-200 transition-colors">
+                      <h4 className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-3 flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Origin (POL)</h4>
                       
-                      <div className="grid grid-cols-1 gap-5">
+                      <div className="grid grid-cols-1 gap-4">
                         {isEXW && (
-                            <div className="animate-in slide-in-from-top-1">
-                                <InputField 
-                                    label="Pickup Address (EXW)" 
-                                    icon={Home}
-                                    placeholder="Factory address details..."
-                                    value={dossier.incotermPlace || ''}
-                                    onChange={(e) => updateDossier('incotermPlace', e.target.value)}
-                                    className="border-amber-200 bg-amber-50/10"
-                                />
-                            </div>
+                            <InputField 
+                                label="Pickup Address (EXW)" 
+                                icon={Home}
+                                placeholder="Factory address details..."
+                                value={dossier.incotermPlace || ''}
+                                onChange={(e) => updateDossier('incotermPlace', e.target.value)}
+                                className="border-amber-200 bg-amber-50/10"
+                            />
                         )}
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                            <div className="flex-1">
-                              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Port of Loading (POL)</label>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Port of Loading</label>
                               <Popover open={polOpen} onOpenChange={setPolOpen}>
                                  <PopoverTrigger asChild>
-                                   <Button variant="outline" className="w-full justify-between h-[42px] text-sm bg-white border-slate-300 hover:border-slate-400 text-slate-900 shadow-sm">
+                                   <Button variant="outline" className="w-full justify-between h-[38px] text-sm bg-white border-slate-300 hover:border-slate-400 text-slate-900 shadow-sm">
                                       <div className="flex items-center gap-2 truncate">
                                         <MapPin className="h-4 w-4 text-slate-400" />
                                         {dossier.pol ? dossier.pol : <span className="text-slate-400 font-normal">Select POL...</span>}
@@ -265,7 +288,7 @@ export const DossierOperationsTab = () => {
                            </div>
 
                            <InputField 
-                              label="Departure Date (ETD)"
+                              label="ETD Date"
                               icon={Calendar}
                               type="date"
                               value={dossier.etd ? new Date(dossier.etd).toISOString().split('T')[0] : ''}
@@ -278,19 +301,19 @@ export const DossierOperationsTab = () => {
 
                 {/* POD SECTION */}
                 <div className="flex flex-col md:flex-row gap-4 items-start">
-                   <div className="hidden md:flex flex-col items-center mt-2 min-w-[50px]">
-                      <div className="h-4 w-4 rounded-full border-4 border-white bg-green-500 shadow-md ring-1 ring-green-100"></div>
+                   <div className="hidden md:flex flex-col items-center mt-1 min-w-[50px]">
+                      <div className="h-3 w-3 rounded-full border-2 border-white bg-green-500 shadow ring-1 ring-green-100"></div>
                    </div>
-                   <div className="flex-1 w-full bg-slate-50/50 p-5 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
-                      <h4 className="text-[11px] font-bold text-green-600 uppercase tracking-widest mb-4 flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Discharge & Delivery</h4>
+                   <div className="flex-1 w-full bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:border-green-200 transition-colors">
+                      <h4 className="text-[10px] font-bold text-green-600 uppercase tracking-widest mb-3 flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Destination (POD)</h4>
                       
-                      <div className="grid grid-cols-1 gap-5">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                            <div className="flex-1">
-                              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Port of Discharge (POD)</label>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Port of Discharge</label>
                               <Popover open={podOpen} onOpenChange={setPodOpen}>
                                  <PopoverTrigger asChild>
-                                   <Button variant="outline" className="w-full justify-between h-[42px] text-sm bg-white border-slate-300 hover:border-slate-400 text-slate-900 shadow-sm">
+                                   <Button variant="outline" className="w-full justify-between h-[38px] text-sm bg-white border-slate-300 hover:border-slate-400 text-slate-900 shadow-sm">
                                       <div className="flex items-center gap-2 truncate">
                                         <MapPin className="h-4 w-4 text-slate-400" />
                                         {dossier.pod ? dossier.pod : <span className="text-slate-400 font-normal">Select POD...</span>}
@@ -320,12 +343,39 @@ export const DossierOperationsTab = () => {
                            </div>
 
                            <InputField 
-                              label="Arrival Date (ETA)"
+                              label="ETA Date"
                               icon={Calendar}
                               type="date"
                               value={dossier.eta ? new Date(dossier.eta).toISOString().split('T')[0] : ''}
                               onChange={(e) => updateDossier('eta', new Date(e.target.value))}
                            />
+                        </div>
+                        
+                        {/* MOROCCO CUSTOMS DATA */}
+                        <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                             <h5 className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1">
+                                 <FileText className="h-3 w-3" /> Customs Data (Morocco)
+                             </h5>
+                             <div className="grid grid-cols-2 gap-4">
+                                <InputField 
+                                    label="N° Gros / Manifest" 
+                                    placeholder="e.g. 2024/9999"
+                                    // @ts-ignore
+                                    value={dossier.customsRef || ''}
+                                    // @ts-ignore
+                                    onChange={(e) => updateDossier('customsRef', e.target.value)}
+                                    className="h-8 text-xs font-mono"
+                                />
+                                <InputField 
+                                    label="N° Article" 
+                                    placeholder="e.g. 1502"
+                                    // @ts-ignore
+                                    value={dossier.articleNumber || ''}
+                                    // @ts-ignore
+                                    onChange={(e) => updateDossier('articleNumber', e.target.value)}
+                                    className="h-8 text-xs font-mono"
+                                />
+                             </div>
                         </div>
 
                         {isDeliveryInco && (
@@ -344,50 +394,28 @@ export const DossierOperationsTab = () => {
                    </div>
                 </div>
 
-                {/* LOGISTICAL PARAMS */}
-                <div className="grid grid-cols-2 gap-5 px-5 md:px-0">
-                    <div className="hidden md:block min-w-[50px]"></div>
-                    <div className="flex-1 grid grid-cols-2 gap-5">
-                        <InputField 
-                           label="Free Time (Days)"
-                           icon={Clock}
-                           type="number"
-                           value={dossier.freeTimeDays || 0}
-                           onChange={(e) => updateDossier('freeTimeDays', parseInt(e.target.value) || 0)}
-                        />
-                        <InputField 
-                           label="Est. Transit (Days)"
-                           icon={Calendar}
-                           type="number"
-                           // @ts-ignore
-                           value={dossier.transitTime || 0}
-                           // @ts-ignore
-                           onChange={(e) => updateDossier('transitTime', parseInt(e.target.value) || 0)}
-                        />
-                    </div>
-                </div>
               </div>
             </div>
           </div>
 
           {/* CARD 2: Parties Involved */}
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col flex-1 relative z-10">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-2xl">
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col flex-1 relative z-10 overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-50 text-purple-600 rounded-lg ring-1 ring-purple-100"><User className="h-5 w-5" /></div>
-                  <h3 className="text-base font-bold text-slate-900">Parties Involved</h3>
+                  <div className="p-1.5 bg-purple-100 text-purple-600 rounded-lg"><User className="h-4 w-4" /></div>
+                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-tight">Parties</h3>
                </div>
                {!isAddingParty && (
-                 <button onClick={() => setIsAddingParty(true)} className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors flex items-center shadow-sm">
-                   <Plus className="h-3.5 w-3.5 mr-1"/> Add Party
+                 <button onClick={() => setIsAddingParty(true)} className="text-[10px] font-bold text-blue-600 hover:text-blue-700 bg-white border border-blue-200 px-2.5 py-1 rounded-md transition-colors flex items-center shadow-sm">
+                   <Plus className="h-3 w-3 mr-1"/> Add
                  </button>
                )}
             </div>
-            <div className="p-6 flex-1">
+            <div className="p-5 flex-1">
               {isAddingParty && (
-                 <div className="mb-6 p-5 bg-slate-50 border border-dashed border-slate-300 rounded-xl animate-in fade-in slide-in-from-top-2">
-                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide mb-3">New Party Details</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4">
+                 <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg animate-in fade-in slide-in-from-top-2">
+                    <h4 className="text-[10px] font-bold text-slate-900 uppercase tracking-wide mb-3">Add Stakeholder</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
                        <div className="md:col-span-4">
                           <SelectField label="Role" value={newParty.role} onChange={(e) => setNewParty({...newParty, role: e.target.value as any})}>
                              <option value="Shipper">Shipper</option>
@@ -397,16 +425,16 @@ export const DossierOperationsTab = () => {
                              <option value="Carrier">Carrier</option>
                           </SelectField>
                        </div>
-                       <div className="md:col-span-8"><InputField label="Company Name" placeholder="e.g. Acme Trading Co." value={newParty.name || ''} onChange={e => setNewParty({...newParty, name: e.target.value})} /></div>
-                       <div className="md:col-span-12"><InputField label="Email Address" type="email" placeholder="contact@example.com" value={newParty.email || ''} onChange={e => setNewParty({...newParty, email: e.target.value})} /></div>
+                       <div className="md:col-span-8"><InputField label="Company Name" placeholder="Company Name" value={newParty.name || ''} onChange={e => setNewParty({...newParty, name: e.target.value})} /></div>
+                       <div className="md:col-span-12"><InputField label="Email" type="email" placeholder="contact@example.com" value={newParty.email || ''} onChange={e => setNewParty({...newParty, email: e.target.value})} /></div>
                     </div>
                     <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-                       <button onClick={() => setIsAddingParty(false)} className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50">Cancel</button>
-                       <button onClick={handleAddParty} className="px-4 py-2 text-xs font-bold text-white bg-slate-900 rounded-lg hover:bg-slate-800 shadow-md">Save Party</button>
+                       <button onClick={() => setIsAddingParty(false)} className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-md">Cancel</button>
+                       <button onClick={handleAddParty} className="px-3 py-1.5 text-xs font-bold text-white bg-slate-900 rounded-md hover:bg-slate-800">Save</button>
                     </div>
                  </div>
               )}
-              <div className="grid grid-cols-1 gap-3">
+              <div className="grid grid-cols-1 gap-2">
                  {[
                     { role: 'Shipper', data: dossier.shipper },
                     { role: 'Consignee', data: dossier.consignee },
@@ -414,20 +442,19 @@ export const DossierOperationsTab = () => {
                     ...(dossier.parties || [])
                  ].map((p: any, idx) => (
                     (p.id || p.data?.name) ? (
-                        <div key={idx} className="group p-4 border border-slate-100 rounded-xl bg-white hover:border-blue-200 hover:shadow-md transition-all flex justify-between items-center">
-                        <div className="flex items-start gap-4">
-                            <div className="mt-1 h-8 w-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400"><User className="h-4 w-4" /></div>
+                        <div key={idx} className="group p-3 border border-slate-100 rounded-lg bg-white hover:border-blue-200 hover:shadow-sm transition-all flex justify-between items-center">
+                        <div className="flex items-start gap-3">
+                            <div className="mt-0.5 h-7 w-7 rounded bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400"><User className="h-3.5 w-3.5" /></div>
                             <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{p.role}</span>
+                                <div className="flex items-center gap-2 mb-0.5">
+                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider bg-slate-100 px-1.5 py-px rounded">{p.role}</span>
                                 </div>
-                                <div className="font-bold text-slate-900 text-sm">{p.name || p.data?.name || '—'}</div>
-                                {(p.email || p.data?.email) && <div className="text-xs text-slate-500 flex items-center gap-1 mt-1 font-medium"><Mail className="h-3 w-3"/> {p.email || p.data?.email}</div>}
+                                <div className="font-bold text-slate-900 text-xs">{p.name || p.data?.name || '—'}</div>
                             </div>
                         </div>
                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                             {p.id && !['Shipper', 'Consignee', 'Notify'].includes(p.role) && (
-                                <button onClick={() => removeParty(p.id)} className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 border border-transparent hover:border-red-100 transition-all"><Trash2 className="h-4 w-4"/></button>
+                                <button onClick={() => removeParty(p.id)} className="p-1.5 text-slate-400 hover:text-red-600 rounded hover:bg-red-50 transition-all"><Trash2 className="h-3.5 w-3.5"/></button>
                             )}
                         </div>
                         </div>
@@ -440,71 +467,76 @@ export const DossierOperationsTab = () => {
 
         {/* RIGHT COLUMN */}
         <div className="flex flex-col gap-6 h-full">
-           {/* CARD 3: Cargo */}
-           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative z-20">
-             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-2xl">
+           {/* CARD 3: Cargo (Refactored for Chargeable Weight) */}
+           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative z-20 overflow-hidden">
+             <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg ring-1 ring-blue-100"><Box className="h-5 w-5" /></div>
-                  <h3 className="text-base font-bold text-slate-900">Cargo & Goods</h3>
+                  <div className="p-1.5 bg-blue-100 text-blue-600 rounded-lg"><Box className="h-4 w-4" /></div>
+                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-tight">Cargo & Goods</h3>
                </div>
                {!isAddingCargo && (
-                 <button onClick={() => setIsAddingCargo(true)} className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors flex items-center shadow-sm">
-                   <Plus className="h-3.5 w-3.5 mr-1"/> Add Item
+                 <button onClick={() => setIsAddingCargo(true)} className="text-[10px] font-bold text-blue-600 hover:text-blue-700 bg-white border border-blue-200 px-2.5 py-1 rounded-md transition-colors flex items-center shadow-sm">
+                   <Plus className="h-3 w-3 mr-1"/> Add Item
                  </button>
                )}
             </div>
-            <div className="p-6 flex-1">
-               <div className="grid grid-cols-3 gap-4 mb-6">
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center group hover:border-slate-200 transition-colors">
-                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Pkgs</div>
-                     <div className="text-2xl font-bold text-slate-800 tracking-tight">{totalPkgs}</div>
+            <div className="p-5 flex-1">
+               <div className="grid grid-cols-4 gap-2 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                  <div className="text-center">
+                     <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Pkgs</div>
+                     <div className="text-lg font-bold text-slate-800">{totalPkgs}</div>
                   </div>
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center group hover:border-slate-200 transition-colors">
-                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Gross Wgt</div>
-                     <div className="text-2xl font-bold text-slate-800 tracking-tight">{totalWeight.toLocaleString()} <span className="text-sm font-medium text-slate-400">KG</span></div>
+                  <div className="text-center">
+                     <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Gross</div>
+                     <div className="text-lg font-bold text-slate-800">{totalWeight.toLocaleString()} <span className="text-[10px] text-slate-400">KG</span></div>
                   </div>
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center group hover:border-slate-200 transition-colors">
-                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Volume</div>
-                     <div className="text-2xl font-bold text-slate-800 tracking-tight">{totalVolume.toFixed(2)} <span className="text-sm font-medium text-slate-400">CBM</span></div>
+                  <div className="text-center">
+                     <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Volume</div>
+                     <div className="text-lg font-bold text-slate-800">{totalVolume.toFixed(2)} <span className="text-[10px] text-slate-400">m³</span></div>
+                  </div>
+                  <div className="text-center bg-white rounded-lg border border-slate-200 shadow-sm py-1">
+                     <div className="text-[9px] font-bold text-blue-600 uppercase tracking-wider mb-1 flex justify-center items-center gap-1"><Scale size={10}/> Chg. Wgt</div>
+                     <div className="text-lg font-bold text-blue-700">{chargeableWeight.toLocaleString()} <span className="text-[10px] text-blue-400">KG</span></div>
                   </div>
                </div>
+
                {isAddingCargo && (
-                  <div className="mb-6 p-5 bg-slate-50 border border-dashed border-slate-300 rounded-xl animate-in fade-in slide-in-from-top-2">
-                     <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide mb-3">New Cargo Item</h4>
-                     <div className="grid grid-cols-1 gap-4 mb-4">
-                        <div className="grid grid-cols-12 gap-4">
-                           <div className="col-span-4"><InputField label="Quantity" type="number" placeholder="0" value={newCargo.packageCount || ''} onChange={e => setNewCargo({...newCargo, packageCount: Number(e.target.value)})} /></div>
-                           <div className="col-span-8"><InputField label="Package Type" placeholder="e.g. Cartons" value={newCargo.packageType || ''} onChange={e => setNewCargo({...newCargo, packageType: e.target.value})} /></div>
+                  <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg animate-in fade-in slide-in-from-top-2">
+                     <h4 className="text-[10px] font-bold text-slate-900 uppercase tracking-wide mb-3">New Cargo Item</h4>
+                     <div className="grid grid-cols-1 gap-3 mb-3">
+                        <div className="grid grid-cols-12 gap-3">
+                           <div className="col-span-4"><InputField label="Qty" type="number" placeholder="0" value={newCargo.packageCount || ''} onChange={e => setNewCargo({...newCargo, packageCount: Number(e.target.value)})} /></div>
+                           <div className="col-span-8"><InputField label="Type" placeholder="Cartons" value={newCargo.packageType || ''} onChange={e => setNewCargo({...newCargo, packageType: e.target.value})} /></div>
                         </div>
                         <InputField label="Description" placeholder="Goods description..." value={newCargo.description || ''} onChange={e => setNewCargo({...newCargo, description: e.target.value})} />
-                         <div className="grid grid-cols-2 gap-4">
+                         <div className="grid grid-cols-2 gap-3">
                             <InputField label="Weight (KG)" type="number" placeholder="0.00" value={newCargo.weight || ''} onChange={e => setNewCargo({...newCargo, weight: Number(e.target.value)})} />
                            <InputField label="Volume (CBM)" type="number" placeholder="0.000" value={newCargo.volume || ''} onChange={e => setNewCargo({...newCargo, volume: Number(e.target.value)})} />
                          </div>
                      </div>
                      <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-                        <button onClick={() => setIsAddingCargo(false)} className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50">Cancel</button>
-                        <button onClick={handleAddCargo} className="px-4 py-2 text-xs font-bold text-white bg-slate-900 rounded-lg hover:bg-slate-800 shadow-md">Add Item</button>
+                        <button onClick={() => setIsAddingCargo(false)} className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-md">Cancel</button>
+                        <button onClick={handleAddCargo} className="px-3 py-1.5 text-xs font-bold text-white bg-slate-900 rounded-md hover:bg-slate-800">Add Item</button>
                      </div>
                   </div>
                )}
-               <div className="space-y-3">
+               <div className="space-y-2">
                   {dossier.cargoItems && dossier.cargoItems.map(item => (
-                    <div key={item.id} className="group p-4 border border-slate-200 rounded-xl hover:border-blue-300 hover:shadow-md transition-all bg-white relative">
+                    <div key={item.id} className="group p-3 border border-slate-100 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all bg-white relative">
                        <div className="flex justify-between items-start">
                           <div className="flex-1">
-                             <div className="flex items-center gap-2 text-sm font-bold text-slate-900 mb-2">
-                                <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs border border-slate-200">{item.packageCount} {item.packageType}</span>
+                             <div className="flex items-center gap-2 text-xs font-bold text-slate-900 mb-1">
+                                <span className="bg-slate-100 text-slate-700 px-1.5 py-px rounded border border-slate-200">{item.packageCount} {item.packageType}</span>
                                 <span className="text-slate-300">|</span>
-                                <span className="truncate">{item.description}</span>
+                                <span className="truncate max-w-[200px]">{item.description}</span>
                              </div>
-                             <div className="gap-6 text-xs text-slate-500 font-medium bg-slate-50 px-3 py-2 rounded-lg inline-flex">
-                                <div><span className="font-bold text-slate-900">{item.weight.toLocaleString()}</span> KG</div>
-                                <div className="w-px h-3 bg-slate-300 my-auto"></div>
-                                <div><span className="font-bold text-slate-900">{item.volume.toFixed(2)}</span> CBM</div>
+                             <div className="text-[10px] text-slate-500 font-medium flex gap-3">
+                                <span><b className="text-slate-700">{item.weight.toLocaleString()}</b> KG</span>
+                                <span className="text-slate-300">•</span>
+                                <span><b className="text-slate-700">{item.volume.toFixed(2)}</b> m³</span>
                              </div>
                           </div>
-                          <button onClick={() => removeCargo(item.id)} className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg hover:bg-red-50"><Trash2 size={16} /></button>
+                          <button onClick={() => removeCargo(item.id)} className="p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-red-50"><Trash2 size={14} /></button>
                        </div>
                     </div>
                   ))}
@@ -513,39 +545,39 @@ export const DossierOperationsTab = () => {
            </div>
 
            {/* CARD 4: Containers */}
-           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col flex-1 relative z-10">
-               <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-2xl">
+           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col flex-1 relative z-10 overflow-hidden">
+               <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-orange-50 text-orange-600 rounded-lg ring-1 ring-orange-100"><Truck className="h-5 w-5" /></div>
-                    <h3 className="text-base font-bold text-slate-900">Containers</h3>
+                    <div className="p-1.5 bg-orange-100 text-orange-600 rounded-lg"><Truck className="h-4 w-4" /></div>
+                    <h3 className="text-sm font-bold text-slate-800 uppercase tracking-tight">Containers</h3>
                   </div>
                   {!isAddingContainer && (
-                    <button onClick={() => setIsAddingContainer(true)} className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors flex items-center shadow-sm">
-                      <Plus className="h-3.5 w-3.5 mr-1"/> Add Cntr
+                    <button onClick={() => setIsAddingContainer(true)} className="text-[10px] font-bold text-blue-600 hover:text-blue-700 bg-white border border-blue-200 px-2.5 py-1 rounded-md transition-colors flex items-center shadow-sm">
+                      <Plus className="h-3 w-3 mr-1"/> Add Cntr
                     </button>
                   )}
                </div>
-               <div className="p-6 flex-1">
+               <div className="p-5 flex-1">
                  {isAddingContainer && (
-                    <div className="mb-6 p-5 bg-slate-50 border border-dashed border-slate-300 rounded-xl animate-in fade-in slide-in-from-top-2">
-                       <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide mb-3">New Container</h4>
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                          <InputField label="Container Number" placeholder="e.g. CMAU1234567" value={newContainer.number || ''} onChange={e => setNewContainer({...newContainer, number: e.target.value.toUpperCase()})} />
+                    <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg animate-in fade-in slide-in-from-top-2">
+                       <h4 className="text-[10px] font-bold text-slate-900 uppercase tracking-wide mb-3">New Container</h4>
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                          <InputField label="Container No." placeholder="CMAU..." value={newContainer.number || ''} onChange={e => setNewContainer({...newContainer, number: e.target.value.toUpperCase()})} />
                           <SelectField label="Type" value={newContainer.type} onChange={e => setNewContainer({...newContainer, type: e.target.value as any})}>
                              <option value="20DV">20' DV</option>
                              <option value="40HC">40' HC</option>
                              <option value="40RH">40' RH</option>
                              <option value="LCL">LCL</option>
                           </SelectField>
-                          <InputField label="Seal Number" placeholder="e.g. SL-998877" value={newContainer.seal || ''} onChange={e => setNewContainer({...newContainer, seal: e.target.value.toUpperCase()})} />
-                          <div className="grid grid-cols-2 gap-4">
-                             <InputField label="Packages" type="number" placeholder="0" value={newContainer.packages || ''} onChange={e => setNewContainer({...newContainer, packages: +e.target.value})} />
-                             <InputField label="VGM (KG)" type="number" placeholder="0" value={newContainer.weight || ''} onChange={e => setNewContainer({...newContainer, weight: +e.target.value})} />
+                          <InputField label="Seal No." placeholder="Seal..." value={newContainer.seal || ''} onChange={e => setNewContainer({...newContainer, seal: e.target.value.toUpperCase()})} />
+                          <div className="grid grid-cols-2 gap-3">
+                             <InputField label="Pkgs" type="number" placeholder="0" value={newContainer.packages || ''} onChange={e => setNewContainer({...newContainer, packages: +e.target.value})} />
+                             <InputField label="VGM" type="number" placeholder="0" value={newContainer.weight || ''} onChange={e => setNewContainer({...newContainer, weight: +e.target.value})} />
                           </div>
                        </div>
                        <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-                          <button onClick={() => setIsAddingContainer(false)} className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50">Cancel</button>
-                          <button onClick={handleAddContainer} className="px-4 py-2 text-xs font-bold text-white bg-slate-900 rounded-lg hover:bg-slate-800 shadow-md">Add Container</button>
+                          <button onClick={() => setIsAddingContainer(false)} className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-md">Cancel</button>
+                          <button onClick={handleAddContainer} className="px-3 py-1.5 text-xs font-bold text-white bg-slate-900 rounded-md hover:bg-slate-800">Add</button>
                        </div>
                     </div>
                  )}
@@ -553,28 +585,28 @@ export const DossierOperationsTab = () => {
                    <table className="min-w-full divide-y divide-slate-100">
                      <thead className="bg-slate-50">
                        <tr>
-                         <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Container / Seal</th>
-                         <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Details</th>
-                         <th className="relative px-4 py-3"><span className="sr-only">Actions</span></th>
+                         <th className="px-3 py-2 text-left text-[9px] font-bold text-slate-400 uppercase tracking-wider">Unit / Seal</th>
+                         <th className="px-3 py-2 text-left text-[9px] font-bold text-slate-400 uppercase tracking-wider">Specs</th>
+                         <th className="relative px-3 py-2"><span className="sr-only">Actions</span></th>
                        </tr>
                      </thead>
                      <tbody className="bg-white divide-y divide-slate-100">
                        {dossier.containers.map(container => (
                          <tr key={container.id} className="hover:bg-blue-50/30 transition-colors group">
-                           <td className="px-4 py-3">
-                             <div className="text-sm font-bold text-slate-900 font-mono tracking-wide">{container.number}</div>
-                             <div className="text-xs text-slate-500 font-mono flex items-center gap-1 mt-0.5"><Shield size={10} className="text-green-500"/> {container.seal || 'No Seal'}</div>
+                           <td className="px-3 py-2">
+                             <div className="text-xs font-bold text-slate-900 font-mono tracking-wide">{container.number}</div>
+                             <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1 mt-0.5"><Shield size={10} className="text-green-500"/> {container.seal || '-'}</div>
                            </td>
-                           <td className="px-4 py-3">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 mb-1 border border-blue-100">{container.type}</span>
-                              <div className="text-xs text-slate-500 font-medium">{container.packages} pkgs • {container.weight?.toLocaleString()} kg</div>
+                           <td className="px-3 py-2">
+                              <span className="inline-flex items-center px-1.5 py-px rounded text-[9px] font-bold bg-blue-50 text-blue-700 mb-0.5 border border-blue-100">{container.type}</span>
+                              <div className="text-[10px] text-slate-500 font-medium">{container.packages} p • {container.weight?.toLocaleString()} k</div>
                            </td>
-                           <td className="px-4 py-3 text-right">
-                             <button onClick={() => removeContainer(container.id)} className="p-2 text-slate-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-red-50"><Trash2 size={16}/></button>
+                           <td className="px-3 py-2 text-right">
+                             <button onClick={() => removeContainer(container.id)} className="p-1.5 text-slate-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-red-50"><Trash2 size={14}/></button>
                            </td>
                          </tr>
                        ))}
-                       {dossier.containers.length === 0 && <tr><td colSpan={3} className="px-4 py-6 text-center text-xs text-slate-400 italic">No cargo units added.</td></tr>}
+                       {dossier.containers.length === 0 && <tr><td colSpan={3} className="px-4 py-6 text-center text-xs text-slate-400 italic">No units.</td></tr>}
                      </tbody>
                    </table>
                  </div>
@@ -583,7 +615,7 @@ export const DossierOperationsTab = () => {
         </div>
       </div>
       <div className="flex items-center justify-between pt-8 mt-6 border-t border-slate-200">
-        <span className="text-sm text-slate-500 flex items-center bg-white px-4 py-2 rounded-full border border-slate-200 shadow-sm"><Shield className="h-4 w-4 text-green-500 mr-2" /> All changes saved locally</span>
+        <span className="text-xs text-slate-500 flex items-center bg-white px-3 py-1.5 rounded-full border border-slate-200 shadow-sm"><Shield className="h-3 w-3 text-green-500 mr-2" /> Changes autosaved locally</span>
       </div>
     </div>
   );

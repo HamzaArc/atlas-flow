@@ -66,6 +66,9 @@ export interface QuoteApproval {
 
 export type DynamicLineType = 'MAIN_FRET' | 'RET_FOND' | 'PEAGE_LCL' | 'STATIC';
 
+// Updated VatRule to include EXEMPT_0
+export type VatRule = 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | 'DISBURSEMENT_0' | 'EXEMPT_0';
+
 export interface QuoteLineItem {
   id: string;
   quoteId: string;
@@ -80,7 +83,7 @@ export interface QuoteLineItem {
   validityDate?: Date; 
   markupType: 'PERCENT' | 'FIXED_AMOUNT';
   markupValue: number;
-  vatRule: 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | 'DISBURSEMENT';
+  vatRule: VatRule;
   source: 'MANUAL' | 'TARIFF' | 'SMART_INIT';
   tariffId?: string;
   isRequired?: boolean;           
@@ -161,7 +164,6 @@ export interface Quote {
 }
 
 // --- 3. DOSSIER MODELS (ENHANCED) ---
-// Added 'CANCELLED' to the status union type
 export type ShipmentStatus = 'BOOKED' | 'PICKUP' | 'AT_POL' | 'ON_WATER' | 'AT_POD' | 'CUSTOMS' | 'DELIVERED' | 'COMPLETED' | 'CANCELLED';
 
 export interface ShipmentParty {
@@ -307,7 +309,6 @@ export type ChargeCategory = ChargeType;
 export type ChargeStatus = 'ESTIMATED' | 'ACCRUED' | 'READY_TO_INVOICE' | 'INVOICED' | 'POSTED' | 'PAID' | 'PARTIAL';
 export type InvoiceStatus = 'DRAFT' | 'ISSUED' | 'SENT' | 'PAID' | 'OVERDUE' | 'CANCELLED';
 export type InvoiceType = 'INVOICE' | 'CREDIT_NOTE' | 'PROFORMA';
-export type VatRule = 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | 'DISBURSEMENT_0';
 
 export interface ChargeLine {
     id: string;
