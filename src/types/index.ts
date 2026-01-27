@@ -121,7 +121,8 @@ export interface Quote {
   masterReference: string; 
   version: number; 
   customerReference?: string;
-  status: 'DRAFT' | 'PRICING' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'REJECTED';
+  // Added 'CONVERTED' status
+  status: 'DRAFT' | 'PRICING' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'REJECTED' | 'CONVERTED';
   clientId: string;
   clientName: string;
   clientTaxId?: string; 

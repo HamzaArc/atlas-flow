@@ -1,8 +1,10 @@
 import { create } from 'zustand';
-import { Dossier, DossierContainer, ShipmentStatus, ActivityCategory, ShipmentStage, DossierTask, Document } from '@/types/index';
+import { Dossier, DossierContainer, ShipmentStatus, ActivityCategory, ShipmentStage, DossierTask, Document, Quote, ChargeLine } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 import { DossierService } from '@/services/dossier.service';
 import { generateUUID } from '@/lib/utils';
+import { useFinanceStore } from './useFinanceStore';
+import { addDays } from 'date-fns';
 
 interface DossierState {
   dossiers: Dossier[];
@@ -10,9 +12,11 @@ interface DossierState {
   isLoading: boolean;
   isEditing: boolean;
   error: string | null;
+  pendingFinanceLines: Partial<ChargeLine>[];
 
   fetchDossiers: () => Promise<void>;
   createDossier: () => void;
+  initializeFromQuote: (quote: Quote) => void;
   loadDossier: (id: string) => Promise<void>;
   saveDossier: () => Promise<void>;
   deleteDossier: (id: string) => Promise<void>;
@@ -85,6 +89,7 @@ export const useDossierStore = create<DossierState>((set, get) => ({
   isLoading: false,
   isEditing: false,
   error: null,
+  pendingFinanceLines: [],
 
   fetchDossiers: async () => {
       set({ isLoading: true, error: null });
@@ -102,8 +107,140 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       set({ 
           dossier: { ...DEFAULT_DOSSIER, id: `new-${Date.now()}` }, 
           isEditing: true,
-          error: null
+          error: null,
+          pendingFinanceLines: []
       });
+  },
+
+  initializeFromQuote: (quote: Quote) => {
+    const year = new Date().getFullYear();
+    const random = Math.floor(1000 + Math.random() * 9000);
+    const newRef = `BKG-${year}-${random}`;
+    
+    // Determine active option
+    const activeOption = quote.options.find(o => o.id === quote.activeOptionId) || quote.options[0];
+    if (!activeOption) {
+        useToast.getState().toast("Error: Quote has no options to convert.", "error");
+        return;
+    }
+
+    // Prepare Date Logic
+    const etd = quote.requestedDepartureDate 
+        ? new Date(quote.requestedDepartureDate) 
+        : (quote.cargoReadyDate ? new Date(quote.cargoReadyDate) : new Date());
+    
+    const eta = activeOption.transitTime 
+        ? addDays(etd, activeOption.transitTime)
+        : addDays(etd, 14);
+
+    // Map Containers
+    const containers: DossierContainer[] = activeOption.equipmentList.map(eq => ({
+        id: generateUUID(),
+        number: '',
+        type: eq.type as any || '40HC',
+        seal: '',
+        weight: 0,
+        packages: 0,
+        packageType: 'PALLETS',
+        volume: 0,
+        status: 'GATE_IN',
+        pickupDate: undefined,
+        returnDate: undefined
+    }));
+
+    // Map Financial Lines (Expenses and Income)
+    const financeLines: Partial<ChargeLine>[] = [];
+    
+    activeOption.items.forEach(item => {
+        // Create Expense (Payable) - Buy Price
+        if (item.buyPrice > 0) {
+            financeLines.push({
+                type: 'EXPENSE',
+                code: 'FREIGHT_COST', // Generic code, could be improved with mapping
+                description: `[Cost] ${item.description}`,
+                amount: item.buyPrice,
+                currency: item.buyCurrency || item.buyCurrency,
+                vatRule: item.vatRule,
+                status: 'ESTIMATED',
+                vendorName: item.vendorName,
+                isBillable: true
+            });
+        }
+
+        // Create Income (Receivable) - Sell Price
+        if (item.sellPrice > 0) {
+            financeLines.push({
+                type: 'INCOME',
+                code: 'FREIGHT_REV',
+                description: item.description,
+                amount: item.sellPrice,
+                currency: activeOption.quoteCurrency,
+                vatRule: item.vatRule,
+                status: 'ESTIMATED',
+                isBillable: true
+            });
+        }
+    });
+
+    const newDossier: Dossier = {
+        ...DEFAULT_DOSSIER,
+        id: `new-quote-${quote.id}`,
+        ref: newRef,
+        customerReference: quote.reference,
+        clientId: quote.clientId,
+        clientName: quote.clientName,
+        quoteId: quote.id,
+        
+        mode: activeOption.mode || quote.mode || 'SEA_FCL',
+        incoterm: activeOption.incoterm || quote.incoterm || 'FOB',
+        pol: activeOption.pol || quote.pol || '',
+        pod: activeOption.pod || quote.pod || '',
+        
+        incotermPlace: activeOption.placeOfDelivery || activeOption.placeOfLoading || '',
+        
+        etd: etd,
+        eta: eta,
+        transitTime: activeOption.transitTime || 0,
+        freeTimeDays: activeOption.freeTime || 7,
+
+        // Parties Mapping
+        shipper: { 
+            name: quote.clientName, // Default to client as shipper if not specified
+            role: 'Shipper',
+            address: activeOption.placeOfLoading || ''
+        },
+        consignee: {
+            name: 'To Order', // Placeholder
+            role: 'Consignee',
+            address: activeOption.placeOfDelivery || ''
+        },
+        
+        // Goods
+        containers: containers,
+        cargoItems: quote.cargoRows ? quote.cargoRows.map(r => ({
+             id: generateUUID(),
+             description: quote.goodsDescription || 'General Cargo',
+             packageCount: r.count || 0,
+             packageType: quote.packagingType || 'PALLETS',
+             weight: r.weight || quote.totalWeight || 0,
+             volume: r.volume || quote.totalVolume || 0
+        })) : [],
+
+        createdDate: new Date().toISOString(),
+        status: 'BOOKED',
+        stage: ShipmentStage.INTAKE
+    };
+
+    set({
+        dossier: newDossier,
+        isEditing: true,
+        pendingFinanceLines: financeLines,
+        error: null
+    });
+
+    useToast.getState().toast("Booking initialized from quote details.", "success");
+    // Activity Log
+    get().addActivity(`Booking initialized from Quote ${quote.reference}`, 'SYSTEM', 'neutral');
   },
 
   duplicateDossier: () => {
@@ -162,7 +299,7 @@ export const useDossierStore = create<DossierState>((set, get) => ({
               if (safeCopy.etd) safeCopy.etd = new Date(safeCopy.etd);
               if (safeCopy.eta) safeCopy.eta = new Date(safeCopy.eta);
               
-              set({ dossier: safeCopy, isEditing: false, isLoading: false });
+              set({ dossier: safeCopy, isEditing: false, isLoading: false, pendingFinanceLines: [] });
               get().runSmartChecks();
           } else {
               set({ isLoading: false, error: 'Shipment not found' });
@@ -344,11 +481,25 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       set({ isLoading: true });
       get().runSmartChecks(); 
       
-      const { dossier, dossiers } = get();
+      const { dossier, dossiers, pendingFinanceLines } = get();
       
       try {
           const savedDossier = await DossierService.save(dossier);
           
+          // --- Process Pending Finance Lines ---
+          if (pendingFinanceLines && pendingFinanceLines.length > 0) {
+              const financeStore = useFinanceStore.getState();
+              // Process sequentially to ensure order or reduce race conditions
+              for (const line of pendingFinanceLines) {
+                  await financeStore.addCharge({
+                      ...line,
+                      dossierId: savedDossier.id
+                  });
+              }
+              // Clear pending lines after successful add
+              set({ pendingFinanceLines: [] });
+          }
+
           const index = dossiers.findIndex(d => d.id === dossier.id);
           let newDossiers = [...dossiers];
           

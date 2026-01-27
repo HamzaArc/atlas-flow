@@ -40,7 +40,8 @@ interface QuoteState {
   masterReference: string; 
   version: number;
   customerReference: string;
-  status: 'DRAFT' | 'PRICING' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'REJECTED';
+  // Added CONVERTED to status type
+  status: 'DRAFT' | 'PRICING' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'REJECTED' | 'CONVERTED';
   
   // CRM & Identity
   clientId: string;
@@ -64,6 +65,7 @@ interface QuoteState {
   // Cargo
   goodsDescription: string; 
   hsCode: string;
+  packagingType: PackagingType;
   isHazmat: boolean;
   isReefer: boolean;
   temperature: string;
@@ -294,6 +296,7 @@ const DEFAULT_STATE = {
 
   goodsDescription: '',
   hsCode: '',
+  packagingType: 'PALLETS' as PackagingType, 
   isHazmat: false,
   isReefer: false,
   temperature: '',
@@ -1152,6 +1155,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
           goodsDescription: state.goodsDescription,
           hsCode: state.hsCode,
+          packagingType: state.packagingType, // Added
           isHazmat: state.isHazmat,
           isReefer: state.isReefer,
           temperature: state.temperature,
@@ -1239,6 +1243,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
               goodsDescription: quote.goodsDescription,
               hsCode: quote.hsCode,
+              packagingType: quote.packagingType || 'PALLETS', // Added with fallback
               isHazmat: quote.isHazmat,
               isReefer: quote.isReefer,
               temperature: quote.temperature,

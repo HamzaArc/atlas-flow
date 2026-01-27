@@ -14,15 +14,17 @@ import {
 } from "@/components/ui/command";
 import { 
     Save, ArrowLeft, Copy, Coins, Settings2, 
-    User, Clock, Check, GitBranch, ChevronsUpDown
+    User, Clock, Check, GitBranch, ChevronsUpDown, Ship, ChevronRight, Loader2
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { useClientStore } from "@/store/useClientStore"; 
 import { useUserStore } from "@/store/useUserStore"; 
+import { useDossierStore } from "@/store/useDossierStore";
 import { Currency } from "@/types/index";
 import { cn } from "@/lib/utils";
 import { ApprovalAction } from "./ApprovalAction";
 import { useToast } from "@/components/ui/use-toast";
+import { useNavigate } from "react-router-dom";
 
 interface QuoteHeaderProps {
     onBack: () => void;
@@ -32,25 +34,32 @@ const STEPS = [
     { id: 'DRAFT', label: 'Draft' },
     { id: 'VALIDATION', label: 'Review' },
     { id: 'SENT', label: 'Sent' },
-    { id: 'ACCEPTED', label: 'Won' }
+    { id: 'ACCEPTED', label: 'Won' },
+    { id: 'CONVERTED', label: 'Used' } // Added visual step for converted
 ];
 
 const STANDARD_PAYMENT_TERMS = ["Cash", "30 Days", "60 Days", "NET_60", "90 Days"];
 
 export function QuoteHeader({ onBack }: QuoteHeaderProps) {
+  const navigate = useNavigate();
   // Quote Store
   const { 
-    reference, status, clientName, clientId, validityDate, version,
-    salespersonId, 
+    id, reference, status, clientName, clientId, validityDate, version,
+    salespersonId, isLoading,
     quoteCurrency, exchangeRates, paymentTerms,
     setIdentity, setClientSnapshot, setStatus, saveQuote, duplicateQuote, createRevision,
     setQuoteCurrency, setExchangeRate,
+    options, activeOptionId, mode, incoterm, cargoRows, goodsDescription, 
+    packagingType, totalWeight, totalVolume, requestedDepartureDate, cargoReadyDate
   } = useQuoteStore();
 
   // Client Store Integration
   const { clients, fetchClients } = useClientStore();
   // User Store Integration
   const { users, fetchUsers } = useUserStore();
+  // Dossier Store Integration
+  const { initializeFromQuote } = useDossierStore();
+
   const { toast } = useToast();
   
   // Local State
@@ -62,8 +71,10 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
     fetchUsers();
   }, [fetchClients, fetchUsers]);
 
-  const isReadOnly = status === 'ACCEPTED' || status === 'REJECTED' || status === 'SENT';
-  const isLocked = status === 'ACCEPTED' || status === 'REJECTED';
+  const isConverted = status === 'CONVERTED';
+  const isReadOnly = status === 'ACCEPTED' || status === 'REJECTED' || status === 'SENT' || isConverted;
+  const isLocked = status === 'ACCEPTED' || status === 'REJECTED' || isConverted;
+  const isApproved = status === 'ACCEPTED';
 
   // --- FILTERS ---
   const salesReps = users.filter(u => ['SALES', 'MANAGER', 'DIRECTOR', 'ADMIN'].includes(u.role));
@@ -106,7 +117,7 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
 
   const handleSave = async () => {
     await saveQuote();
-    // FIXED: Use simplified toast signature (string, string)
+    // Use the toast function directly from the hook result
     toast("Quote Saved: Your changes have been saved successfully.", "success");
   };
 
@@ -115,11 +126,37 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
           await createRevision();
       }
   };
+  
+  const handleCreateBooking = async () => {
+      if(!confirm("This will lock the quote and create a new shipment booking. Continue?")) return;
+
+      // 1. Mark as Converted/Used
+      await setStatus('CONVERTED');
+
+      // 2. Prepare Snapshot for Dossier
+      const quoteSnapshot: any = {
+          id, reference, clientId, clientName, activeOptionId, options, 
+          mode, incoterm, requestedDepartureDate, cargoReadyDate,
+          cargoRows, goodsDescription, packagingType, totalWeight, totalVolume,
+      };
+      
+      // 3. Initialize Dossier
+      initializeFromQuote(quoteSnapshot);
+      
+      // 4. Navigate
+      const newId = `new-quote-${id}`;
+      navigate(`/dossiers/${newId}`);
+      
+      toast("Shipment Created: Quote has been converted and locked.", "success");
+  };
 
   // --- COMPONENT: WORKFLOW STEPPER ---
   const StatusStepper = () => (
       <div className="flex items-center mr-6 bg-slate-50 rounded-lg p-1 border border-slate-200">
           {STEPS.map((step, idx) => {
+              // Hide CONVERTED step if not converted to avoid clutter, or show it only if active
+              if (step.id === 'CONVERTED' && status !== 'CONVERTED') return null;
+
               const isActive = step.id === status;
               const currentIdx = STEPS.findIndex(s => s.id === status);
               const isCompleted = idx < currentIdx;
@@ -235,25 +272,51 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
            {/* Action Buttons */}
            <div className="flex gap-2 items-center">
                
+               {/* Always show Duplicate for utility */}
                <Button variant="outline" size="sm" onClick={duplicateQuote} className="h-8 text-xs border-slate-200 text-slate-600">
                    <Copy className="h-3.5 w-3.5 mr-2" /> Copy
                </Button>
+               
+               {/* Action: Create Shipment (Only when Approved and not yet Converted) */}
+               {isApproved && (
+                   <div 
+                        onClick={handleCreateBooking}
+                        className="relative overflow-hidden group cursor-pointer h-9 px-5 rounded-md bg-slate-900 flex items-center shadow-md transition-all duration-300 hover:shadow-lg hover:scale-[1.02]"
+                   >
+                       <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 translate-x-[-100%] group-hover:translate-x-0 transition-transform duration-500 ease-out"></div>
+                       <div className="relative z-10 flex items-center gap-2 text-white text-xs font-bold">
+                           <Ship className="h-3.5 w-3.5" />
+                           <span>Create Shipment</span>
+                           <ChevronRight className="h-3 w-3 opacity-0 -ml-2 group-hover:opacity-100 group-hover:ml-0 transition-all duration-300" />
+                       </div>
+                   </div>
+               )}
 
-               {isReadOnly && (
+               {/* Action: Already Converted Badge */}
+               {isConverted && (
+                    <Badge variant="secondary" className="h-8 border-purple-200 text-purple-700 bg-purple-50 gap-1.5 px-3">
+                        <Check className="h-3.5 w-3.5" /> Shipment Created
+                    </Badge>
+               )}
+
+               {/* Action: Revision (Only if ReadOnly but not Locked, or if Locked but we want to allow re-negotiation of a new version) */}
+               {isReadOnly && !isConverted && (
                    <Button variant="outline" size="sm" onClick={handleRevision} className="h-8 text-xs border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100">
                        <GitBranch className="h-3.5 w-3.5 mr-2" /> Revise (v{version+1})
                    </Button>
                )}
 
+               {/* Standard Actions: Save / Approval */}
                {!isLocked && (
                    <>
                     <ApprovalAction />
-                    <Button size="sm" onClick={handleSave} className="h-8 bg-slate-900 hover:bg-slate-800 text-xs px-4 ml-2">
-                        <Save className="h-3.5 w-3.5 mr-2" /> Save
+                    <Button size="sm" onClick={handleSave} disabled={isLoading} className="h-8 bg-slate-900 hover:bg-slate-800 text-xs px-4 ml-2 min-w-[80px]">
+                        {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Save className="h-3.5 w-3.5 mr-2" /> Save</>}
                     </Button>
                    </>
                )}
                
+               {/* Admin Override: Re-open */}
                {isLocked && !isReadOnly && (
                    <Button size="sm" variant="outline" onClick={() => setStatus('DRAFT')} className="h-8 text-xs">
                         Re-open Quote
