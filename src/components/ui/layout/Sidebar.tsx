@@ -214,6 +214,8 @@ export function Sidebar({
         {/* NAV SCROLL AREA */}
         <div className="flex-1 py-2 overflow-y-auto overflow-x-hidden scrollbar-none space-y-1">
           
+          <NavItem path="/dashboard" icon={LayoutDashboard} label="Dashboard" />
+
           <SectionHeader title="Operations" />
           <NavItem path="/quotes" icon={FileText} label="Quotes (Devis)" />
           <NavItem path="/tariffs" icon={Banknote} label="Tariff Manager" />
@@ -225,7 +227,6 @@ export function Sidebar({
 
           <SectionHeader title="Configuration" />
           <NavItem path="/users" icon={UserCog} label="Team Directory" />
-          <NavItem path="/analytics" icon={LayoutDashboard} label="Analytics" status="soon" statusText="In Dev" />
           <NavItem path="/settings" icon={Settings} label="Settings" status="soon" statusText="In Dev" />
         </div>
 

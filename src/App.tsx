@@ -9,6 +9,7 @@ import { Loader2 } from "lucide-react";
 
 // Pages
 import LandingPage from './features/landing/LandingPage';
+import DashboardPage from './features/dashboard/pages/DashboardPage'; // NEW IMPORT
 import RateDashboard from './features/tariffs/pages/RateDashboard';
 import RateWorkspace from './features/tariffs/pages/RateWorkspace';
 import QuoteDashboard from './features/quotes/pages/QuoteDashboard';
@@ -18,8 +19,6 @@ import FinanceDashboard from './features/finance/pages/FinanceDashboard';
 import ClientListPage from './features/crm/pages/ClientListPage';
 import ClientDetailsPage from './features/crm/pages/ClientDetailsPage';
 import DossierDashboard from './features/dossier/pages/DossierDashboard';
-
-// FIX: Changed to named import to match the component export
 import { DossierWorkspace } from './features/dossier/DossierWorkspace';
 
 // --- LAYOUT WRAPPER FOR AUTHENTICATED ROUTES ---
@@ -96,8 +95,8 @@ function App() {
 
         {/* --- PROTECTED ROUTES (Sidebar + Auth Check) --- */}
         <Route element={<ProtectedLayout />}>
-            {/* FIX: Default Dashboard now points to Dossiers (Operations) */}
-            <Route path="/dashboard" element={<Navigate to="/dossiers" replace />} />
+            {/* FIX: Dashboard is now the DashboardPage, not redirect */}
+            <Route path="/dashboard" element={<DashboardPage />} />
             
             {/* Quotes */}
             <Route path="/quotes" element={<QuoteDashboard />} />
