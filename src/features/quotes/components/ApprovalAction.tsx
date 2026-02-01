@@ -49,7 +49,8 @@ export function ApprovalAction() {
       setRejectReason('');
   };
 
-  const RejectionDialog = () => (
+  // FIX: Defined as a constant JSX element instead of a nested component to prevent re-mounting on typing
+  const rejectionDialogContent = (
       <Dialog open={isRejectOpen} onOpenChange={setIsRejectOpen}>
           <DialogContent className="sm:max-w-md">
               <DialogHeader>
@@ -111,7 +112,7 @@ export function ApprovalAction() {
             >
                 <Trash2 className="h-4 w-4" />
             </Button>
-            <RejectionDialog />
+            {rejectionDialogContent}
           </TooltipProvider>
       );
   }
@@ -187,7 +188,7 @@ export function ApprovalAction() {
                     <Trash2 className="h-4 w-4" />
                 </Button>
             </div>
-            <RejectionDialog />
+            {rejectionDialogContent}
           </>
       );
   }
@@ -242,7 +243,7 @@ export function ApprovalAction() {
                     <XCircle className="h-3.5 w-3.5 mr-1.5" /> Reject
                 </Button>
             </div>
-            <RejectionDialog />
+            {rejectionDialogContent}
           </>
       );
   }
@@ -266,7 +267,7 @@ export function ApprovalAction() {
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
-            <RejectionDialog />
+            {rejectionDialogContent}
           </>
       );
   }
