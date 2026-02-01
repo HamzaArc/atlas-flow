@@ -4,8 +4,8 @@ import {
   AreaChart, Area, Tooltip, ResponsiveContainer, 
   RadialBarChart, RadialBar} from 'recharts';
 import { 
-  Briefcase, FileText, Users, Activity, 
-  ArrowUpRight, Plus, Ship, Send, UserPlus 
+  Briefcase, FileText, Activity, 
+  ArrowUpRight, Ship 
 } from "lucide-react";
 
 import { useDossierStore } from '@/store/useDossierStore';
@@ -13,30 +13,15 @@ import { useQuoteStore } from '@/store/useQuoteStore';
 import { useClientStore } from '@/store/useClientStore';
 import { useUserStore } from '@/store/useUserStore';
 import { BentoGrid, BentoGridItem } from '../components/BentoGrid';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-
-// --- DATA HELPERS ---
-const getUserDisplayName = (user: any) => {
-    if (user.name) return user.name;
-    if (user.firstName && user.lastName) return `${user.firstName} ${user.lastName}`;
-    return user.email || 'Team Member';
-};
-
-const getUserInitials = (user: any) => {
-    const name = getUserDisplayName(user);
-    const parts = name.split(' ').filter(Boolean);
-    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-    return name.substring(0, 2).toUpperCase();
-};
+import { ActionCenter } from '../components/ActionCenter';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { dossiers, fetchDossiers } = useDossierStore();
   const { quotes, fetchQuotes } = useQuoteStore();
   const { fetchClients } = useClientStore();
-  const { users, fetchUsers } = useUserStore();
+  const { fetchUsers } = useUserStore();
 
   useEffect(() => {
     fetchDossiers();
@@ -74,11 +59,6 @@ export default function DashboardPage() {
 
   const winRate = winRateData[1].value;
 
-  // --- ACTIONS ---
-  const handleCreateShipment = () => navigate('/dossiers?action=new');
-  const handleInviteUser = () => navigate('/users?action=invite');
-  const handleCreateQuote = () => navigate('/quotes/create');
-
   return (
     <div className="min-h-screen bg-slate-50/50 p-6 md:p-8 space-y-8">
       
@@ -91,16 +71,6 @@ export default function DashboardPage() {
           <p className="text-slate-500 mt-1">
             Here's what's happening in your logistics network today.
           </p>
-        </div>
-        <div className="flex items-center gap-2">
-           <Button onClick={handleCreateShipment} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20">
-              <Ship className="w-4 h-4 mr-2" />
-              New Shipment
-           </Button>
-           <Button onClick={handleCreateQuote} variant="outline" className="border-slate-200 shadow-sm">
-              <Plus className="w-4 h-4 mr-2" />
-              New Quote
-           </Button>
         </div>
       </div>
 
@@ -177,57 +147,9 @@ export default function DashboardPage() {
           icon={<Activity className="h-4 w-4 text-slate-500" />}
         />
 
-        {/* 3. QUICK ACTIONS (Square) */}
-        <div className="md:col-span-1 row-span-2 flex flex-col gap-4">
-            {/* Team Widget */}
-             <div className="flex-1 rounded-xl bg-white border border-slate-200 p-4 shadow-sm flex flex-col">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-                        <Users className="w-4 h-4 text-blue-500" />
-                        Team
-                    </h3>
-                    <Button variant="ghost" size="icon" onClick={handleInviteUser} className="h-6 w-6 rounded-full hover:bg-slate-100">
-                        <UserPlus className="w-4 h-4 text-slate-600" />
-                    </Button>
-                </div>
-                <ScrollArea className="flex-1 pr-4">
-                    <div className="space-y-3">
-                        {users.slice(0, 5).map(u => (
-                            <div key={u.id} className="flex items-center gap-3">
-                                <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
-                                    {getUserInitials(u)}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-slate-900 truncate">
-                                        {getUserDisplayName(u)}
-                                    </p>
-                                    <div className="flex items-center gap-1.5">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                        <p className="text-[10px] text-slate-500">Online</p>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </ScrollArea>
-                <Button variant="outline" className="w-full mt-4 text-xs h-8" onClick={() => navigate('/users')}>
-                    View Directory
-                </Button>
-            </div>
-            
-            {/* Invite Promo */}
-             <div 
-                onClick={handleInviteUser}
-                className="h-24 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 p-4 text-white cursor-pointer hover:shadow-lg transition-all flex items-center justify-between group"
-            >
-                <div>
-                    <p className="font-bold text-lg">Invite User</p>
-                    <p className="text-xs text-indigo-100 opacity-80 group-hover:opacity-100">Grow your team</p>
-                </div>
-                <div className="h-10 w-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm group-hover:scale-110 transition-transform">
-                    <Send className="w-5 h-5 text-white" />
-                </div>
-            </div>
+        {/* 3. QUICK ACTIONS (Square / Tall) */}
+        <div className="md:col-span-1 row-span-2">
+            <ActionCenter />
         </div>
 
         {/* 4. ACTIVE SHIPMENTS (Tall) */}
@@ -280,7 +202,6 @@ export default function DashboardPage() {
                             </div>
                             <div className="text-right">
                                 <p className="text-sm font-bold text-slate-700">
-                                    {/* Mock value if totalAmount missing in type */}
                                     {/* @ts-ignore */}
                                     MAD {q.totalAmount?.toLocaleString() || '---'}
                                 </p>

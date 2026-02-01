@@ -341,9 +341,23 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
 
   useEffect(() => {
      if (bottomRef.current) {
-         bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+         // Prevent auto-scrolling the page on load.
+         // Only scroll if the audit log is currently visible in the viewport.
+         const rect = bottomRef.current.getBoundingClientRect();
+         const isVisible = rect.top < window.innerHeight;
+
+         if (isVisible) {
+             bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+         }
      }
   }, [activities]);
+
+  useEffect(() => {
+    if (bottomRef.current) {
+        // This is a backup effect to scroll ONLY if user is interacting with the list
+        // We handle this via the logic above already.
+    }
+ }, []);
 
   // Update totals whenever items change or Exchange Rates change
   useEffect(() => {
