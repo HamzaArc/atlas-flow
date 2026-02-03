@@ -1,9 +1,10 @@
+// src/features/dossier/tabs/DossierOperationsTab.tsx
 import { useState, useMemo } from 'react';
 import { 
    MapPin, Box, Plus, Trash2, User, 
    ArrowRight, Shield,
    Truck, Check, ChevronsUpDown, Home, Calendar,
-   FileText, Scale
+   Scale, Plane, Anchor
 } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
 import { ShipmentParty, CargoItem, DossierContainer } from "@/types/index";
@@ -103,31 +104,41 @@ export const DossierOperationsTab = () => {
 
   // --- Logic Helpers ---
   const isEXW = dossier.incoterm === 'EXW';
-  const isDeliveryInco = ['DAP', 'DPU', 'DDP'].includes(dossier.incoterm);
+  
+  const isAir = dossier.mode === 'AIR';
+  const isRoad = dossier.mode === 'ROAD';
+  const isSea = dossier.mode?.startsWith('SEA');
+  const isLCL = dossier.mode === 'SEA_LCL';
 
-  // --- Chargeable Weight Logic (Morocco Freight Standard) ---
-  // AIR: 1 CBM = 167 KG
-  // SEA: 1 CBM = 1000 KG
-  // ROAD: 1 CBM = 333 KG (Often)
-  const chargeableWeight = useMemo(() => {
+  // --- Dynamic Labels ---
+  const LABELS = {
+    bookingRef: isAir ? 'Airline Ref (LTA)' : isRoad ? 'Transport Order' : 'Booking Ref',
+    pol: isAir ? 'Airport of Departure' : isRoad ? 'Pickup Place' : 'Port of Loading',
+    pod: isAir ? 'Airport of Arrival' : isRoad ? 'Delivery Place' : 'Port of Discharge',
+    etd: isRoad ? 'Pickup Date' : 'ETD',
+    eta: isRoad ? 'Delivery Date' : 'ETA',
+    masterDoc: isAir ? 'MAWB' : isRoad ? 'CMR' : 'Master B/L',
+    houseDoc: isAir ? 'HAWB' : 'House B/L',
+    vehicleId: isAir ? 'Flight Number' : isRoad ? 'Truck Plate' : 'Vessel Name',
+    tripId: isAir ? 'Flight Date' : isRoad ? 'Trailer Plate' : 'Voyage No',
+    freeTime: isAir ? 'Storage Free Time' : isRoad ? 'Stationnement' : 'Demurrage/Detention'
+  };
+
+  // --- Chargeable Weight Logic (Air Profitability Focus) ---
+  const calculatedChargeableWeight = useMemo(() => {
      if(!dossier.cargoItems) return 0;
-     
      let totalVol = 0;
      let totalGross = 0;
-     
      dossier.cargoItems.forEach(item => {
          totalVol += item.volume;
          totalGross += item.weight;
      });
-
-     let ratio = 1000; // Sea Default
-     if(dossier.mode?.includes('AIR')) ratio = 166.67;
-     if(dossier.mode?.includes('ROAD')) ratio = 333.33;
-
-     const volWeight = totalVol * ratio;
+     
+     // Air Formula: 1 CBM = 166.67 KG
+     const airRatio = 166.67;
+     const volWeight = totalVol * airRatio;
      return Math.max(totalGross, volWeight);
-  }, [dossier.cargoItems, dossier.mode]);
-
+  }, [dossier.cargoItems]);
 
   // --- Handlers ---
   const handleAddParty = () => {
@@ -149,7 +160,6 @@ export const DossierOperationsTab = () => {
      } else {
          updateDossier('parties', [...(dossier.parties || []), partyToAdd]);
      }
-     
      setIsAddingParty(false);
      setNewParty({ role: 'Notify' });
   };
@@ -215,11 +225,13 @@ export const DossierOperationsTab = () => {
         {/* LEFT COLUMN */}
         <div className="flex flex-col gap-6 h-full">
           
-          {/* CARD 1: Route & Schedule */}
+          {/* CARD 1: Route & Schedule (Morphed) */}
           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative z-20 overflow-hidden">
             <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-3">
-                 <div className="p-1.5 bg-blue-100 text-blue-600 rounded-lg"><MapPin className="h-4 w-4" /></div>
+                 <div className="p-1.5 bg-blue-100 text-blue-600 rounded-lg">
+                    {isAir ? <Plane className="h-4 w-4" /> : isRoad ? <Truck className="h-4 w-4" /> : <MapPin className="h-4 w-4" />}
+                 </div>
                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-tight">Logistics Route</h3>
               </div>
               <div className="flex items-center gap-2">
@@ -239,7 +251,7 @@ export const DossierOperationsTab = () => {
                       <div className="h-3 w-3 rounded-full border-2 border-white bg-blue-500 shadow ring-1 ring-blue-100"></div>
                    </div>
                    <div className="flex-1 w-full bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:border-blue-200 transition-colors">
-                      <h4 className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-3 flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Origin (POL)</h4>
+                      <h4 className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-3 flex items-center gap-2"><ArrowRight className="h-3 w-3" /> {LABELS.pol}</h4>
                       
                       <div className="grid grid-cols-1 gap-4">
                         {isEXW && (
@@ -255,22 +267,22 @@ export const DossierOperationsTab = () => {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                            <div className="flex-1">
-                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Port of Loading</label>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{LABELS.pol}</label>
                               <Popover open={polOpen} onOpenChange={setPolOpen}>
                                  <PopoverTrigger asChild>
                                    <Button variant="outline" className="w-full justify-between h-[38px] text-sm bg-white border-slate-300 hover:border-slate-400 text-slate-900 shadow-sm">
                                       <div className="flex items-center gap-2 truncate">
                                         <MapPin className="h-4 w-4 text-slate-400" />
-                                        {dossier.pol ? dossier.pol : <span className="text-slate-400 font-normal">Select POL...</span>}
+                                        {dossier.pol ? dossier.pol : <span className="text-slate-400 font-normal">Select Location...</span>}
                                       </div>
                                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                    </Button>
                                  </PopoverTrigger>
                                  <PopoverContent className="w-[300px] p-0" align="start">
                                    <Command>
-                                     <CommandInput placeholder="Search ports..." />
+                                     <CommandInput placeholder="Search..." />
                                      <CommandList>
-                                        <CommandEmpty>No port found.</CommandEmpty>
+                                        <CommandEmpty>No location found.</CommandEmpty>
                                         <CommandGroup>
                                            {PORT_DB.map((port) => (
                                               <CommandItem key={port.id} value={port.id} 
@@ -288,7 +300,7 @@ export const DossierOperationsTab = () => {
                            </div>
 
                            <InputField 
-                              label="ETD Date"
+                              label={LABELS.etd}
                               icon={Calendar}
                               type="date"
                               value={dossier.etd ? new Date(dossier.etd).toISOString().split('T')[0] : ''}
@@ -305,27 +317,27 @@ export const DossierOperationsTab = () => {
                       <div className="h-3 w-3 rounded-full border-2 border-white bg-green-500 shadow ring-1 ring-green-100"></div>
                    </div>
                    <div className="flex-1 w-full bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:border-green-200 transition-colors">
-                      <h4 className="text-[10px] font-bold text-green-600 uppercase tracking-widest mb-3 flex items-center gap-2"><ArrowRight className="h-3 w-3" /> Destination (POD)</h4>
+                      <h4 className="text-[10px] font-bold text-green-600 uppercase tracking-widest mb-3 flex items-center gap-2"><ArrowRight className="h-3 w-3" /> {LABELS.pod}</h4>
                       
                       <div className="grid grid-cols-1 gap-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                            <div className="flex-1">
-                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Port of Discharge</label>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{LABELS.pod}</label>
                               <Popover open={podOpen} onOpenChange={setPodOpen}>
                                  <PopoverTrigger asChild>
                                    <Button variant="outline" className="w-full justify-between h-[38px] text-sm bg-white border-slate-300 hover:border-slate-400 text-slate-900 shadow-sm">
                                       <div className="flex items-center gap-2 truncate">
                                         <MapPin className="h-4 w-4 text-slate-400" />
-                                        {dossier.pod ? dossier.pod : <span className="text-slate-400 font-normal">Select POD...</span>}
+                                        {dossier.pod ? dossier.pod : <span className="text-slate-400 font-normal">Select Location...</span>}
                                       </div>
                                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                    </Button>
                                  </PopoverTrigger>
                                  <PopoverContent className="w-[300px] p-0" align="start">
                                    <Command>
-                                     <CommandInput placeholder="Search ports..." />
+                                     <CommandInput placeholder="Search..." />
                                      <CommandList>
-                                        <CommandEmpty>No port found.</CommandEmpty>
+                                        <CommandEmpty>No location found.</CommandEmpty>
                                         <CommandGroup>
                                            {PORT_DB.map((port) => (
                                               <CommandItem key={port.id} value={port.id} 
@@ -343,7 +355,7 @@ export const DossierOperationsTab = () => {
                            </div>
 
                            <InputField 
-                              label="ETA Date"
+                              label={LABELS.eta}
                               icon={Calendar}
                               type="date"
                               value={dossier.eta ? new Date(dossier.eta).toISOString().split('T')[0] : ''}
@@ -351,45 +363,110 @@ export const DossierOperationsTab = () => {
                            />
                         </div>
                         
-                        {/* MOROCCO CUSTOMS DATA */}
+                        {/* VEHICLE DETAILS (Dynamic) */}
                         <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
                              <h5 className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1">
-                                 <FileText className="h-3 w-3" /> Customs Data (Morocco)
+                                 {isAir ? <Plane className="h-3 w-3" /> : isRoad ? <Truck className="h-3 w-3" /> : <Anchor className="h-3 w-3" />} 
+                                 Details
                              </h5>
                              <div className="grid grid-cols-2 gap-4">
-                                <InputField 
-                                    label="N° Gros / Manifest" 
-                                    placeholder="e.g. 2024/9999"
-                                    // @ts-ignore
-                                    value={dossier.customsRef || ''}
-                                    // @ts-ignore
-                                    onChange={(e) => updateDossier('customsRef', e.target.value)}
-                                    className="h-8 text-xs font-mono"
-                                />
-                                <InputField 
-                                    label="N° Article" 
-                                    placeholder="e.g. 1502"
-                                    // @ts-ignore
-                                    value={dossier.articleNumber || ''}
-                                    // @ts-ignore
-                                    onChange={(e) => updateDossier('articleNumber', e.target.value)}
-                                    className="h-8 text-xs font-mono"
-                                />
+                                {isAir ? (
+                                    <>
+                                        <InputField 
+                                            label={LABELS.vehicleId} 
+                                            placeholder="AT801"
+                                            value={dossier.flightNumber || ''}
+                                            onChange={(e) => updateDossier('flightNumber', e.target.value)}
+                                            className="h-8 text-xs font-mono"
+                                        />
+                                        <InputField 
+                                            label={LABELS.tripId} 
+                                            type="date"
+                                            value={dossier.flightDate ? new Date(dossier.flightDate).toISOString().split('T')[0] : ''}
+                                            onChange={(e) => updateDossier('flightDate', new Date(e.target.value))}
+                                            className="h-8 text-xs font-mono"
+                                        />
+                                    </>
+                                ) : isRoad ? (
+                                    <>
+                                        <InputField 
+                                            label={LABELS.vehicleId} 
+                                            placeholder="12345-A-6"
+                                            value={dossier.truckPlate || ''}
+                                            onChange={(e) => updateDossier('truckPlate', e.target.value)}
+                                            className="h-8 text-xs font-mono"
+                                        />
+                                        <InputField 
+                                            label={LABELS.tripId} 
+                                            placeholder="Trailer Plate"
+                                            value={dossier.trailerPlate || ''}
+                                            onChange={(e) => updateDossier('trailerPlate', e.target.value)}
+                                            className="h-8 text-xs font-mono"
+                                        />
+                                    </>
+                                ) : (
+                                    <>
+                                        <InputField 
+                                            label={LABELS.vehicleId} 
+                                            placeholder="Vessel Name"
+                                            value={dossier.vesselName || ''}
+                                            onChange={(e) => updateDossier('vesselName', e.target.value)}
+                                            className="h-8 text-xs font-mono"
+                                        />
+                                        <InputField 
+                                            label={LABELS.tripId} 
+                                            placeholder="Voyage No"
+                                            value={dossier.voyageNumber || ''}
+                                            onChange={(e) => updateDossier('voyageNumber', e.target.value)}
+                                            className="h-8 text-xs font-mono"
+                                        />
+                                    </>
+                                )}
                              </div>
                         </div>
 
-                        {isDeliveryInco && (
-                           <div className="animate-in slide-in-from-top-1">
-                               <InputField 
-                                   label="Final Delivery Address" 
-                                   icon={MapPin}
-                                   placeholder="Warehouse/Store address..."
-                                   value={dossier.incotermPlace || ''}
-                                   onChange={(e) => updateDossier('incotermPlace', e.target.value)}
-                                   className="border-blue-200 bg-blue-50/10"
-                               />
-                           </div>
-                        )}
+                        {/* CUSTOMS & DEADLINES (Conditional) */}
+                        <div className="p-3 bg-white rounded-lg border border-slate-200">
+                             <div className="grid grid-cols-2 gap-4">
+                                <InputField 
+                                    label={LABELS.masterDoc} 
+                                    placeholder={isAir ? "123-12345678" : "BL Number"}
+                                    value={dossier.mblNumber || ''}
+                                    onChange={(e) => updateDossier('mblNumber', e.target.value)}
+                                    className="h-8 text-xs font-mono"
+                                />
+                                {!isRoad && (
+                                    <InputField 
+                                        label={LABELS.houseDoc} 
+                                        placeholder="Reference"
+                                        value={dossier.hblNumber || ''}
+                                        onChange={(e) => updateDossier('hblNumber', e.target.value)}
+                                        className="h-8 text-xs font-mono"
+                                    />
+                                )}
+                             </div>
+                             
+                             {/* Deadlines - Only for SEA/AIR */}
+                             {!isRoad && (
+                                <div className="mt-3 grid grid-cols-3 gap-2">
+                                    {isSea && (
+                                        <div className="col-span-1">
+                                            <label className="text-[9px] font-bold text-red-500 uppercase">VGM Cut-off</label>
+                                            <input type="date" className="w-full text-[10px] border-b border-red-200 py-1 focus:outline-none" />
+                                        </div>
+                                    )}
+                                    <div className="col-span-1">
+                                        <label className="text-[9px] font-bold text-red-500 uppercase">{isAir ? "Drop-off Deadline" : "Port Cut-off"}</label>
+                                        <input type="date" className="w-full text-[10px] border-b border-red-200 py-1 focus:outline-none" />
+                                    </div>
+                                    <div className="col-span-1">
+                                        <label className="text-[9px] font-bold text-red-500 uppercase">Doc Cut-off</label>
+                                        <input type="date" className="w-full text-[10px] border-b border-red-200 py-1 focus:outline-none" />
+                                    </div>
+                                </div>
+                             )}
+                        </div>
+
                       </div>
                    </div>
                 </div>
@@ -412,6 +489,46 @@ export const DossierOperationsTab = () => {
                )}
             </div>
             <div className="p-5 flex-1">
+              
+              {/* ROAD SPECIFIC: DRIVER DETAILS */}
+              {isRoad && (
+                  <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <h4 className="text-[10px] font-bold text-amber-800 uppercase tracking-wide mb-2 flex items-center gap-2">
+                          <Truck className="h-3 w-3" /> Driver Details
+                      </h4>
+                      <div className="grid grid-cols-2 gap-3">
+                          <InputField 
+                              placeholder="Driver Name" 
+                              value={dossier.driverName || ''}
+                              onChange={(e) => updateDossier('driverName', e.target.value)}
+                              className="bg-white"
+                          />
+                          <InputField 
+                              placeholder="Phone Number" 
+                              value={dossier.driverPhone || ''}
+                              onChange={(e) => updateDossier('driverPhone', e.target.value)}
+                              className="bg-white"
+                          />
+                          <InputField 
+                              placeholder="Passport / CIN" 
+                              value={dossier.driverPassport || ''}
+                              onChange={(e) => updateDossier('driverPassport', e.target.value)}
+                              className="bg-white"
+                          />
+                           <div className="flex items-center space-x-2 pt-2">
+                                <input 
+                                    type="checkbox" 
+                                    id="carnet" 
+                                    checked={dossier.carnetTir || false}
+                                    onChange={(e) => updateDossier('carnetTir', e.target.checked)}
+                                    className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                                />
+                                <label htmlFor="carnet" className="text-xs font-medium text-amber-900">Carnet TIR?</label>
+                           </div>
+                      </div>
+                  </div>
+              )}
+
               {isAddingParty && (
                  <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg animate-in fade-in slide-in-from-top-2">
                     <h4 className="text-[10px] font-bold text-slate-900 uppercase tracking-wide mb-3">Add Stakeholder</h4>
@@ -422,7 +539,7 @@ export const DossierOperationsTab = () => {
                              <option value="Consignee">Consignee</option>
                              <option value="Notify">Notify</option>
                              <option value="Agent">Agent</option>
-                             <option value="Carrier">Carrier</option>
+                             <option value={isRoad ? "Haulier" : "Carrier"}>{isRoad ? "Haulier" : "Carrier"}</option>
                           </SelectField>
                        </div>
                        <div className="md:col-span-8"><InputField label="Company Name" placeholder="Company Name" value={newParty.name || ''} onChange={e => setNewParty({...newParty, name: e.target.value})} /></div>
@@ -467,7 +584,7 @@ export const DossierOperationsTab = () => {
 
         {/* RIGHT COLUMN */}
         <div className="flex flex-col gap-6 h-full">
-           {/* CARD 3: Cargo (Refactored for Chargeable Weight) */}
+           {/* CARD 3: Cargo & Weight Widget */}
            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative z-20 overflow-hidden">
              <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                <div className="flex items-center gap-3">
@@ -481,24 +598,51 @@ export const DossierOperationsTab = () => {
                )}
             </div>
             <div className="p-5 flex-1">
-               <div className="grid grid-cols-4 gap-2 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                  <div className="text-center">
-                     <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Pkgs</div>
-                     <div className="text-lg font-bold text-slate-800">{totalPkgs}</div>
-                  </div>
-                  <div className="text-center">
-                     <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Gross</div>
-                     <div className="text-lg font-bold text-slate-800">{totalWeight.toLocaleString()} <span className="text-[10px] text-slate-400">KG</span></div>
-                  </div>
-                  <div className="text-center">
-                     <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Volume</div>
-                     <div className="text-lg font-bold text-slate-800">{totalVolume.toFixed(2)} <span className="text-[10px] text-slate-400">m³</span></div>
-                  </div>
-                  <div className="text-center bg-white rounded-lg border border-slate-200 shadow-sm py-1">
-                     <div className="text-[9px] font-bold text-blue-600 uppercase tracking-wider mb-1 flex justify-center items-center gap-1"><Scale size={10}/> Chg. Wgt</div>
-                     <div className="text-lg font-bold text-blue-700">{chargeableWeight.toLocaleString()} <span className="text-[10px] text-blue-400">KG</span></div>
-                  </div>
-               </div>
+               
+               {/* AIR SPECIFIC: WEIGHT CALC WIDGET */}
+               {isAir && (
+                   <div className="mb-4 grid grid-cols-3 gap-0 bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
+                       <div className="p-4 text-center border-r border-slate-200">
+                           <div className="text-[9px] font-bold text-slate-500 uppercase mb-1">Total Gross</div>
+                           <div className="text-xl font-bold text-slate-900">{totalWeight.toLocaleString()} <span className="text-xs text-slate-400">KG</span></div>
+                       </div>
+                       <div className="p-4 text-center border-r border-slate-200">
+                           <div className="text-[9px] font-bold text-slate-500 uppercase mb-1">Volumetric</div>
+                           <div className="text-xl font-bold text-slate-900">{(totalVolume * 166.67).toLocaleString(undefined, {maximumFractionDigits: 0})} <span className="text-xs text-slate-400">KG</span></div>
+                       </div>
+                       <div className="p-4 text-center bg-green-50">
+                           <div className="text-[9px] font-bold text-green-700 uppercase mb-1">Chargeable</div>
+                           <div className="text-2xl font-black text-green-700">{calculatedChargeableWeight.toLocaleString()} <span className="text-xs font-medium text-green-500">KG</span></div>
+                       </div>
+                   </div>
+               )}
+               
+               {/* STANDARD STATS (Non-Air) */}
+               {!isAir && (
+                    <div className="grid grid-cols-4 gap-2 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <div className="text-center">
+                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Pkgs</div>
+                            <div className="text-lg font-bold text-slate-800">{totalPkgs}</div>
+                        </div>
+                        <div className="text-center">
+                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Gross</div>
+                            <div className="text-lg font-bold text-slate-800">{totalWeight.toLocaleString()} <span className="text-[10px] text-slate-400">KG</span></div>
+                        </div>
+                        <div className="text-center">
+                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Volume</div>
+                            <div className="text-lg font-bold text-slate-800">{totalVolume.toFixed(2)} <span className="text-[10px] text-slate-400">m³</span></div>
+                        </div>
+                        <div className="text-center bg-white rounded-lg border border-slate-200 shadow-sm py-1">
+                            <div className="text-[9px] font-bold text-blue-600 uppercase tracking-wider mb-1 flex justify-center items-center gap-1"><Scale size={10}/> Chg. Wgt</div>
+                            <div className="text-lg font-bold text-blue-700">
+                                {isRoad 
+                                    ? Math.max(totalWeight, totalVolume * 333.33).toLocaleString()
+                                    : Math.max(totalWeight, totalVolume * 1000).toLocaleString()
+                                } <span className="text-[10px] text-blue-400">KG</span>
+                            </div>
+                        </div>
+                    </div>
+               )}
 
                {isAddingCargo && (
                   <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg animate-in fade-in slide-in-from-top-2">
@@ -544,74 +688,85 @@ export const DossierOperationsTab = () => {
             </div>
            </div>
 
-           {/* CARD 4: Containers */}
-           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col flex-1 relative z-10 overflow-hidden">
-               <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                  <div className="flex items-center gap-3">
-                    <div className="p-1.5 bg-orange-100 text-orange-600 rounded-lg"><Truck className="h-4 w-4" /></div>
-                    <h3 className="text-sm font-bold text-slate-800 uppercase tracking-tight">Containers</h3>
-                  </div>
-                  {!isAddingContainer && (
-                    <button onClick={() => setIsAddingContainer(true)} className="text-[10px] font-bold text-blue-600 hover:text-blue-700 bg-white border border-blue-200 px-2.5 py-1 rounded-md transition-colors flex items-center shadow-sm">
-                      <Plus className="h-3 w-3 mr-1"/> Add Cntr
-                    </button>
-                  )}
+           {/* CARD 4: Containers (Hidden for Air/Road unless needed) */}
+           {(!isAir && !isRoad) && (
+               <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col flex-1 relative z-10 overflow-hidden">
+                   <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                      <div className="flex items-center gap-3">
+                        <div className="p-1.5 bg-orange-100 text-orange-600 rounded-lg"><Truck className="h-4 w-4" /></div>
+                        <h3 className="text-sm font-bold text-slate-800 uppercase tracking-tight">{isLCL ? "LCL Handling" : "Containers"}</h3>
+                      </div>
+                      {!isLCL && !isAddingContainer && (
+                        <button onClick={() => setIsAddingContainer(true)} className="text-[10px] font-bold text-blue-600 hover:text-blue-700 bg-white border border-blue-200 px-2.5 py-1 rounded-md transition-colors flex items-center shadow-sm">
+                          <Plus className="h-3 w-3 mr-1"/> Add Cntr
+                        </button>
+                      )}
+                   </div>
+                   <div className="p-5 flex-1">
+                     {/* LCL SPECIFIC DISPLAY */}
+                     {isLCL ? (
+                        <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 text-center">
+                            <div className="text-xs text-slate-500 mb-2">CFS Closing Date</div>
+                            <input type="date" className="bg-transparent font-bold text-slate-900 border-b border-slate-300 focus:outline-none" />
+                        </div>
+                     ) : (
+                         <>
+                         {isAddingContainer && (
+                            <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg animate-in fade-in slide-in-from-top-2">
+                               <h4 className="text-[10px] font-bold text-slate-900 uppercase tracking-wide mb-3">New Container</h4>
+                               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                  <InputField label="Container No." placeholder="CMAU..." value={newContainer.number || ''} onChange={e => setNewContainer({...newContainer, number: e.target.value.toUpperCase()})} />
+                                  <SelectField label="Type" value={newContainer.type} onChange={e => setNewContainer({...newContainer, type: e.target.value as any})}>
+                                     <option value="20DV">20' DV</option>
+                                     <option value="40HC">40' HC</option>
+                                     <option value="40RH">40' RH</option>
+                                  </SelectField>
+                                  <InputField label="Seal No." placeholder="Seal..." value={newContainer.seal || ''} onChange={e => setNewContainer({...newContainer, seal: e.target.value.toUpperCase()})} />
+                                  <div className="grid grid-cols-2 gap-3">
+                                     <InputField label="Pkgs" type="number" placeholder="0" value={newContainer.packages || ''} onChange={e => setNewContainer({...newContainer, packages: +e.target.value})} />
+                                     <InputField label="VGM" type="number" placeholder="0" value={newContainer.weight || ''} onChange={e => setNewContainer({...newContainer, weight: +e.target.value})} />
+                                  </div>
+                               </div>
+                               <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+                                  <button onClick={() => setIsAddingContainer(false)} className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-md">Cancel</button>
+                                  <button onClick={handleAddContainer} className="px-3 py-1.5 text-xs font-bold text-white bg-slate-900 rounded-md hover:bg-slate-800">Add</button>
+                               </div>
+                            </div>
+                         )}
+                         <div className="overflow-hidden border border-slate-200 rounded-xl bg-white shadow-sm">
+                           <table className="min-w-full divide-y divide-slate-100">
+                             <thead className="bg-slate-50">
+                               <tr>
+                                 <th className="px-3 py-2 text-left text-[9px] font-bold text-slate-400 uppercase tracking-wider">Unit / Seal</th>
+                                 <th className="px-3 py-2 text-left text-[9px] font-bold text-slate-400 uppercase tracking-wider">Specs</th>
+                                 <th className="relative px-3 py-2"><span className="sr-only">Actions</span></th>
+                               </tr>
+                             </thead>
+                             <tbody className="bg-white divide-y divide-slate-100">
+                               {dossier.containers.map(container => (
+                                 <tr key={container.id} className="hover:bg-blue-50/30 transition-colors group">
+                                   <td className="px-3 py-2">
+                                     <div className="text-xs font-bold text-slate-900 font-mono tracking-wide">{container.number}</div>
+                                     <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1 mt-0.5"><Shield size={10} className="text-green-500"/> {container.seal || '-'}</div>
+                                   </td>
+                                   <td className="px-3 py-2">
+                                      <span className="inline-flex items-center px-1.5 py-px rounded text-[9px] font-bold bg-blue-50 text-blue-700 mb-0.5 border border-blue-100">{container.type}</span>
+                                      <div className="text-[10px] text-slate-500 font-medium">{container.packages} p • {container.weight?.toLocaleString()} k</div>
+                                   </td>
+                                   <td className="px-3 py-2 text-right">
+                                     <button onClick={() => removeContainer(container.id)} className="p-1.5 text-slate-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-red-50"><Trash2 size={14}/></button>
+                                   </td>
+                                 </tr>
+                               ))}
+                               {dossier.containers.length === 0 && <tr><td colSpan={3} className="px-4 py-6 text-center text-xs text-slate-400 italic">No units.</td></tr>}
+                             </tbody>
+                           </table>
+                         </div>
+                         </>
+                     )}
+                   </div>
                </div>
-               <div className="p-5 flex-1">
-                 {isAddingContainer && (
-                    <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg animate-in fade-in slide-in-from-top-2">
-                       <h4 className="text-[10px] font-bold text-slate-900 uppercase tracking-wide mb-3">New Container</h4>
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                          <InputField label="Container No." placeholder="CMAU..." value={newContainer.number || ''} onChange={e => setNewContainer({...newContainer, number: e.target.value.toUpperCase()})} />
-                          <SelectField label="Type" value={newContainer.type} onChange={e => setNewContainer({...newContainer, type: e.target.value as any})}>
-                             <option value="20DV">20' DV</option>
-                             <option value="40HC">40' HC</option>
-                             <option value="40RH">40' RH</option>
-                             <option value="LCL">LCL</option>
-                          </SelectField>
-                          <InputField label="Seal No." placeholder="Seal..." value={newContainer.seal || ''} onChange={e => setNewContainer({...newContainer, seal: e.target.value.toUpperCase()})} />
-                          <div className="grid grid-cols-2 gap-3">
-                             <InputField label="Pkgs" type="number" placeholder="0" value={newContainer.packages || ''} onChange={e => setNewContainer({...newContainer, packages: +e.target.value})} />
-                             <InputField label="VGM" type="number" placeholder="0" value={newContainer.weight || ''} onChange={e => setNewContainer({...newContainer, weight: +e.target.value})} />
-                          </div>
-                       </div>
-                       <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-                          <button onClick={() => setIsAddingContainer(false)} className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-md">Cancel</button>
-                          <button onClick={handleAddContainer} className="px-3 py-1.5 text-xs font-bold text-white bg-slate-900 rounded-md hover:bg-slate-800">Add</button>
-                       </div>
-                    </div>
-                 )}
-                 <div className="overflow-hidden border border-slate-200 rounded-xl bg-white shadow-sm">
-                   <table className="min-w-full divide-y divide-slate-100">
-                     <thead className="bg-slate-50">
-                       <tr>
-                         <th className="px-3 py-2 text-left text-[9px] font-bold text-slate-400 uppercase tracking-wider">Unit / Seal</th>
-                         <th className="px-3 py-2 text-left text-[9px] font-bold text-slate-400 uppercase tracking-wider">Specs</th>
-                         <th className="relative px-3 py-2"><span className="sr-only">Actions</span></th>
-                       </tr>
-                     </thead>
-                     <tbody className="bg-white divide-y divide-slate-100">
-                       {dossier.containers.map(container => (
-                         <tr key={container.id} className="hover:bg-blue-50/30 transition-colors group">
-                           <td className="px-3 py-2">
-                             <div className="text-xs font-bold text-slate-900 font-mono tracking-wide">{container.number}</div>
-                             <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1 mt-0.5"><Shield size={10} className="text-green-500"/> {container.seal || '-'}</div>
-                           </td>
-                           <td className="px-3 py-2">
-                              <span className="inline-flex items-center px-1.5 py-px rounded text-[9px] font-bold bg-blue-50 text-blue-700 mb-0.5 border border-blue-100">{container.type}</span>
-                              <div className="text-[10px] text-slate-500 font-medium">{container.packages} p • {container.weight?.toLocaleString()} k</div>
-                           </td>
-                           <td className="px-3 py-2 text-right">
-                             <button onClick={() => removeContainer(container.id)} className="p-1.5 text-slate-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-red-50"><Trash2 size={14}/></button>
-                           </td>
-                         </tr>
-                       ))}
-                       {dossier.containers.length === 0 && <tr><td colSpan={3} className="px-4 py-6 text-center text-xs text-slate-400 italic">No units.</td></tr>}
-                     </tbody>
-                   </table>
-                 </div>
-               </div>
-           </div>
+           )}
         </div>
       </div>
       <div className="flex items-center justify-between pt-8 mt-6 border-t border-slate-200">

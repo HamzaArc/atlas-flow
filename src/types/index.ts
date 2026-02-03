@@ -230,7 +230,7 @@ export interface DossierTask {
   isBlocker: boolean;
   category: TaskCategory;
   priority: TaskPriority;
-  stage?: ShipmentStage;
+  stage?: ShipmentStage | string; // Loosened type to support dynamic stages
 }
 
 export interface ShipmentEvent {
@@ -249,7 +249,7 @@ export interface Dossier {
   bookingRef: string; 
   
   status: ShipmentStatus;
-  stage: ShipmentStage;
+  stage: ShipmentStage | string; // Loosened to support custom steps
   
   clientId: string;
   clientName: string;
@@ -301,6 +301,20 @@ export interface Dossier {
   
   createdDate?: string;
   owner?: string;
+
+  // --- MORPHING EXTENSIONS ---
+  // AIR
+  flightNumber?: string;
+  flightDate?: Date;
+  chargeableWeight?: number;
+
+  // ROAD
+  truckPlate?: string;
+  trailerPlate?: string;
+  driverName?: string;
+  driverPhone?: string;
+  driverPassport?: string;
+  carnetTir?: boolean;
 }
 
 // --- 4. FINANCE ENGINE ---

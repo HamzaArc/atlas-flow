@@ -1,41 +1,49 @@
+// src/features/dossier/components/ShipmentProgress.tsx
 import React from 'react';
 import { Check } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
-import { ShipmentStage } from "@/types/index";
 
 export function ShipmentProgress() {
     const { dossier, setStage } = useDossierStore();
     
-    const STAGES = [
-        ShipmentStage.INTAKE,
-        ShipmentStage.BOOKING,
-        ShipmentStage.ORIGIN,
-        ShipmentStage.TRANSIT,
-        ShipmentStage.DELIVERY,
-        ShipmentStage.FINANCE,
-        ShipmentStage.CLOSED
+    // --- MODE SPECIFIC STEPS ---
+    const SEA_STEPS = [
+        'Intake', 'Booking', 'Container Pickup', 'Gate In', 'On Water', 'Arrival (POD)', 'Customs', 'Delivery'
     ];
 
-    const activeStepIndex = STAGES.indexOf(dossier.stage);
+    const AIR_STEPS = [
+        'Intake', 'Booking', 'Cargo Pickup', 'Warehouse Drop', 'Departed', 'Arrived', 'Customs', 'Delivery'
+    ];
 
-    // FIXED: Removed unused 'idx' parameter
-    const handleStepClick = (stage: ShipmentStage) => {
+    const ROAD_STEPS = [
+        'Intake', 'Order', 'Loading', 'Export Customs', 'Crossing', 'Import Customs', 'Delivery'
+    ];
+
+    // Determine active steps based on mode
+    let steps = SEA_STEPS;
+    if (dossier.mode === 'AIR') steps = AIR_STEPS;
+    if (dossier.mode === 'ROAD') steps = ROAD_STEPS;
+
+    const activeStepIndex = steps.indexOf(dossier.stage as string);
+    // If current stage is not found (e.g. data mismatch), default to 0
+    const safeIndex = activeStepIndex === -1 ? 0 : activeStepIndex;
+
+    const handleStepClick = (stage: string) => {
         setStage(stage);
     };
 
     return (
         <div className="px-6 pb-4 pt-2 flex items-center gap-6 overflow-x-auto border-t border-transparent">
             <div className="flex-1 flex items-center min-w-0">
-                {STAGES.map((step, idx) => {
-                    const isCompleted = idx < activeStepIndex;
-                    const isCurrent = idx === activeStepIndex;
-                    const isLast = idx === STAGES.length - 1;
+                {steps.map((step, idx) => {
+                    const isCompleted = idx < safeIndex;
+                    const isCurrent = idx === safeIndex;
+                    const isLast = idx === steps.length - 1;
                     
                     return (
                         <React.Fragment key={step}>
                             <div className="flex flex-col items-center relative group">
                                 <button 
-                                    // FIXED: Removed index argument
                                     onClick={() => handleStepClick(step)}
                                     className={`
                                         relative z-10 flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold transition-all duration-300
@@ -59,7 +67,7 @@ export function ShipmentProgress() {
                             {!isLast && (
                                 <div className="flex-1 h-1 mx-2 rounded-full bg-slate-100 overflow-hidden">
                                     <div 
-                                        className={`h-full transition-all duration-500 ease-out ${idx < activeStepIndex ? 'bg-green-500 w-full' : 'w-0'}`}
+                                        className={`h-full transition-all duration-500 ease-out ${idx < safeIndex ? 'bg-green-500 w-full' : 'w-0'}`}
                                     />
                                 </div>
                             )}

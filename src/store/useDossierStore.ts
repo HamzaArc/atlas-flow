@@ -1,3 +1,4 @@
+// src/store/useDossierStore.ts
 import { create } from 'zustand';
 import { Dossier, DossierContainer, ShipmentStatus, ActivityCategory, ShipmentStage, DossierTask, Document, Quote, ChargeLine } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
@@ -27,7 +28,7 @@ interface DossierState {
   updateDossier: <K extends keyof Dossier>(field: K, value: Dossier[K]) => void;
   updateParty: (party: 'shipper' | 'consignee' | 'notify', field: string, value: string) => void;
   setStatus: (status: ShipmentStatus) => void;
-  setStage: (stage: ShipmentStage) => void;
+  setStage: (stage: string) => void;
   
   addContainer: (container?: DossierContainer) => void;
   updateContainer: <K extends keyof DossierContainer>(id: string, field: K, value: DossierContainer[K]) => void;
@@ -80,7 +81,14 @@ const DEFAULT_DOSSIER: Dossier = {
     totalCost: 0, 
     currency: 'MAD',
     alerts: [], 
-    nextAction: 'Initialize Booking'
+    nextAction: 'Initialize Booking',
+    
+    // New Fields Defaults
+    chargeableWeight: 0,
+    flightNumber: '',
+    truckPlate: '',
+    trailerPlate: '',
+    carnetTir: false
 };
 
 export const useDossierStore = create<DossierState>((set, get) => ({
@@ -339,27 +347,14 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       // Logic to auto-map stage to status for better UX
       let newStatus: ShipmentStatus = get().dossier.status;
       
-      switch (stage) {
-          case ShipmentStage.INTAKE:
-          case ShipmentStage.BOOKING:
-              newStatus = 'BOOKED';
-              break;
-          case ShipmentStage.ORIGIN:
-              newStatus = 'AT_POL';
-              break;
-          case ShipmentStage.TRANSIT:
-              newStatus = 'ON_WATER';
-              break;
-          case ShipmentStage.DELIVERY:
-              newStatus = 'AT_POD'; // Or DELIVERED depending on POD date
-              break;
-          case ShipmentStage.FINANCE:
-              newStatus = 'DELIVERED';
-              break;
-          case ShipmentStage.CLOSED:
-              newStatus = 'COMPLETED';
-              break;
-      }
+      // Dynamic status mapping based on stage string
+      // Note: This loose matching allows for the different workflows (Air/Road)
+      if (stage === 'Intake' || stage === 'Booking' || stage === 'Order') newStatus = 'BOOKED';
+      if (stage === 'Origin' || stage === 'Loading' || stage === 'Cargo Pickup') newStatus = 'AT_POL';
+      if (stage === 'Transit' || stage === 'Departed' || stage === 'Crossing') newStatus = 'ON_WATER';
+      if (stage === 'Delivery' || stage === 'Arrived') newStatus = 'AT_POD';
+      if (stage === 'Finance') newStatus = 'DELIVERED';
+      if (stage === 'Closed') newStatus = 'COMPLETED';
 
       set((state) => ({
           dossier: { ...state.dossier, stage, status: newStatus }
