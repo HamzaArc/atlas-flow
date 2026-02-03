@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { 
     Save, ArrowLeft, Copy, Coins, Settings2, 
-    User, Clock, Check, GitBranch, ChevronsUpDown, Briefcase 
+    User, Clock, Check, GitBranch, ChevronsUpDown, Briefcase, Loader2 
 } from "lucide-react";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { useClientStore } from "@/store/useClientStore"; 
@@ -52,7 +52,7 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
     salespersonId, 
     quoteCurrency, exchangeRates, paymentTerms,
     setIdentity, setClientSnapshot, setStatus, saveQuote, duplicateQuote, createRevision,
-    setQuoteCurrency, setExchangeRate,
+    setQuoteCurrency, setExchangeRate, isLoading
   } = useQuoteStore();
 
   // Client Store Integration
@@ -287,8 +287,21 @@ export function QuoteHeader({ onBack }: QuoteHeaderProps) {
                {!isLocked && (
                    <>
                     <ApprovalAction />
-                    <Button size="sm" onClick={handleSave} className="h-8 bg-slate-900 hover:bg-slate-800 text-xs px-4 ml-2">
-                        <Save className="h-3.5 w-3.5 mr-2" /> Save
+                    <Button 
+                        size="sm" 
+                        onClick={handleSave} 
+                        disabled={isLoading}
+                        className="h-8 bg-slate-900 hover:bg-slate-800 text-xs px-4 ml-2"
+                    >
+                        {isLoading ? (
+                            <>
+                                <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> Saving...
+                            </>
+                        ) : (
+                            <>
+                                <Save className="h-3.5 w-3.5 mr-2" /> Save
+                            </>
+                        )}
                     </Button>
                    </>
                )}
