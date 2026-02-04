@@ -204,7 +204,7 @@ export const DossierHeader = () => {
                  }
                `}
             >
-               {isCancelled ? 'Cancelled' : getCTA(dossier.stage)}
+               {isCancelled ? 'Cancelled' : getCTA(dossier.stage as ShipmentStage)}
                {!isLastStage && !isCancelled && <ChevronRight className="h-4 w-4" />}
             </button>
          </div>

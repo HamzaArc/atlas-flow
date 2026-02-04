@@ -26,7 +26,7 @@ export const WorkflowModal: React.FC<Props> = ({ isOpen, onClose, dossier, onAdv
 
   if (!isOpen) return null;
 
-  const STAGES_ORDER = [
+  const STAGES_ORDER: ShipmentStage[] = [
     ShipmentStage.INTAKE,
     ShipmentStage.BOOKING,
     ShipmentStage.ORIGIN,
@@ -36,7 +36,7 @@ export const WorkflowModal: React.FC<Props> = ({ isOpen, onClose, dossier, onAdv
     ShipmentStage.CLOSED
   ];
 
-  const currentIndex = STAGES_ORDER.indexOf(dossier.stage);
+  const currentIndex = STAGES_ORDER.indexOf(dossier.stage as ShipmentStage);
   const nextStage = currentIndex >= 0 && currentIndex < STAGES_ORDER.length - 1 
     ? STAGES_ORDER[currentIndex + 1] 
     : null;
@@ -85,7 +85,7 @@ export const WorkflowModal: React.FC<Props> = ({ isOpen, onClose, dossier, onAdv
 
         const summary = generateChangeSummary(updates);
 
-        onAdvance(updates, nextStage, summary);
+        onAdvance(updates, nextStage as ShipmentStage, summary);
         setIsLoading(false);
         onClose();
     }, 800);
