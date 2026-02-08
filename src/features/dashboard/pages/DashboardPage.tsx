@@ -186,7 +186,7 @@ export default function DashboardPage() {
         <BentoGridItem
             className="md:col-span-2"
             title="Recent Quotes"
-            description="Latest pricing requests and offers."
+            description=""
             header={
                 <div className="space-y-2 mt-4">
                     {quotes.slice(0, 3).map(q => (

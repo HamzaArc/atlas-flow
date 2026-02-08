@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { useDossierStore } from "@/store/useDossierStore";
 import { useClientStore } from "@/store/useClientStore"; 
 import { TransportMode, Incoterm } from "@/types/index";
-import { cn, PORT_DB } from "@/lib/utils";
+import { cn, PORT_DB, AIRPORT_DB } from "@/lib/utils";
 import {
   Command,
   CommandEmpty,
@@ -24,6 +24,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+// Using the shared component from UI library
+import { AddressWithMap } from "@/components/ui/address-with-map";
 
 const INCOTERMS: Incoterm[] = [
     'EXW', 'FCA', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP', 'FAS', 'FOB', 'CFR', 'CIF'
@@ -87,7 +89,7 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
   }, [isOpen]);
 
   const handleModeSelect = (mode: TransportMode) => {
-    setFormData(prev => ({ ...prev, mode }));
+    setFormData(prev => ({ ...prev, mode, pol: '', pod: '' })); // Reset ports on mode change
   };
 
   const handleSubmit = async () => {
@@ -144,6 +146,11 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
 
   const isEXW = formData.incoterm === 'EXW';
   const isDeliveryInco = ['DAP', 'DPU', 'DDP'].includes(formData.incoterm);
+  
+  // Dynamic Helpers
+  const isRoad = formData.mode === 'ROAD';
+  const isAir = formData.mode === 'AIR';
+  const locationData = isAir ? AIRPORT_DB : PORT_DB;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -222,64 +229,103 @@ export const NewDossierDialog = ({ isOpen, onClose }: Props) => {
                  </div>
               </div>
 
+              {/* Dynamic Origin Field */}
               <div className="space-y-1.5">
-                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Origin (POL)</Label>
-                 <Popover open={polOpen} onOpenChange={setPolOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-between h-10 text-sm bg-white border-slate-200">
-                         <div className="flex items-center gap-2 truncate">
-                           <MapPin className="h-4 w-4 text-slate-400" />
-                           {formData.pol ? formData.pol : <span className="text-slate-400 font-normal">Select Origin...</span>}
-                         </div>
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[280px] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Search ports..." />
-                        <CommandList>
-                           <CommandEmpty>No port found.</CommandEmpty>
-                           <CommandGroup>
-                              {PORT_DB.map((port) => (
-                                 <CommandItem key={port.id} value={port.id} onSelect={(v) => { setFormData({...formData, pol: v}); setPolOpen(false); }}>
-                                    <Check className={cn("mr-2 h-4 w-4", formData.pol === port.id ? "opacity-100" : "opacity-0")}/>
-                                    {port.id} <span className="ml-1 text-slate-400 text-xs">({port.code})</span>
-                                 </CommandItem>
-                              ))}
-                           </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                 </Popover>
+                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                     {isRoad ? "Origin Address" : isAir ? "Airport of Departure" : "Port of Loading"}
+                 </Label>
+                 
+                 {isRoad ? (
+                    // Road: Address Input
+                    <AddressWithMap 
+                        label=""
+                        placeholder="City, Zip..."
+                        value={formData.pol}
+                        onChange={(val) => setFormData({...formData, pol: val})}
+                        iconClassName="text-emerald-500"
+                    />
+                 ) : (
+                    // Air/Sea: Smart Selector
+                     <Popover open={polOpen} onOpenChange={setPolOpen}>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-between h-10 text-sm bg-white border-slate-200">
+                             <div className="flex items-center gap-2 truncate">
+                               {isAir ? <Plane className="h-4 w-4 text-slate-400" /> : <MapPin className="h-4 w-4 text-slate-400" />}
+                               {formData.pol ? (
+                                   <span className="uppercase">{formData.pol}</span>
+                               ) : (
+                                   <span className="text-slate-400 font-normal">Select Origin...</span>
+                               )}
+                             </div>
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[280px] p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Search location..." />
+                            <CommandList>
+                               <CommandEmpty>No location found.</CommandEmpty>
+                               <CommandGroup>
+                                  {locationData.map((loc) => (
+                                     <CommandItem key={loc.id} value={loc.id} onSelect={() => { setFormData({...formData, pol: loc.id}); setPolOpen(false); }}>
+                                        <Check className={cn("mr-2 h-4 w-4", formData.pol === loc.id ? "opacity-100" : "opacity-0")}/>
+                                        {loc.id} <span className="ml-1 text-slate-400 text-xs">({loc.code})</span>
+                                     </CommandItem>
+                                  ))}
+                               </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                     </Popover>
+                 )}
               </div>
-
+              {/* Dynamic Destination Field */}
               <div className="space-y-1.5">
-                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Destination (POD)</Label>
-                 <Popover open={podOpen} onOpenChange={setPodOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-between h-10 text-sm bg-white border-slate-200">
-                         <div className="flex items-center gap-2 truncate">
-                           <Anchor className="h-4 w-4 text-slate-400" />
-                           {formData.pod ? formData.pod : <span className="text-slate-400 font-normal">Select Dest...</span>}
-                         </div>
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[280px] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Search ports..." />
-                        <CommandList>
-                           <CommandEmpty>No port found.</CommandEmpty>
-                           <CommandGroup>
-                              {PORT_DB.map((port) => (
-                                 <CommandItem key={port.id} value={port.id} onSelect={(v) => { setFormData({...formData, pod: v}); setPodOpen(false); }}>
-                                    <Check className={cn("mr-2 h-4 w-4", formData.pod === port.id ? "opacity-100" : "opacity-0")}/>
-                                    {port.id} <span className="ml-1 text-slate-400 text-xs">({port.code})</span>
-                                 </CommandItem>
-                              ))}
-                           </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                 </Popover>
+                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                     {isRoad ? "Destination Address" : isAir ? "Airport of Destination" : "Port of Discharge"}
+                 </Label>
+
+                 {isRoad ? (
+                    // Road: Address Input
+                    <AddressWithMap 
+                        label=""
+                        placeholder="City, Zip..."
+                        value={formData.pod}
+                        onChange={(val) => setFormData({...formData, pod: val})}
+                        iconClassName="text-emerald-500"
+                    />
+                 ) : (
+                    // Air/Sea: Smart Selector
+                     <Popover open={podOpen} onOpenChange={setPodOpen}>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-between h-10 text-sm bg-white border-slate-200">
+                             <div className="flex items-center gap-2 truncate">
+                               {isAir ? <Plane className="h-4 w-4 text-slate-400" /> : <Anchor className="h-4 w-4 text-slate-400" />}
+                               {formData.pod ? (
+                                   <span className="uppercase">{formData.pod}</span>
+                               ) : (
+                                   <span className="text-slate-400 font-normal">Select Dest...</span>
+                               )}
+                             </div>
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[280px] p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Search location..." />
+                            <CommandList>
+                               <CommandEmpty>No location found.</CommandEmpty>
+                               <CommandGroup>
+                                  {locationData.map((loc) => (
+                                     <CommandItem key={loc.id} value={loc.id} onSelect={() => { setFormData({...formData, pod: loc.id}); setPodOpen(false); }}>
+                                        <Check className={cn("mr-2 h-4 w-4", formData.pod === loc.id ? "opacity-100" : "opacity-0")}/>
+                                        {loc.id} <span className="ml-1 text-slate-400 text-xs">({loc.code})</span>
+                                     </CommandItem>
+                                  ))}
+                               </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                     </Popover>
+                 )}
               </div>
 
               <div className="space-y-1.5">

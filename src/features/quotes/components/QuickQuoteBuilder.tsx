@@ -6,7 +6,7 @@ import {
   Box,  
   Plus, Trash2, Clock, Anchor,
   Mail, FileOutput, Zap, DollarSign, X, AlertCircle,
-  Loader2, AlertTriangle, Globe, MessageCircle, Copy, FileInput,
+  MessageCircle, Copy, FileInput,
   History, Send, Bell, RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,16 +17,17 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from "@/components/ui/select";
 import { 
-    Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
+    Dialog, DialogContent, DialogHeader, DialogTitle
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { SmartPortSelector } from "./RouteSelector";
+// REFACTORED: Imported AddressWithMap instead of defining it inline to save ~150 lines of duplicate code
+import { SmartPortSelector, AddressWithMap } from "./RouteSelector";
 import { useQuoteStore } from "@/store/useQuoteStore";
 import { useClientStore } from "@/store/useClientStore"; 
 import { useTariffStore } from "@/store/useTariffStore";
-import { cn } from "@/lib/utils";
+import { cn, PORT_DB, AIRPORT_DB } from "@/lib/utils";
 import { TransportMode, Incoterm, PackagingType, QuoteLineItem } from "@/types/index";
 import { useToast } from "@/components/ui/use-toast";
 import { format } from "date-fns";
@@ -42,195 +43,6 @@ const VAT_RATES: Record<string, number> = {
   'ROAD_14': 0.14,
   'EXPORT_0_ART92': 0,
   'DISBURSEMENT': 0
-};
-
-// -----------------------------------------------------------------------------
-// GOOGLE MAPS & ADDRESS UTILS
-// -----------------------------------------------------------------------------
-
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ""; 
-
-const GOOGLE_MAP_STYLES = [
-  { "elementType": "geometry", "stylers": [{ "color": "#212121" }] },
-  { "elementType": "labels.icon", "stylers": [{ "visibility": "off" }] },
-  { "elementType": "labels.text.fill", "stylers": [{ "color": "#757575" }] },
-  { "elementType": "labels.text.stroke", "stylers": [{ "color": "#212121" }] },
-  { "featureType": "administrative", "elementType": "geometry", "stylers": [{ "color": "#757575" }] },
-  { "featureType": "administrative.country", "elementType": "labels.text.fill", "stylers": [{ "color": "#9e9e9e" }] },
-  { "featureType": "administrative.locality", "elementType": "labels.text.fill", "stylers": [{ "color": "#bdbdbd" }] },
-  { "featureType": "poi", "elementType": "labels.text.fill", "stylers": [{ "color": "#757575" }] },
-  { "featureType": "poi.park", "elementType": "geometry", "stylers": [{ "color": "#181818" }] },
-  { "featureType": "poi.park", "elementType": "labels.text.fill", "stylers": [{ "color": "#616161" }] },
-  { "featureType": "poi.park", "elementType": "labels.text.stroke", "stylers": [{ "color": "#1b1b1b" }] },
-  { "featureType": "road", "elementType": "geometry.fill", "stylers": [{ "color": "#2c2c2c" }] },
-  { "featureType": "road", "elementType": "labels.text.fill", "stylers": [{ "color": "#8a8a8a" }] },
-  { "featureType": "road.arterial", "elementType": "geometry", "stylers": [{ "color": "#373737" }] },
-  { "featureType": "road.highway", "elementType": "geometry", "stylers": [{ "color": "#3c3c3c" }] },
-  { "featureType": "road.highway.controlled_access", "elementType": "geometry", "stylers": [{ "color": "#4e4e4e" }] },
-  { "featureType": "road.local", "elementType": "labels.text.fill", "stylers": [{ "color": "#616161" }] },
-  { "featureType": "transit", "elementType": "labels.text.fill", "stylers": [{ "color": "#757575" }] },
-  { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#000000" }] },
-  { "featureType": "water", "elementType": "labels.text.fill", "stylers": [{ "color": "#3d3d3d" }] }
-];
-
-const useGoogleMaps = (apiKey: string) => {
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    if (window.google?.maps) {
-      setIsLoaded(true);
-      return;
-    }
-    if (!apiKey) return;
-    
-    const existingScript = document.querySelector(`script[src*="maps.googleapis.com"]`);
-    if (existingScript) {
-      existingScript.addEventListener("load", () => setIsLoaded(true));
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => setIsLoaded(true);
-    document.body.appendChild(script);
-  }, [apiKey]);
-
-  return isLoaded;
-};
-
-const AddressWithMap = ({ 
-  label, 
-  value, 
-  onChange, 
-  disabled, 
-  iconClassName,
-  placeholder 
-}: { 
-  label: string, 
-  value: string, 
-  onChange: (val: string) => void, 
-  disabled?: boolean, 
-  iconClassName: string,
-  placeholder?: string
-}) => {
-  const isMapsLoaded = useGoogleMaps(GOOGLE_MAPS_API_KEY);
-  const inputRef = useRef<HTMLInputElement>(null);
-  
-  const [mapContainer, setMapContainer] = useState<HTMLDivElement | null>(null);
-  const [isMapOpen, setIsMapOpen] = useState(false);
-  const [mapError, setMapError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (isMapsLoaded && inputRef.current && !disabled) {
-      const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
-        fields: ["formatted_address", "geometry", "name"],
-        types: ["establishment", "geocode"]
-      });
-
-      autocomplete.addListener("place_changed", () => {
-        const place: any = autocomplete.getPlace();
-        if (place.formatted_address) {
-          onChange(place.formatted_address);
-        } else if (place.name) {
-          onChange(place.name);
-        }
-      });
-    }
-  }, [isMapsLoaded, disabled, onChange]);
-
-  useEffect(() => {
-    if (isMapOpen && isMapsLoaded && mapContainer) {
-      setMapError(null);
-      const geocoder = new window.google.maps.Geocoder();
-      
-      geocoder.geocode({ address: value }, (results: any[], status: any) => {
-        if (status === "OK" && results && results[0]) {
-          const location = results[0].geometry.location;
-          const map = new window.google.maps.Map(mapContainer, {
-            center: location,
-            zoom: 14,
-            styles: GOOGLE_MAP_STYLES,
-            disableDefaultUI: true,
-            zoomControl: true,
-          });
-
-          new window.google.maps.Marker({
-            map: map,
-            position: location,
-            animation: window.google.maps.Animation.DROP
-          });
-        } else {
-          setMapError("Could not locate this address. Please try a different query.");
-        }
-      });
-    }
-  }, [isMapOpen, isMapsLoaded, mapContainer, value]);
-
-  return (
-    <div className="space-y-1">
-        <Label className={cn("text-xs font-semibold text-slate-500", iconClassName)}>{label}</Label>
-        <div className="relative flex gap-2">
-            <div className="relative flex-1 group">
-                <Input 
-                  ref={inputRef}
-                  className={cn("h-10 bg-slate-50 text-xs pl-9 transition-all shadow-sm", iconClassName.includes('amber') ? "border-amber-200 focus:border-amber-400" : "border-blue-200 focus:border-blue-400")}
-                  placeholder={placeholder || "Enter address..."}
-                  value={value} 
-                  onChange={(e) => onChange(e.target.value)} 
-                  disabled={disabled}
-                />
-                <MapPin className={cn("absolute left-3 top-3 h-4 w-4", iconClassName)} />
-            </div>
-            
-            <Dialog open={isMapOpen} onOpenChange={setIsMapOpen}>
-              <DialogTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  className={cn("h-10 w-10 shrink-0 bg-white", disabled && "opacity-50")}
-                  disabled={disabled || !value}
-                  title="Verify Address on Map"
-                >
-                  <Globe className={cn("h-4 w-4", iconClassName)} />
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[600px] bg-white p-0 overflow-hidden rounded-lg">
-                <DialogHeader className="px-4 py-3 border-b border-slate-100 bg-slate-50">
-                  <DialogTitle className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-blue-600" />
-                    Address Verification
-                  </DialogTitle>
-                </DialogHeader>
-                
-                <div className="relative w-full h-[400px] bg-slate-100">
-                  {!isMapsLoaded && (
-                    <div className="absolute inset-0 flex items-center justify-center text-slate-400 gap-2">
-                      <Loader2 className="h-5 w-5 animate-spin" /> Loading Maps API...
-                    </div>
-                  )}
-                  
-                  {mapError && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-red-500 gap-2 bg-slate-50 p-4 text-center z-10">
-                      <AlertTriangle className="h-8 w-8" /> 
-                      <p className="text-sm font-medium">{mapError}</p>
-                      <p className="text-xs text-slate-400">"{value}"</p>
-                    </div>
-                  )}
-
-                  <div ref={setMapContainer} className="w-full h-full" />
-                  
-                  <div className="absolute bottom-4 left-4 right-4 bg-slate-900/90 backdrop-blur text-white p-3 rounded-lg border border-slate-700 shadow-xl pointer-events-none">
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Verifying Location</span>
-                    <p className="text-xs font-medium">{value}</p>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-        </div>
-    </div>
-  );
 };
 
 // -----------------------------------------------------------------------------
@@ -411,6 +223,11 @@ export function QuickQuoteBuilder({ onGeneratePDF }: QuickQuoteBuilderProps) {
   const showFreeTime = mode === 'SEA_FCL' || mode === 'SEA_LCL';
   const showPlaceOfLoading = incoterm === 'EXW';
   const showPlaceOfDelivery = ['DAP', 'DPU', 'DDP'].includes(incoterm);
+  
+  // Dynamic Helpers
+  const isRoad = mode === 'ROAD';
+  const isAir = mode === 'AIR';
+  const locationData = isAir ? AIRPORT_DB : PORT_DB;
 
   // -- HANDLERS --
   const handleRequestRates = () => {
@@ -763,28 +580,54 @@ Best regards,`;
                             </div>
                         )}
 
-                        {/* Ports Grid */}
+                        {/* Ports Grid - Dynamic Rendering based on Mode */}
                         <div className="grid grid-cols-12 gap-4 items-end">
                              <div className="col-span-12 md:col-span-5 space-y-1.5">
-                                <SmartPortSelector 
-                                    label="Origin (POL)" 
-                                    value={pol} 
-                                    onChange={(v) => setRouteLocations('pol', v)}
-                                    icon={MapPin}
-                                    disabled={isLocked}
-                                />
+                                {isRoad ? (
+                                    <AddressWithMap 
+                                        label="Pickup City (Origin)"
+                                        placeholder="City, Zip code..."
+                                        value={pol}
+                                        onChange={(val) => setRouteLocations('pol', val)}
+                                        iconClassName="text-slate-500"
+                                        disabled={isLocked}
+                                    />
+                                ) : (
+                                    <SmartPortSelector 
+                                        label={isAir ? "Origin Airport" : "Origin Port"} 
+                                        value={pol} 
+                                        onChange={(v) => setRouteLocations('pol', v)}
+                                        icon={isAir ? Plane : MapPin}
+                                        disabled={isLocked}
+                                        data={locationData}
+                                    />
+                                )}
                              </div>
+                             
                              <div className="hidden md:flex col-span-2 items-center justify-center pb-2">
                                 <ArrowRight className="h-5 w-5 text-slate-300" />
                              </div>
+                             
                              <div className="col-span-12 md:col-span-5 space-y-1.5">
-                                <SmartPortSelector 
-                                    label="Destination (POD)" 
-                                    value={pod} 
-                                    onChange={(v) => setRouteLocations('pod', v)}
-                                    icon={MapPin}
-                                    disabled={isLocked}
-                                />
+                                {isRoad ? (
+                                    <AddressWithMap 
+                                        label="Delivery City (Dest)"
+                                        placeholder="City, Zip code..."
+                                        value={pod}
+                                        onChange={(val) => setRouteLocations('pod', val)}
+                                        iconClassName="text-slate-500"
+                                        disabled={isLocked}
+                                    />
+                                ) : (
+                                    <SmartPortSelector 
+                                        label={isAir ? "Dest Airport" : "Dest Port"} 
+                                        value={pod} 
+                                        onChange={(v) => setRouteLocations('pod', v)}
+                                        icon={isAir ? Plane : Anchor}
+                                        disabled={isLocked}
+                                        data={locationData}
+                                    />
+                                )}
                              </div>
                         </div>
 
