@@ -7,7 +7,7 @@ import { useClientStore } from "@/store/useClientStore";
 import { ContactDialog } from "./ContactDialog";
 
 export function ClientContacts({ isEditing }: { isEditing: boolean }) {
-    const { activeClient, addContact, removeContact } = useClientStore();
+    const { activeClient, addContact, updateContact, removeContact } = useClientStore();
 
     if (!activeClient) return null;
 
@@ -34,7 +34,7 @@ export function ClientContacts({ isEditing }: { isEditing: boolean }) {
                             <TableHead>Function</TableHead>
                             <TableHead>Email</TableHead>
                             <TableHead>Phone</TableHead>
-                            <TableHead className="w-[50px]"></TableHead>
+                            <TableHead className="w-[100px]"></TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -51,9 +51,14 @@ export function ClientContacts({ isEditing }: { isEditing: boolean }) {
                                 <TableCell className="text-xs text-slate-500 font-mono">{c.phone}</TableCell>
                                 <TableCell>
                                     {isEditing && (
-                                        <Button variant="ghost" size="sm" onClick={() => removeContact(c.id)} className="text-slate-400 hover:text-red-500">
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
+                                        <div className="flex items-center gap-1">
+                                            {/* Edit Button via Dialog */}
+                                            <ContactDialog onSave={updateContact} contactToEdit={c} />
+                                            
+                                            <Button variant="ghost" size="sm" onClick={() => removeContact(c.id)} className="text-slate-400 hover:text-red-500">
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
                                     )}
                                 </TableCell>
                             </TableRow>

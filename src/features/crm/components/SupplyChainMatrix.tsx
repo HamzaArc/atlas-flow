@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { 
     Truck, Ship, Plane, Trash2, Plus, 
     MapPin, Factory, QrCode, Mail, Anchor, 
-    ArrowRight, Globe, MessageCircle, Pencil
+    ArrowRight, Globe, MessageCircle, Pencil, X
 } from "lucide-react";
 import { useClientStore } from "@/store/useClientStore";
-import { SupplierRole, SupplierTier, Incoterm, TransportMode, ClientSupplier, ClientRoute } from "@/types/index";
+import { SupplierRole, SupplierTier, Incoterm, TransportMode, ClientSupplier, ClientRoute, AdditionalContact, SocialProfile } from "@/types/index";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AddressWithMap } from "@/components/ui/address-with-map";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const ALL_INCOTERMS: Incoterm[] = [
     'EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'
@@ -40,7 +41,9 @@ export function SupplyChainMatrix({ isEditing }: { isEditing: boolean }) {
   const [newSupplier, setNewSupplier] = useState({ 
       name: '', role: 'EXPORTER' as SupplierRole, tier: 'APPROVED' as SupplierTier,
       country: '', city: '', address: '', contactName: '', email: '', phone: '', 
-      products: '', socialQrCodeUrl: '', socialId: '', defaultIncoterms: [] as Incoterm[]
+      products: '', socialQrCodeUrl: '', socialId: '', defaultIncoterms: [] as Incoterm[],
+      additionalContacts: [] as AdditionalContact[],
+      socialProfiles: [] as SocialProfile[]
   });
 
   // Lane Form
@@ -64,7 +67,8 @@ export function SupplyChainMatrix({ isEditing }: { isEditing: boolean }) {
       setEditingSupplierId(null);
       setNewSupplier({
           name: '', role: 'EXPORTER', tier: 'APPROVED', country: '', city: '', address: '', 
-          contactName: '', email: '', phone: '', products: '', socialQrCodeUrl: '', socialId: '', defaultIncoterms: []
+          contactName: '', email: '', phone: '', products: '', socialQrCodeUrl: '', socialId: '', defaultIncoterms: [],
+          additionalContacts: [], socialProfiles: []
       });
       setIsSupplierOpen(true);
   };
@@ -84,7 +88,9 @@ export function SupplyChainMatrix({ isEditing }: { isEditing: boolean }) {
           products: supplier.products || '', 
           socialQrCodeUrl: supplier.socialQrCodeUrl || '', 
           socialId: supplier.socialId ? String(supplier.socialId) : '', 
-          defaultIncoterms: supplier.defaultIncoterms || []
+          defaultIncoterms: supplier.defaultIncoterms || [],
+          additionalContacts: supplier.additionalContacts || [],
+          socialProfiles: supplier.socialProfiles || []
       });
       
       if(supplier.role === 'EXPORTER') {
@@ -98,7 +104,8 @@ export function SupplyChainMatrix({ isEditing }: { isEditing: boolean }) {
       setEditingSupplierId(null);
       setNewSupplier({
           name: '', role: 'SEA_LINE', tier: 'APPROVED', country: '', city: '', address: '', 
-          contactName: '', email: '', phone: '', products: '', socialQrCodeUrl: '', socialId: '', defaultIncoterms: []
+          contactName: '', email: '', phone: '', products: '', socialQrCodeUrl: '', socialId: '', defaultIncoterms: [],
+          additionalContacts: [], socialProfiles: []
       });
       setIsCarrierOpen(true);
   };
@@ -167,6 +174,41 @@ export function SupplyChainMatrix({ isEditing }: { isEditing: boolean }) {
           });
       }
       setIsLaneOpen(false);
+  };
+
+  // 3. DYNAMIC LIST HANDLERS
+  const addContactRow = () => {
+      setNewSupplier({
+          ...newSupplier,
+          additionalContacts: [...newSupplier.additionalContacts, { name: '', role: '', email: '', phone: '' }]
+      });
+  };
+  const removeContactRow = (index: number) => {
+      const updated = [...newSupplier.additionalContacts];
+      updated.splice(index, 1);
+      setNewSupplier({ ...newSupplier, additionalContacts: updated });
+  };
+  const updateContactRow = (index: number, field: keyof AdditionalContact, value: string) => {
+      const updated = [...newSupplier.additionalContacts];
+      updated[index] = { ...updated[index], [field]: value };
+      setNewSupplier({ ...newSupplier, additionalContacts: updated });
+  };
+
+  const addSocialRow = () => {
+      setNewSupplier({
+          ...newSupplier,
+          socialProfiles: [...newSupplier.socialProfiles, { network: 'OTHER', handle: '' }]
+      });
+  };
+  const removeSocialRow = (index: number) => {
+      const updated = [...newSupplier.socialProfiles];
+      updated.splice(index, 1);
+      setNewSupplier({ ...newSupplier, socialProfiles: updated });
+  };
+  const updateSocialRow = (index: number, field: keyof SocialProfile, value: string) => {
+      const updated = [...newSupplier.socialProfiles];
+      updated[index] = { ...updated[index], [field]: value };
+      setNewSupplier({ ...newSupplier, socialProfiles: updated });
   };
 
   // --- HELPERS ---
@@ -240,6 +282,10 @@ export function SupplyChainMatrix({ isEditing }: { isEditing: boolean }) {
                        <div className="flex items-center gap-1 text-green-600 font-medium bg-green-50 px-1.5 py-0.5 rounded">
                            <MessageCircle className="h-3 w-3" /> {sup.socialId}
                        </div>
+                   )}
+                   {/* Indicator for additional contacts */}
+                   {(sup.additionalContacts?.length || 0) > 0 && (
+                       <Badge variant="secondary" className="text-[9px] h-4 px-1 bg-slate-100">+{sup.additionalContacts?.length}</Badge>
                    )}
               </div>
 
@@ -375,59 +421,102 @@ export function SupplyChainMatrix({ isEditing }: { isEditing: boolean }) {
           
           {/* ADD/EDIT SUPPLIER DIALOG */}
           <Dialog open={isSupplierOpen} onOpenChange={setIsSupplierOpen}>
-              <DialogContent className="max-w-2xl">
-                  <DialogHeader><DialogTitle>{editingSupplierId ? 'Edit' : 'Add'} Commercial Supplier</DialogTitle></DialogHeader>
-                  <div className="grid grid-cols-2 gap-4 py-4">
-                      <div className="col-span-2 space-y-2">
-                          <Label>Company Name</Label>
-                          <Input value={newSupplier.name} onChange={(e) => setNewSupplier({...newSupplier, name: e.target.value})} placeholder="e.g. Shanghai Textile Co." />
-                      </div>
-                      
-                      <div className="col-span-2 space-y-2">
-                          <AddressWithMap label="Full Address" value={newSupplier.address} onChange={(v) => setNewSupplier({...newSupplier, address: v})} />
-                      </div>
-                      
-                      <div className="col-span-2 space-y-2 border-t border-slate-100 pt-2">
-                          <Label>Supported Incoterms</Label>
-                          <div className="flex flex-wrap gap-2">
-                              {ALL_INCOTERMS.map(term => (
-                                  <div key={term} className="flex items-center space-x-1 border rounded px-2 py-1 bg-slate-50">
-                                      <Checkbox 
-                                          id={`sup-${term}`} 
-                                          checked={newSupplier.defaultIncoterms.includes(term)}
-                                          onCheckedChange={() => toggleIncoterm(term)}
-                                      />
-                                      <label htmlFor={`sup-${term}`} className="text-xs font-mono cursor-pointer">{term}</label>
-                                  </div>
-                              ))}
+              <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-lg">
+                  <div className="px-6 py-4 border-b">
+                      <DialogHeader className="m-0 p-0">
+                          <DialogTitle>{editingSupplierId ? 'Edit' : 'Add'} Commercial Supplier</DialogTitle>
+                      </DialogHeader>
+                  </div>
+                  
+                  <ScrollArea className="flex-1 p-6">
+                      <div className="grid grid-cols-2 gap-4">
+                          <div className="col-span-2 space-y-2">
+                              <Label>Company Name</Label>
+                              <Input value={newSupplier.name} onChange={(e) => setNewSupplier({...newSupplier, name: e.target.value})} placeholder="e.g. Shanghai Textile Co." />
                           </div>
-                      </div>
+                          
+                          <div className="col-span-2 space-y-2">
+                              <AddressWithMap label="Full Address" value={newSupplier.address} onChange={(v) => setNewSupplier({...newSupplier, address: v})} />
+                          </div>
+                          
+                          <div className="col-span-2 space-y-2 border-t border-slate-100 pt-2">
+                              <Label>Supported Incoterms</Label>
+                              <div className="flex flex-wrap gap-2">
+                                  {ALL_INCOTERMS.map(term => (
+                                      <div key={term} className="flex items-center space-x-1 border rounded px-2 py-1 bg-slate-50">
+                                          <Checkbox 
+                                              id={`sup-${term}`} 
+                                              checked={newSupplier.defaultIncoterms.includes(term)}
+                                              onCheckedChange={() => toggleIncoterm(term)}
+                                          />
+                                          <label htmlFor={`sup-${term}`} className="text-xs font-mono cursor-pointer">{term}</label>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
 
-                      <div className="col-span-2 space-y-2 border-t border-slate-100 pt-2">
-                          <Label>Contact & Social Media</Label>
-                          <div className="grid grid-cols-2 gap-3">
-                              <Input placeholder="Contact Name" value={newSupplier.contactName} onChange={(e) => setNewSupplier({...newSupplier, contactName: e.target.value})} />
-                              <Input placeholder="Phone Number" value={newSupplier.phone} onChange={(e) => setNewSupplier({...newSupplier, phone: e.target.value})} />
-                              <Input placeholder="Email Address" value={newSupplier.email} onChange={(e) => setNewSupplier({...newSupplier, email: e.target.value})} />
-                              <div className="flex gap-2">
-                                  <Input placeholder="WeChat ID / Social" value={newSupplier.socialId} onChange={(e) => setNewSupplier({...newSupplier, socialId: e.target.value})} />
-                                  <TooltipProvider>
-                                      <Tooltip>
-                                          <TooltipTrigger asChild>
-                                             <Button variant="outline" size="icon" className="shrink-0">
-                                                 <QrCode className="h-4 w-4" />
-                                             </Button>
-                                          </TooltipTrigger>
-                                          <TooltipContent>Upload QR Code (Feature pending)</TooltipContent>
-                                      </Tooltip>
-                                  </TooltipProvider>
+                          <div className="col-span-2 space-y-2 border-t border-slate-100 pt-2">
+                              <Label>Primary Contact</Label>
+                              <div className="grid grid-cols-2 gap-3">
+                                  <Input placeholder="Contact Name" value={newSupplier.contactName} onChange={(e) => setNewSupplier({...newSupplier, contactName: e.target.value})} />
+                                  <Input placeholder="Phone Number" value={newSupplier.phone} onChange={(e) => setNewSupplier({...newSupplier, phone: e.target.value})} />
+                                  <Input placeholder="Email Address" value={newSupplier.email} onChange={(e) => setNewSupplier({...newSupplier, email: e.target.value})} />
+                                  <Input placeholder="Primary Social ID" value={newSupplier.socialId} onChange={(e) => setNewSupplier({...newSupplier, socialId: e.target.value})} />
+                              </div>
+                          </div>
+
+                          {/* DYNAMIC ADDITIONAL CONTACTS */}
+                          <div className="col-span-2 space-y-2 border-t border-slate-100 pt-2">
+                              <div className="flex justify-between items-center">
+                                <Label>Additional Contacts</Label>
+                                <Button variant="ghost" size="sm" onClick={addContactRow}><Plus className="h-3 w-3 mr-1"/> Add Contact</Button>
+                              </div>
+                              <div className="space-y-2">
+                                  {newSupplier.additionalContacts.map((contact, idx) => (
+                                      <div key={idx} className="flex gap-2 items-center bg-slate-50 p-2 rounded">
+                                          <Input className="h-7 text-xs" placeholder="Name" value={contact.name} onChange={(e) => updateContactRow(idx, 'name', e.target.value)} />
+                                          <Input className="h-7 text-xs" placeholder="Role" value={contact.role} onChange={(e) => updateContactRow(idx, 'role', e.target.value)} />
+                                          <Input className="h-7 text-xs" placeholder="Phone" value={contact.phone} onChange={(e) => updateContactRow(idx, 'phone', e.target.value)} />
+                                          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500 shrink-0" onClick={() => removeContactRow(idx)}><X className="h-3 w-3"/></Button>
+                                      </div>
+                                  ))}
+                                  {newSupplier.additionalContacts.length === 0 && <p className="text-xs text-slate-400 italic">No additional contacts.</p>}
+                              </div>
+                          </div>
+
+                          {/* DYNAMIC SOCIAL PROFILES */}
+                          <div className="col-span-2 space-y-2 border-t border-slate-100 pt-2">
+                              <div className="flex justify-between items-center">
+                                <Label>Social Media Profiles</Label>
+                                <Button variant="ghost" size="sm" onClick={addSocialRow}><Plus className="h-3 w-3 mr-1"/> Add Profile</Button>
+                              </div>
+                              <div className="space-y-2">
+                                  {newSupplier.socialProfiles.map((social, idx) => (
+                                      <div key={idx} className="flex gap-2 items-center bg-slate-50 p-2 rounded">
+                                          <Select value={social.network} onValueChange={(v) => updateSocialRow(idx, 'network', v)}>
+                                              <SelectTrigger className="h-7 w-[100px] text-xs"><SelectValue /></SelectTrigger>
+                                              <SelectContent>
+                                                  <SelectItem value="WECHAT">WeChat</SelectItem>
+                                                  <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
+                                                  <SelectItem value="LINKEDIN">LinkedIn</SelectItem>
+                                                  <SelectItem value="OTHER">Other</SelectItem>
+                                              </SelectContent>
+                                          </Select>
+                                          <Input className="h-7 text-xs" placeholder="Handle / ID" value={social.handle} onChange={(e) => updateSocialRow(idx, 'handle', e.target.value)} />
+                                          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500 shrink-0" onClick={() => removeSocialRow(idx)}><X className="h-3 w-3"/></Button>
+                                      </div>
+                                  ))}
+                                  {newSupplier.socialProfiles.length === 0 && <p className="text-xs text-slate-400 italic">No additional profiles.</p>}
                               </div>
                           </div>
                       </div>
+                  </ScrollArea>
+
+                  <div className="px-6 py-4 border-t bg-slate-50 mt-auto">
+                      <DialogFooter>
+                          <Button onClick={() => handleSaveSupplier(false)} className="w-full sm:w-auto">{editingSupplierId ? 'Update' : 'Save'} Supplier</Button>
+                      </DialogFooter>
                   </div>
-                  <DialogFooter>
-                      <Button onClick={() => handleSaveSupplier(false)}>{editingSupplierId ? 'Update' : 'Save'} Supplier</Button>
-                  </DialogFooter>
               </DialogContent>
           </Dialog>
 

@@ -38,6 +38,7 @@ interface ClientState {
   updateOperationalProfile: <K extends keyof OperationalProfile>(field: K, value: OperationalProfile[K]) => void;
   
   addContact: (contact: ClientContact) => void;
+  updateContact: (contact: ClientContact) => void; // Added updateContact
   removeContact: (contactId: string) => void;
   
   addRoute: (route: ClientRoute) => void;
@@ -181,6 +182,17 @@ export const useClientStore = create<ClientState>((set, get) => ({
           newContacts.forEach(c => { if(c.id !== contact.id) c.isPrimary = false });
       }
       return { activeClient: { ...state.activeClient, contacts: newContacts } };
+  }),
+
+  updateContact: (contact) => set(state => {
+      if (!state.activeClient) return {};
+      const updatedContacts = state.activeClient.contacts.map(c => 
+        c.id === contact.id ? contact : c
+      );
+      if(contact.isPrimary) {
+        updatedContacts.forEach(c => { if(c.id !== contact.id) c.isPrimary = false });
+      }
+      return { activeClient: { ...state.activeClient, contacts: updatedContacts } };
   }),
 
   removeContact: (id) => set(state => ({

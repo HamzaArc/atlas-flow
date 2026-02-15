@@ -33,6 +33,7 @@ const mapRowToClient = (row: any): Client => {
         unpaidInvoices: Number(row.unpaid_invoices) || 0,
         
         salesRepId: row.sales_rep_id || '',
+        opsManagerId: row.ops_manager_id || '', // FIXED: Mapped correctly
         tags: row.tags || [],
         
         // JSONB Fields (Default to empty objects/arrays if null)
@@ -79,6 +80,7 @@ const mapClientToRow = (client: Client) => {
         unpaid_invoices: client.unpaidInvoices || 0,
         
         sales_rep_id: client.salesRepId || null,
+        ops_manager_id: client.opsManagerId || null, // FIXED: Mapped correctly
         tags: client.tags || [],
         
         // JSONB Columns
@@ -232,6 +234,7 @@ export const ClientService = {
         unbilledWork: 0,
         unpaidInvoices: 0,
         salesRepId: '', 
+        opsManagerId: '',
         tags: [],
         contacts: [],
         routes: [],

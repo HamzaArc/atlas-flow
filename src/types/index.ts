@@ -430,6 +430,19 @@ export interface ClientFinancials {
   specialInstructions?: string;  
 }
 
+export interface AdditionalContact {
+    name: string;
+    role?: string;
+    email?: string;
+    phone?: string;
+}
+
+export interface SocialProfile {
+    network: string;
+    handle: string;
+    url?: string;
+}
+
 export interface ClientSupplier {
   id: string;
   name: string;
@@ -448,6 +461,9 @@ export interface ClientSupplier {
   website?: string;
   defaultIncoterms?: Incoterm[]; 
   notes?: string;
+  // Enhanced Fields
+  additionalContacts?: AdditionalContact[];
+  socialProfiles?: SocialProfile[];
 }
 
 export interface ClientCommodity {

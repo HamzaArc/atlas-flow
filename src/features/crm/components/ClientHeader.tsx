@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { ArrowLeft, CheckCircle2, MapPin, User, LayoutDashboard, FilePlus, Ship, Ban, AlertTriangle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, User, LayoutDashboard, FilePlus, Ship, Ban, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -33,6 +33,12 @@ export function ClientHeader({ isEditing, setIsEditing, onSave, onBack }: Client
     const salesReps = users.filter(u => ['SALES', 'MANAGER', 'DIRECTOR', 'ADMIN'].includes(u.role));
     // Ops: Operations, Managers, Directors
     const opsManagers = users.filter(u => ['OPERATIONS', 'MANAGER', 'DIRECTOR', 'ADMIN'].includes(u.role));
+
+    // Ensure currently selected KAM is in the list (even if role changed)
+    if (activeClient.opsManagerId && !opsManagers.find(u => u.id === activeClient.opsManagerId)) {
+        const currentKam = users.find(u => u.id === activeClient.opsManagerId);
+        if (currentKam) opsManagers.push(currentKam);
+    }
 
     // Helper to resolve ID to Name
     const getUserName = (id: string | undefined) => {
@@ -102,8 +108,7 @@ export function ClientHeader({ isEditing, setIsEditing, onSave, onBack }: Client
                             </Badge>
                         </div>
                         <div className="flex items-center gap-4 text-sm text-slate-500">
-                            <span className="flex items-center gap-1.5 text-xs"><MapPin className="h-3.5 w-3.5" /> {activeClient.city || 'No City'}, {activeClient.country || 'No Country'}</span>
-                            <span className="h-3 w-px bg-slate-300"></span>
+                            {/* Address Removed Here */}
                             
                             {/* Ownership Split */}
                             <div className="flex items-center gap-4">
