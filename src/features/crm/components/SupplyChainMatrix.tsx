@@ -16,7 +16,6 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AddressWithMap } from "@/components/ui/address-with-map";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 const ALL_INCOTERMS: Incoterm[] = [
     'EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'
@@ -421,14 +420,15 @@ export function SupplyChainMatrix({ isEditing }: { isEditing: boolean }) {
           
           {/* ADD/EDIT SUPPLIER DIALOG */}
           <Dialog open={isSupplierOpen} onOpenChange={setIsSupplierOpen}>
-              <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-lg">
+              <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-lg">
                   <div className="px-6 py-4 border-b">
                       <DialogHeader className="m-0 p-0">
                           <DialogTitle>{editingSupplierId ? 'Edit' : 'Add'} Commercial Supplier</DialogTitle>
                       </DialogHeader>
                   </div>
                   
-                  <ScrollArea className="flex-1 p-6">
+                  {/* Replaced ScrollArea with native div scrolling for robustness */}
+                  <div className="flex-1 overflow-y-auto p-6">
                       <div className="grid grid-cols-2 gap-4">
                           <div className="col-span-2 space-y-2">
                               <Label>Company Name</Label>
@@ -510,7 +510,7 @@ export function SupplyChainMatrix({ isEditing }: { isEditing: boolean }) {
                               </div>
                           </div>
                       </div>
-                  </ScrollArea>
+                  </div>
 
                   <div className="px-6 py-4 border-t bg-slate-50 mt-auto">
                       <DialogFooter>
