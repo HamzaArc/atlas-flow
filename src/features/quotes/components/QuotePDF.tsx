@@ -1,6 +1,7 @@
 import React from 'react';
-import { Page, Text, View, Document, StyleSheet } from '@react-pdf/renderer';
+import { Page, Text, View, Document, StyleSheet, Image } from '@react-pdf/renderer';
 import { Quote } from '@/types/index';
+import { useSettingsStore } from '@/store/useSettingsStore';
 
 // --- STYLES ---
 const styles = StyleSheet.create({
@@ -23,7 +24,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, 
     borderBottomColor: '#e2e8f0' 
   },
-  logoBlock: { width: '50%' },
+  logoBlock: { width: '50%', justifyContent: 'center' },
+  // INCREASED SIZE BY ~35% (140 -> 190 width, 50 -> 70 height)
+  logoImage: { width: 190, height: 70, objectFit: 'contain' }, 
+  
+  // Fallback Text Styles (Only shown if no logo)
   logoText: { fontSize: 26, fontFamily: 'Helvetica-Bold', color: '#0f172a', textTransform: 'uppercase', letterSpacing: -0.5 },
   logoSub: { fontSize: 8, color: '#64748b', letterSpacing: 2, marginTop: 2, textTransform: 'uppercase' },
   
@@ -164,9 +169,12 @@ interface QuotePDFProps {
 }
 
 export const QuotePDF: React.FC<QuotePDFProps> = ({ data }) => {
+    // ACCESS SETTINGS STORE
+    const { company } = useSettingsStore();
+
     // RESOLVE ACTIVE OPTION
     const activeOption = data.options.find(o => o.id === data.activeOptionId) || data.options[0];
-    const quoteCurrency = activeOption?.quoteCurrency || 'MAD';
+    const quoteCurrency = activeOption?.quoteCurrency || company.currency || 'MAD';
     const mode = activeOption?.mode || data.mode || 'SEA_LCL';
     
     // RESOLVE EQUIPMENT STRING
@@ -196,8 +204,16 @@ export const QuotePDF: React.FC<QuotePDFProps> = ({ data }) => {
                 {/* 1. HEADER */}
                 <View style={styles.header}>
                     <View style={styles.logoBlock}>
-                        <Text style={styles.logoText}>ATLAS FLOW</Text>
-                        <Text style={styles.logoSub}>Logistics Operating System</Text>
+                        {company.logoUrl ? (
+                          /* If Logo exists, show ONLY the image, replacing text */
+                          <Image style={styles.logoImage} src={company.logoUrl} />
+                        ) : (
+                          /* If no logo, show text fallback */
+                          <>
+                            <Text style={styles.logoText}>{company.name || 'ATLAS FLOW'}</Text>
+                            <Text style={styles.logoSub}>Logistics Operating System</Text>
+                          </>
+                        )}
                     </View>
                     <View style={styles.metaBlock}>
                         <Text style={styles.statusBadge}>{data.status}</Text>
@@ -223,10 +239,11 @@ export const QuotePDF: React.FC<QuotePDFProps> = ({ data }) => {
                     <View style={styles.col}>
                         <Text style={styles.colTitle}>Prepared By</Text>
                         <View style={styles.addressBox}>
-                            <Text style={styles.addressName}>{data.salespersonName}</Text>
-                            <Text style={styles.addressLine}>Atlas Flow HQ</Text>
-                            <Text style={styles.addressLine}>Casablanca, Morocco</Text>
-                            <Text style={styles.addressLine}>support@atlasflow.com</Text>
+                            <Text style={styles.addressName}>{company.name}</Text>
+                            <Text style={styles.addressLine}>{company.addressLine1}</Text>
+                            {company.addressLine2 && <Text style={styles.addressLine}>{company.addressLine2}</Text>}
+                            <Text style={styles.addressLine}>{company.city}, {company.country}</Text>
+                            <Text style={styles.addressLine}>{company.email}</Text>
                         </View>
                     </View>
                 </View>
@@ -352,29 +369,36 @@ export const QuotePDF: React.FC<QuotePDFProps> = ({ data }) => {
                 <View style={styles.termsContainer} break>
                     <Text style={styles.termsTitle}>Standard Terms & Conditions</Text>
                     
-                    <Text style={styles.termsText}>
-                        1. <Text style={{ fontFamily: 'Helvetica-Bold' }}>VALIDITY & BOOKING:</Text> Rates are valid until {validUntil} and subject to equipment/space availability at time of booking. Spot rates are subject to change without notice.
-                    </Text>
-                    
-                    <Text style={styles.termsText}>
-                        2. <Text style={{ fontFamily: 'Helvetica-Bold' }}>EXCLUSIONS:</Text> Unless strictly specified, rates exclude Customs Duties, Taxes (VAT), Inspection Fees, Scanning, Storage, Detention, Demurrage, and Waiting Time.
-                    </Text>
+                    {/* Render customized terms if available, otherwise fallback */}
+                    {company.termsAndConditions ? (
+                       <Text style={styles.termsText}>{company.termsAndConditions}</Text>
+                    ) : (
+                      <>
+                        <Text style={styles.termsText}>
+                            1. <Text style={{ fontFamily: 'Helvetica-Bold' }}>VALIDITY & BOOKING:</Text> Rates are valid until {validUntil} and subject to equipment/space availability at time of booking. Spot rates are subject to change without notice.
+                        </Text>
+                        
+                        <Text style={styles.termsText}>
+                            2. <Text style={{ fontFamily: 'Helvetica-Bold' }}>EXCLUSIONS:</Text> Unless strictly specified, rates exclude Customs Duties, Taxes (VAT), Inspection Fees, Scanning, Storage, Detention, Demurrage, and Waiting Time.
+                        </Text>
 
-                    <Text style={styles.termsText}>
-                        3. <Text style={{ fontFamily: 'Helvetica-Bold' }}>INSURANCE:</Text> Goods travel at the risk of the cargo owner. Cargo insurance is NOT included unless explicitly itemized. We strongly recommend arranging comprehensive marine insurance.
-                    </Text>
-                    
-                    <Text style={styles.termsText}>
-                        4. <Text style={{ fontFamily: 'Helvetica-Bold' }}>PAYMENT:</Text> Invoices are payable according to agreed credit terms ({data.paymentTerms}). Late payments may be subject to interest charges. 
-                    </Text>
+                        <Text style={styles.termsText}>
+                            3. <Text style={{ fontFamily: 'Helvetica-Bold' }}>INSURANCE:</Text> Goods travel at the risk of the cargo owner. Cargo insurance is NOT included unless explicitly itemized. We strongly recommend arranging comprehensive marine insurance.
+                        </Text>
+                        
+                        <Text style={styles.termsText}>
+                            4. <Text style={{ fontFamily: 'Helvetica-Bold' }}>PAYMENT:</Text> Invoices are payable according to agreed credit terms ({data.paymentTerms}). Late payments may be subject to interest charges. 
+                        </Text>
 
-                    <Text style={styles.termsText}>
-                        5. <Text style={{ fontFamily: 'Helvetica-Bold' }}>EXCHANGE RATES:</Text> Final invoicing will be based on the exchange rate valid at the date of invoicing or date of shipment, as per company policy.
-                    </Text>
+                        <Text style={styles.termsText}>
+                            5. <Text style={{ fontFamily: 'Helvetica-Bold' }}>EXCHANGE RATES:</Text> Final invoicing will be based on the exchange rate valid at the date of invoicing or date of shipment, as per company policy.
+                        </Text>
 
-                    <Text style={styles.termsText}>
-                        6. <Text style={{ fontFamily: 'Helvetica-Bold' }}>LIABILITY:</Text> All business is undertaken subject to the Standard Trading Conditions of Atlas Flow SARL and applicable international conventions (Hague-Visby, CMR, Montreal).
-                    </Text>
+                        <Text style={styles.termsText}>
+                            6. <Text style={{ fontFamily: 'Helvetica-Bold' }}>LIABILITY:</Text> All business is undertaken subject to the Standard Trading Conditions of Atlas Flow SARL and applicable international conventions (Hague-Visby, CMR, Montreal).
+                        </Text>
+                      </>
+                    )}
                 </View>
 
                 {/* 8. ACCEPTANCE & SIGNATURE */}
@@ -404,7 +428,8 @@ export const QuotePDF: React.FC<QuotePDFProps> = ({ data }) => {
                 </View>
 
                 <View style={styles.footer}>
-                    <Text style={styles.footerText}>Atlas Flow SARL | 123 Logistics Blvd, Casablanca | RC: 12345 | ICE: 00152637283 | www.atlasflow.com</Text>
+                    {/* DYNAMIC FOOTER TEXT */}
+                    <Text style={styles.footerText}>{company.footerText}</Text>
                 </View>
 
             </Page>

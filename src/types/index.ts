@@ -576,3 +576,43 @@ export interface CompanyUser {
   avatarUrl?: string;
   phone?: string;
 }
+
+// --- 6. SETTINGS & CONFIGURATION ---
+export interface BankDetails {
+    bankName: string;
+    accountName: string;
+    rib: string;
+    swift: string;
+    iban: string;
+    address?: string;
+}
+
+export interface CompanySettings {
+    name: string;
+    email: string;
+    phone: string;
+    website: string;
+    logoUrl: string;
+    
+    // Address
+    addressLine1: string;
+    addressLine2?: string;
+    city: string;
+    country: string;
+    zipCode: string;
+    
+    // Legal
+    taxId: string;      // IF
+    ice: string;        // ICE
+    rc: string;         // RC
+    patente: string;    // Patente
+    cnss: string;       // CNSS
+    
+    // Defaults
+    currency: Currency;
+    bankDetails: BankDetails;
+    
+    // Document Footer
+    footerText: string;
+    termsAndConditions: string;
+}

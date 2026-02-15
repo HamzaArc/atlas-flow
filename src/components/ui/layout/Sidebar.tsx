@@ -227,7 +227,7 @@ export function Sidebar({
 
           <SectionHeader title="Configuration" />
           <NavItem path="/users" icon={UserCog} label="Team Directory" />
-          <NavItem path="/settings" icon={Settings} label="Settings" status="soon" statusText="In Dev" />
+          <NavItem path="/settings" icon={Settings} label="Settings" />
         </div>
 
         {/* TOGGLE BUTTON */}

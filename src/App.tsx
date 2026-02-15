@@ -3,13 +3,14 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-
 import Sidebar from './components/ui/layout/Sidebar';
 import LoginPage from './features/auth/LoginPage';
 import { useUserStore } from './store/useUserStore';
+import { useSettingsStore } from './store/useSettingsStore'; // NEW
 import { supabase } from './lib/supabase'; 
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react"; 
 
 // Pages
 import LandingPage from './features/landing/LandingPage';
-import DashboardPage from './features/dashboard/pages/DashboardPage'; // NEW IMPORT
+import DashboardPage from './features/dashboard/pages/DashboardPage';
 import RateDashboard from './features/tariffs/pages/RateDashboard';
 import RateWorkspace from './features/tariffs/pages/RateWorkspace';
 import QuoteDashboard from './features/quotes/pages/QuoteDashboard';
@@ -20,11 +21,20 @@ import ClientListPage from './features/crm/pages/ClientListPage';
 import ClientDetailsPage from './features/crm/pages/ClientDetailsPage';
 import DossierDashboard from './features/dossier/pages/DossierDashboard';
 import { DossierWorkspace } from './features/dossier/DossierWorkspace';
+import SettingsPage from './features/settings/SettingsPage';
 
 // --- LAYOUT WRAPPER FOR AUTHENTICATED ROUTES ---
 const ProtectedLayout = () => {
   const { isAuthenticated, logout } = useUserStore();
+  const { fetchSettings } = useSettingsStore(); // NEW
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Initialize Settings on Mount of Protected Layout
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchSettings();
+    }
+  }, [isAuthenticated, fetchSettings]);
 
   // 1. Guard: Redirect to Login if not authenticated
   if (!isAuthenticated) {
@@ -95,7 +105,6 @@ function App() {
 
         {/* --- PROTECTED ROUTES (Sidebar + Auth Check) --- */}
         <Route element={<ProtectedLayout />}>
-            {/* FIX: Dashboard is now the DashboardPage, not redirect */}
             <Route path="/dashboard" element={<DashboardPage />} />
             
             {/* Quotes */}
@@ -121,6 +130,7 @@ function App() {
             
             {/* Settings/Users */}
             <Route path="/users" element={<UserDirectoryPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
         </Route>
 
         {/* Catch-all: Send to Landing Page */}
