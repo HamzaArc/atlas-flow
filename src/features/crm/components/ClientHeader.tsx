@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useClientStore } from "@/store/useClientStore";
-import { useUserStore } from "@/store/useUserStore"; // Import User Store
+import { useUserStore } from "@/store/useUserStore"; 
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -19,12 +19,14 @@ interface ClientHeaderProps {
 
 export function ClientHeader({ isEditing, setIsEditing, onSave, onBack }: ClientHeaderProps) {
     const { activeClient, updateActiveField } = useClientStore();
-    const { users, fetchUsers } = useUserStore(); // Hook into User System
+    const { users, fetchUsers } = useUserStore(); 
 
-    // Load users on mount
+    // Load users on mount to ensure we have the list for the Select dropdowns
     useEffect(() => {
-        fetchUsers();
-    }, []);
+        if (users.length === 0) {
+            fetchUsers();
+        }
+    }, [fetchUsers, users.length]);
 
     if (!activeClient) return null;
 
@@ -34,17 +36,21 @@ export function ClientHeader({ isEditing, setIsEditing, onSave, onBack }: Client
     // Ops: Operations, Managers, Directors
     const opsManagers = users.filter(u => ['OPERATIONS', 'MANAGER', 'DIRECTOR', 'ADMIN'].includes(u.role));
 
-    // Ensure currently selected KAM is in the list (even if role changed)
-    if (activeClient.opsManagerId && !opsManagers.find(u => u.id === activeClient.opsManagerId)) {
+    // FIX: Ensure currently selected KAM is in the list even if their role doesn't strictly match the filter
+    // This prevents the dropdown from showing an empty value for a valid ID
+    if (activeClient.opsManagerId) {
         const currentKam = users.find(u => u.id === activeClient.opsManagerId);
-        if (currentKam) opsManagers.push(currentKam);
+        // Only add if not already in the list to avoid duplicates
+        if (currentKam && !opsManagers.find(m => m.id === currentKam.id)) {
+            opsManagers.push(currentKam);
+        }
     }
 
     // Helper to resolve ID to Name
     const getUserName = (id: string | undefined) => {
         if (!id) return 'Unassigned';
         const user = users.find(u => u.id === id);
-        return user ? user.fullName : id; // Fallback to ID if not found (or legacy data)
+        return user ? user.fullName : 'Unknown User'; // Better fallback
     };
 
     const getStatusColor = (status: string) => {
@@ -108,7 +114,6 @@ export function ClientHeader({ isEditing, setIsEditing, onSave, onBack }: Client
                             </Badge>
                         </div>
                         <div className="flex items-center gap-4 text-sm text-slate-500">
-                            {/* Address Removed Here */}
                             
                             {/* Ownership Split */}
                             <div className="flex items-center gap-4">

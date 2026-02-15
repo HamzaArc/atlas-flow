@@ -38,7 +38,7 @@ interface ClientState {
   updateOperationalProfile: <K extends keyof OperationalProfile>(field: K, value: OperationalProfile[K]) => void;
   
   addContact: (contact: ClientContact) => void;
-  updateContact: (contact: ClientContact) => void; // Added updateContact
+  updateContact: (contact: ClientContact) => void; 
   removeContact: (contactId: string) => void;
   
   addRoute: (route: ClientRoute) => void;
@@ -91,15 +91,37 @@ export const useClientStore = create<ClientState>((set, get) => ({
 
   loadClient: async (id) => {
     set({ isLoading: true });
-    const found = get().clients.find(c => c.id === id);
     
-    // Simulate selection delay for UI transition
-    setTimeout(() => {
-        set({ 
-            activeClient: found ? JSON.parse(JSON.stringify(found)) : null, 
-            isLoading: false 
-        });
-    }, 50);
+    // 1. Optimistic load: Try to find in cache first for immediate UI feedback
+    const cached = get().clients.find(c => c.id === id);
+    if (cached) {
+        set({ activeClient: JSON.parse(JSON.stringify(cached)) });
+    }
+
+    // 2. Network load: Always fetch fresh data to get missing fields (like opsManagerId)
+    try {
+        const freshClient = await ClientService.fetchOne(id);
+        if (freshClient) {
+            set({ activeClient: freshClient, isLoading: false });
+            
+            // Also update the list cache if we have it
+            const { clients } = get();
+            const index = clients.findIndex(c => c.id === id);
+            if (index !== -1) {
+                const updatedList = [...clients];
+                updatedList[index] = freshClient;
+                set({ clients: updatedList });
+            }
+        } else {
+            set({ isLoading: false });
+            if (!cached) {
+                 toast("Client not found", "error");
+            }
+        }
+    } catch (e) {
+        console.error("Failed to load fresh client data", e);
+        set({ isLoading: false });
+    }
   },
 
   saveClient: async (client) => {
@@ -109,7 +131,7 @@ export const useClientStore = create<ClientState>((set, get) => ({
         // 1. Persist to DB
         const savedClient = await ClientService.save(client);
 
-        // 2. Update Local State (Optimistic-ish)
+        // 2. Update Local State
         const { clients } = get();
         const existsIndex = clients.findIndex(c => c.id === client.id);
         
@@ -178,7 +200,6 @@ export const useClientStore = create<ClientState>((set, get) => ({
       if (!state.activeClient) return {};
       const newContacts = [...state.activeClient.contacts, contact];
       if(contact.isPrimary) {
-          // Ensure only one primary contact
           newContacts.forEach(c => { if(c.id !== contact.id) c.isPrimary = false });
       }
       return { activeClient: { ...state.activeClient, contacts: newContacts } };

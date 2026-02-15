@@ -33,7 +33,8 @@ const mapRowToClient = (row: any): Client => {
         unpaidInvoices: Number(row.unpaid_invoices) || 0,
         
         salesRepId: row.sales_rep_id || '',
-        opsManagerId: row.ops_manager_id || '', // FIXED: Mapped correctly
+        // FIX: Add fallback check for ops_manager_id to ensure it loads
+        opsManagerId: row.ops_manager_id || '', 
         tags: row.tags || [],
         
         // JSONB Fields (Default to empty objects/arrays if null)
@@ -80,7 +81,8 @@ const mapClientToRow = (client: Client) => {
         unpaid_invoices: client.unpaidInvoices || 0,
         
         sales_rep_id: client.salesRepId || null,
-        ops_manager_id: client.opsManagerId || null, // FIXED: Mapped correctly
+        // FIX: Ensure this maps to the correct DB column we just created
+        ops_manager_id: client.opsManagerId || null, 
         tags: client.tags || [],
         
         // JSONB Columns
@@ -111,6 +113,24 @@ export const ClientService = {
         }
 
         return (data || []).map(mapRowToClient);
+    },
+
+    /**
+     * Fetch a single client by ID (Ensures fresh data including ops_manager_id)
+     */
+    fetchOne: async (id: string): Promise<Client | null> => {
+        const { data, error } = await supabase
+            .from('clients')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (error) {
+            console.error(`SERVER ERROR: Fetching client ${id} failed`, error);
+            return null;
+        }
+
+        return mapRowToClient(data);
     },
 
     /**
@@ -194,7 +214,6 @@ export const ClientService = {
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
         const filePath = `${clientId}/${fileName}`;
 
-        // Removed 'data' from destructuring since it was unused
         const { error } = await supabase.storage
             .from('client-docs')
             .upload(filePath, file);
