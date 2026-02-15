@@ -86,7 +86,7 @@ const SelectField = ({ label, children, ...props }: React.SelectHTMLAttributes<H
 export const DossierOperationsTab = () => {
   const { 
      dossier, updateDossier,
-     addContainer, removeContainer, updateContainer
+     addContainer, removeContainer
   } = useDossierStore();
 
   // --- EDIT STATE TRACKING ---
@@ -178,7 +178,7 @@ export const DossierOperationsTab = () => {
      resetPartyForm();
   };
 
-  const startEditParty = (party: ShipmentParty, isMainRole: boolean) => {
+  const startEditParty = (party: ShipmentParty, _isMain: any) => {
       setNewParty({ ...party });
       setEditingPartyRole(party.role);
       setEditingPartyId(party.id || null);
