@@ -1,3 +1,4 @@
+// src/features/dossier/components/DossierHeader.tsx
 import { useState } from 'react';
 import { useNavigate } from "react-router-dom";
 import { 
@@ -6,7 +7,7 @@ import {
   AlertCircle, Archive, Save, FileText
 } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
-import { ShipmentStage, Dossier, ShipmentStatus } from "@/types/index";
+import { Dossier, ShipmentStatus, SHIPMENT_WORKFLOWS, STAGE_CTA_LABELS } from "@/types/index";
 import { ShipmentProgress } from "./ShipmentProgress";
 import { WorkflowModal } from "./modals/WorkflowModal";
 import { Button } from "@/components/ui/button";
@@ -21,19 +22,25 @@ export const DossierHeader = () => {
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const [isWorkflowOpen, setIsWorkflowOpen] = useState(false);
 
-  const getCTA = (stage: ShipmentStage) => {
-    switch (stage) {
-      case ShipmentStage.INTAKE: return 'Confirm & Book';
-      case ShipmentStage.BOOKING: return 'Confirm Departure';
-      case ShipmentStage.ORIGIN: return 'Send Pre-Alert';
-      case ShipmentStage.TRANSIT: return 'Arrival Notice';
-      case ShipmentStage.DELIVERY: return 'Confirm POD';
-      case ShipmentStage.FINANCE: return 'Close Job';
-      default: return 'Job Completed';
-    }
+  // --- WORKFLOW LOGIC ---
+  const getWorkflowSteps = () => {
+     if (dossier.mode?.includes('AIR')) return SHIPMENT_WORKFLOWS.AIR;
+     if (dossier.mode?.includes('ROAD')) return SHIPMENT_WORKFLOWS.ROAD;
+     return SHIPMENT_WORKFLOWS.SEA;
   };
 
-  const handleWorkflowAdvance = (updates: Partial<Dossier>, nextStage: ShipmentStage, summary: string) => {
+  const steps = getWorkflowSteps();
+  const currentStepIndex = steps.indexOf(dossier.stage as string);
+  const nextStep = currentStepIndex !== -1 && currentStepIndex < steps.length - 1 
+      ? steps[currentStepIndex + 1] 
+      : null;
+
+  const getCTA = () => {
+      // Use the map or fallback to "Next Step"
+      return STAGE_CTA_LABELS[dossier.stage as string] || 'Next Step';
+  };
+
+  const handleWorkflowAdvance = (updates: Partial<Dossier>, targetStage: string, summary: string) => {
     Object.entries(updates).forEach(([key, value]) => {
       // @ts-ignore
       updateDossier(key as keyof Dossier, value);
@@ -43,8 +50,14 @@ export const DossierHeader = () => {
         addActivity(summary, 'SYSTEM', 'neutral');
     }
 
-    setStage(nextStage);
+    setStage(targetStage);
     saveDossier();
+  };
+
+  const handleMainActionClick = () => {
+      // If workflow modal logic is complex, we open the modal
+      // But we pass the *calculated* next step to it
+      setIsWorkflowOpen(true);
   };
 
   const handleSave = async () => {
@@ -63,7 +76,7 @@ export const DossierHeader = () => {
       }
   };
 
-  const isLastStage = dossier.stage === ShipmentStage.CLOSED;
+  const isClosed = dossier.stage === 'Closed' || dossier.status === 'COMPLETED';
   const isCancelled = dossier.status === 'CANCELLED';
 
   const ModeIcon = () => {
@@ -194,18 +207,18 @@ export const DossierHeader = () => {
             </div>
 
             <button 
-               onClick={() => setIsWorkflowOpen(true)}
-               disabled={isLastStage || isCancelled}
+               onClick={handleMainActionClick}
+               disabled={isClosed || isCancelled || !nextStep}
                className={`
                  px-5 py-2.5 text-sm font-semibold text-white rounded-lg shadow-sm transition-all transform flex items-center gap-2
-                 ${isLastStage || isCancelled
+                 ${isClosed || isCancelled || !nextStep
                     ? 'bg-slate-400 cursor-not-allowed opacity-75' 
                     : 'bg-slate-900 hover:bg-slate-800 hover:-translate-y-0.5 active:translate-y-0'
                  }
                `}
             >
-               {isCancelled ? 'Cancelled' : getCTA(dossier.stage as ShipmentStage)}
-               {!isLastStage && !isCancelled && <ChevronRight className="h-4 w-4" />}
+               {isCancelled ? 'Cancelled' : getCTA()}
+               {!isClosed && !isCancelled && nextStep && <ChevronRight className="h-4 w-4" />}
             </button>
          </div>
       </div>
@@ -216,6 +229,8 @@ export const DossierHeader = () => {
         isOpen={isWorkflowOpen}
         onClose={() => setIsWorkflowOpen(false)}
         dossier={dossier}
+        // Pass the explicit next step derived from our single source of truth
+        targetStage={nextStep || dossier.stage as string} 
         onAdvance={handleWorkflowAdvance}
       />
 

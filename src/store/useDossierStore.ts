@@ -1,6 +1,6 @@
 // src/store/useDossierStore.ts
 import { create } from 'zustand';
-import { Dossier, DossierContainer, ShipmentStatus, ActivityCategory, ShipmentStage, DossierTask, Document, Quote, ChargeLine } from '@/types/index';
+import { Dossier, DossierContainer, ShipmentStatus, ActivityCategory, DossierTask, Document, Quote, ChargeLine } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 import { DossierService } from '@/services/dossier.service';
 import { generateUUID } from '@/lib/utils';
@@ -52,7 +52,7 @@ const DEFAULT_DOSSIER: Dossier = {
     ref: 'NEW-FILE', 
     bookingRef: '', 
     status: 'BOOKED',
-    stage: ShipmentStage.INTAKE,
+    stage: 'Intake',
     clientId: '', 
     clientName: '',
     mblNumber: '', 
@@ -236,7 +236,7 @@ export const useDossierStore = create<DossierState>((set, get) => ({
 
         createdDate: new Date().toISOString(),
         status: 'BOOKED',
-        stage: ShipmentStage.INTAKE
+        stage: 'Intake'
     };
 
     set({
@@ -261,7 +261,7 @@ export const useDossierStore = create<DossierState>((set, get) => ({
           ref: newRef,
           bookingRef: '',
           status: 'BOOKED',
-          stage: ShipmentStage.INTAKE,
+          stage: 'Intake',
           mblNumber: '',
           hblNumber: '',
           documents: [],
@@ -347,14 +347,33 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       // Logic to auto-map stage to status for better UX
       let newStatus: ShipmentStatus = get().dossier.status;
       
-      // Dynamic status mapping based on stage string
-      // Note: This loose matching allows for the different workflows (Air/Road)
-      if (stage === 'Intake' || stage === 'Booking' || stage === 'Order') newStatus = 'BOOKED';
-      if (stage === 'Origin' || stage === 'Loading' || stage === 'Cargo Pickup') newStatus = 'AT_POL';
-      if (stage === 'Transit' || stage === 'Departed' || stage === 'Crossing') newStatus = 'ON_WATER';
-      if (stage === 'Delivery' || stage === 'Arrived') newStatus = 'AT_POD';
-      if (stage === 'Finance') newStatus = 'DELIVERED';
-      if (stage === 'Closed') newStatus = 'COMPLETED';
+      // Robust status mapping based on granular workflow steps
+      const s = stage;
+      
+      // Early Stages
+      if (['Intake', 'Booking', 'Order', 'Cargo Pickup', 'Container Pickup'].includes(s)) {
+          newStatus = 'BOOKED';
+      }
+      // Pre-Departure
+      else if (['Gate In', 'Warehouse Drop', 'Loading', 'Export Customs'].includes(s)) {
+          newStatus = 'AT_POL';
+      }
+      // Transit
+      else if (['On Water', 'Departed', 'Crossing'].includes(s)) {
+          newStatus = 'ON_WATER';
+      }
+      // Arrival
+      else if (['Arrival (POD)', 'Arrived', 'Import Customs'].includes(s)) {
+          newStatus = 'AT_POD';
+      }
+      // Delivery
+      else if (['Customs', 'Delivery'].includes(s)) {
+          newStatus = 'DELIVERED';
+      }
+      // Completion
+      else if (['Finance', 'Closed'].includes(s)) {
+          newStatus = 'COMPLETED';
+      }
 
       set((state) => ({
           dossier: { ...state.dossier, stage, status: newStatus }

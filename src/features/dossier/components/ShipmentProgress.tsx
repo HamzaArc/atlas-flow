@@ -2,30 +2,18 @@
 import React from 'react';
 import { Check } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
+import { SHIPMENT_WORKFLOWS } from "@/types/index";
 
 export function ShipmentProgress() {
     const { dossier, setStage } = useDossierStore();
     
-    // --- MODE SPECIFIC STEPS ---
-    const SEA_STEPS = [
-        'Intake', 'Booking', 'Container Pickup', 'Gate In', 'On Water', 'Arrival (POD)', 'Customs', 'Delivery'
-    ];
-
-    const AIR_STEPS = [
-        'Intake', 'Booking', 'Cargo Pickup', 'Warehouse Drop', 'Departed', 'Arrived', 'Customs', 'Delivery'
-    ];
-
-    const ROAD_STEPS = [
-        'Intake', 'Order', 'Loading', 'Export Customs', 'Crossing', 'Import Customs', 'Delivery'
-    ];
-
     // Determine active steps based on mode
-    let steps = SEA_STEPS;
-    if (dossier.mode === 'AIR') steps = AIR_STEPS;
-    if (dossier.mode === 'ROAD') steps = ROAD_STEPS;
+    let steps = SHIPMENT_WORKFLOWS.SEA;
+    if (dossier.mode?.includes('AIR')) steps = SHIPMENT_WORKFLOWS.AIR;
+    if (dossier.mode?.includes('ROAD')) steps = SHIPMENT_WORKFLOWS.ROAD;
 
     const activeStepIndex = steps.indexOf(dossier.stage as string);
-    // If current stage is not found (e.g. data mismatch), default to 0
+    // If current stage is not found (e.g. data mismatch), default to 0 to prevent crashes
     const safeIndex = activeStepIndex === -1 ? 0 : activeStepIndex;
 
     const handleStepClick = (stage: string) => {
@@ -33,7 +21,7 @@ export function ShipmentProgress() {
     };
 
     return (
-        <div className="px-6 pb-4 pt-2 flex items-center gap-6 overflow-x-auto border-t border-transparent">
+        <div className="px-6 pb-4 pt-2 flex items-center gap-6 overflow-x-auto border-t border-transparent scrollbar-hide">
             <div className="flex-1 flex items-center min-w-0">
                 {steps.map((step, idx) => {
                     const isCompleted = idx < safeIndex;
@@ -42,7 +30,7 @@ export function ShipmentProgress() {
                     
                     return (
                         <React.Fragment key={step}>
-                            <div className="flex flex-col items-center relative group">
+                            <div className="flex flex-col items-center relative group min-w-[60px]">
                                 <button 
                                     onClick={() => handleStepClick(step)}
                                     className={`
@@ -65,7 +53,7 @@ export function ShipmentProgress() {
                             
                             {/* Connecting Line */}
                             {!isLast && (
-                                <div className="flex-1 h-1 mx-2 rounded-full bg-slate-100 overflow-hidden">
+                                <div className="flex-1 h-1 mx-2 rounded-full bg-slate-100 overflow-hidden min-w-[20px]">
                                     <div 
                                         className={`h-full transition-all duration-500 ease-out ${idx < safeIndex ? 'bg-green-500 w-full' : 'w-0'}`}
                                     />
@@ -77,7 +65,7 @@ export function ShipmentProgress() {
             </div>
             
             {/* Status Badge */}
-            <div className="flex flex-col items-end flex-shrink-0 pl-4 border-l border-slate-100">
+            <div className="hidden lg:flex flex-col items-end flex-shrink-0 pl-4 border-l border-slate-100">
                 <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">Current Status</span>
                 <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-bold bg-blue-50 text-blue-700 border border-blue-100 shadow-sm">
                     <span className="relative flex h-2.5 w-2.5">

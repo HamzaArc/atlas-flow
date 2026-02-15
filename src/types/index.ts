@@ -23,6 +23,51 @@ export enum ShipmentStage {
   CLOSED = 'Closed'
 }
 
+// --- WORKFLOW CONSTANTS (Single Source of Truth) ---
+export const SHIPMENT_WORKFLOWS = {
+  SEA: [
+    'Intake', 'Booking', 'Container Pickup', 'Gate In', 'On Water', 
+    'Arrival (POD)', 'Customs', 'Delivery', 'Finance', 'Closed'
+  ],
+  AIR: [
+    'Intake', 'Booking', 'Cargo Pickup', 'Warehouse Drop', 'Departed', 
+    'Arrived', 'Customs', 'Delivery', 'Finance', 'Closed'
+  ],
+  ROAD: [
+    'Intake', 'Order', 'Loading', 'Export Customs', 'Crossing', 
+    'Import Customs', 'Delivery', 'Finance', 'Closed'
+  ]
+};
+
+export const STAGE_CTA_LABELS: Record<string, string> = {
+  // Common
+  'Intake': 'Confirm & Book',
+  'Booking': 'Initiate Pickup',
+  'Customs': 'Release & Deliver',
+  'Delivery': 'Finalize Financials',
+  'Finance': 'Close Job',
+  'Closed': 'Job Completed',
+  
+  // Sea Specific
+  'Container Pickup': 'Confirm Gate In',
+  'Gate In': 'Confirm Departure',
+  'On Water': 'Confirm Arrival',
+  'Arrival (POD)': 'Start Customs',
+  
+  // Air Specific
+  'Cargo Pickup': 'Confirm Warehouse Drop',
+  'Warehouse Drop': 'Confirm Departure',
+  'Departed': 'Confirm Arrival',
+  'Arrived': 'Start Customs',
+
+  // Road Specific
+  'Order': 'Confirm Loading',
+  'Loading': 'Export Clearance',
+  'Export Customs': 'Start Crossing',
+  'Crossing': 'Import Clearance',
+  'Import Customs': 'Out for Delivery'
+};
+
 export enum DocStatus {
   MISSING = 'Missing',
   REQUESTED = 'Requested',
