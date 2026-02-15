@@ -2,9 +2,9 @@
 import { useState, useMemo } from 'react';
 import { 
    MapPin, Box, Plus, Trash2, User, 
-   ArrowRight, Shield,
+   ArrowRight, Shield, Pencil, X,
    Truck, Check, ChevronsUpDown, Home, Calendar,
-   Scale, Plane, Anchor
+   Scale, Plane, Anchor, RefreshCw
 } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
 import { ShipmentParty, CargoItem, DossierContainer } from "@/types/index";
@@ -86,9 +86,16 @@ const SelectField = ({ label, children, ...props }: React.SelectHTMLAttributes<H
 export const DossierOperationsTab = () => {
   const { 
      dossier, updateDossier,
-     addContainer, removeContainer 
+     addContainer, removeContainer, updateContainer
   } = useDossierStore();
 
+  // --- EDIT STATE TRACKING ---
+  const [editingPartyRole, setEditingPartyRole] = useState<string | null>(null);
+  const [editingPartyId, setEditingPartyId] = useState<string | null>(null);
+  const [editingCargoId, setEditingCargoId] = useState<string | null>(null);
+  const [editingContainerId, setEditingContainerId] = useState<string | null>(null);
+
+  // --- FORM STATES ---
   const [isAddingParty, setIsAddingParty] = useState(false);
   const [newParty, setNewParty] = useState<Partial<ShipmentParty>>({ role: 'Notify' });
 
@@ -104,7 +111,6 @@ export const DossierOperationsTab = () => {
 
   // --- Logic Helpers ---
   const isEXW = dossier.incoterm === 'EXW';
-  
   const isAir = dossier.mode === 'AIR';
   const isRoad = dossier.mode === 'ROAD';
   const isSea = dossier.mode?.startsWith('SEA');
@@ -124,7 +130,7 @@ export const DossierOperationsTab = () => {
     freeTime: isAir ? 'Storage Free Time' : isRoad ? 'Stationnement' : 'Demurrage/Detention'
   };
 
-  // --- Chargeable Weight Logic (Air Profitability Focus) ---
+  // --- Chargeable Weight Logic ---
   const calculatedChargeableWeight = useMemo(() => {
      if(!dossier.cargoItems) return 0;
      let totalVol = 0;
@@ -133,45 +139,77 @@ export const DossierOperationsTab = () => {
          totalVol += item.volume;
          totalGross += item.weight;
      });
-     
-     // Air Formula: 1 CBM = 166.67 KG
      const airRatio = 166.67;
      const volWeight = totalVol * airRatio;
      return Math.max(totalGross, volWeight);
   }, [dossier.cargoItems]);
 
-  // --- Handlers ---
-  const handleAddParty = () => {
+  // --- PARTY HANDLERS ---
+  const handleSaveParty = () => {
      if (!newParty.name) return;
-     const partyToAdd: ShipmentParty = {
-        id: Math.random().toString(36).substring(7),
+
+     const partyToSave: ShipmentParty = {
+        id: editingPartyId || Math.random().toString(36).substring(7),
         name: newParty.name,
         role: newParty.role as any,
         email: newParty.email,
-        contact: newParty.contact
+        contact: newParty.contact,
+        address: newParty.address
      };
      
-     if (partyToAdd.role === 'Shipper') {
-         updateDossier('shipper', partyToAdd);
-     } else if (partyToAdd.role === 'Consignee') {
-         updateDossier('consignee', partyToAdd);
-     } else if (partyToAdd.role === 'Notify') {
-         updateDossier('notify', partyToAdd);
+     if (partyToSave.role === 'Shipper') {
+         updateDossier('shipper', partyToSave);
+     } else if (partyToSave.role === 'Consignee') {
+         updateDossier('consignee', partyToSave);
+     } else if (partyToSave.role === 'Notify') {
+         updateDossier('notify', partyToSave);
      } else {
-         updateDossier('parties', [...(dossier.parties || []), partyToAdd]);
+         // Managing the additional parties list
+         let currentParties = [...(dossier.parties || [])];
+         if (editingPartyId) {
+             const idx = currentParties.findIndex(p => p.id === editingPartyId);
+             if (idx >= 0) currentParties[idx] = partyToSave;
+         } else {
+             currentParties.push(partyToSave);
+         }
+         updateDossier('parties', currentParties);
      }
-     setIsAddingParty(false);
-     setNewParty({ role: 'Notify' });
+     
+     resetPartyForm();
+  };
+
+  const startEditParty = (party: ShipmentParty, isMainRole: boolean) => {
+      setNewParty({ ...party });
+      setEditingPartyRole(party.role);
+      setEditingPartyId(party.id || null);
+      setIsAddingParty(true);
   };
 
   const removeParty = (id: string) => {
      updateDossier('parties', (dossier.parties || []).filter(p => p.id !== id));
   };
 
-  const handleAddCargo = () => {
+  const clearMainParty = (role: 'Shipper' | 'Consignee' | 'Notify') => {
+      // "Delete" for main roles simply resets them
+      const emptyParty: ShipmentParty = { name: '', role: role };
+      if (role === 'Shipper') updateDossier('shipper', emptyParty);
+      if (role === 'Consignee') updateDossier('consignee', emptyParty);
+      if (role === 'Notify') updateDossier('notify', emptyParty);
+  };
+
+  const resetPartyForm = () => {
+      setIsAddingParty(false);
+      setNewParty({ role: 'Notify' });
+      setEditingPartyId(null);
+      setEditingPartyRole(null);
+  }
+
+  // --- CARGO HANDLERS ---
+  const handleSaveCargo = () => {
     if (!newCargo.description) return;
+
     const item: CargoItem = {
-      id: `ci-${Date.now()}`,
+      id: editingCargoId || `ci-${Date.now()}`,
       description: newCargo.description,
       packageCount: Number(newCargo.packageCount) || 0,
       packageType: newCargo.packageType || 'Pkgs',
@@ -179,33 +217,84 @@ export const DossierOperationsTab = () => {
       volume: Number(newCargo.volume) || 0,
       dimensions: newCargo.dimensions
     };
-    updateDossier('cargoItems', [...(dossier.cargoItems || []), item]);
-    setIsAddingCargo(false);
-    setNewCargo({ packageType: 'Cartons' });
+
+    let newItems = [...(dossier.cargoItems || [])];
+    if (editingCargoId) {
+        newItems = newItems.map(i => i.id === editingCargoId ? item : i);
+    } else {
+        newItems.push(item);
+    }
+
+    updateDossier('cargoItems', newItems);
+    resetCargoForm();
+  };
+
+  const startEditCargo = (item: CargoItem) => {
+      setNewCargo({ ...item });
+      setEditingCargoId(item.id);
+      setIsAddingCargo(true);
   };
 
   const removeCargo = (id: string) => {
     updateDossier('cargoItems', (dossier.cargoItems || []).filter(c => c.id !== id));
   };
 
-  const handleAddContainer = () => {
-     if (!newContainer.number) return;
-     const containerToAdd: DossierContainer = {
-        id: Math.random().toString(36).substring(7),
-        number: newContainer.number.toUpperCase(),
-        type: newContainer.type as any || '40HC',
-        seal: newContainer.seal ? newContainer.seal.toUpperCase() : '',
-        packages: Number(newContainer.packages) || 0,
-        weight: Number(newContainer.weight) || 0,
-        packageType: 'CARTONS',
-        volume: 0,
-        status: 'GATE_IN'
-     };
-     addContainer(containerToAdd);
-     setIsAddingContainer(false);
-     setNewContainer({ type: '40HC' });
+  const resetCargoForm = () => {
+      setIsAddingCargo(false);
+      setNewCargo({ packageType: 'Cartons' });
+      setEditingCargoId(null);
   };
 
+  // --- CONTAINER HANDLERS ---
+  const handleSaveContainer = () => {
+     if (!newContainer.number) return;
+     
+     // Note: updateContainer in store is for single field updates, 
+     // so we construct logic here for bulk update or add
+     if (editingContainerId) {
+         // We need to manually update all fields for the container in the array
+         const updatedList = dossier.containers.map(c => 
+             c.id === editingContainerId ? { ...c, ...newContainer } as DossierContainer : c
+         );
+         // There isn't a direct "setContainers" exposed, so we iterate or use a new method? 
+         // Actually updateDossier('containers', ...) works perfectly if the type allows it.
+         // Let's use updateDossier directly for the array to be safe.
+         // Wait, updateDossier is strictly typed. Let's iterate `updateContainer` calls or 
+         // realize that `updateDossier` can take 'containers' as key.
+         // The store type definition: `updateDossier: <K extends keyof Dossier>(field: K, value: Dossier[K]) => void;`
+         // So yes, we can pass the whole array.
+         updateDossier('containers', updatedList);
+
+     } else {
+         const containerToAdd: DossierContainer = {
+            id: Math.random().toString(36).substring(7),
+            number: newContainer.number.toUpperCase(),
+            type: newContainer.type as any || '40HC',
+            seal: newContainer.seal ? newContainer.seal.toUpperCase() : '',
+            packages: Number(newContainer.packages) || 0,
+            weight: Number(newContainer.weight) || 0,
+            packageType: 'CARTONS',
+            volume: 0,
+            status: 'GATE_IN'
+         };
+         addContainer(containerToAdd);
+     }
+     resetContainerForm();
+  };
+
+  const startEditContainer = (c: DossierContainer) => {
+      setNewContainer({ ...c });
+      setEditingContainerId(c.id);
+      setIsAddingContainer(true);
+  };
+
+  const resetContainerForm = () => {
+      setIsAddingContainer(false);
+      setNewContainer({ type: '40HC' });
+      setEditingContainerId(null);
+  };
+
+  // --- TOTALS ---
   const hasCargoItems = (dossier.cargoItems?.length || 0) > 0;
   const totalWeight = hasCargoItems 
     ? dossier.cargoItems?.reduce((sum, item) => sum + item.weight, 0) || 0
@@ -225,7 +314,7 @@ export const DossierOperationsTab = () => {
         {/* LEFT COLUMN */}
         <div className="flex flex-col gap-6 h-full">
           
-          {/* CARD 1: Route & Schedule (Morphed) */}
+          {/* CARD 1: Route & Schedule */}
           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative z-20 overflow-hidden">
             <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-3">
@@ -531,10 +620,18 @@ export const DossierOperationsTab = () => {
 
               {isAddingParty && (
                  <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg animate-in fade-in slide-in-from-top-2">
-                    <h4 className="text-[10px] font-bold text-slate-900 uppercase tracking-wide mb-3">Add Stakeholder</h4>
+                    <h4 className="text-[10px] font-bold text-slate-900 uppercase tracking-wide mb-3 flex items-center justify-between">
+                        {editingPartyId ? `Edit ${editingPartyRole || 'Party'}` : 'Add Stakeholder'}
+                        <button onClick={resetPartyForm}><X className="h-3 w-3 text-slate-400 hover:text-slate-600"/></button>
+                    </h4>
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
                        <div className="md:col-span-4">
-                          <SelectField label="Role" value={newParty.role} onChange={(e) => setNewParty({...newParty, role: e.target.value as any})}>
+                          <SelectField 
+                            label="Role" 
+                            value={newParty.role} 
+                            disabled={!!editingPartyRole && ['Shipper', 'Consignee', 'Notify'].includes(editingPartyRole)}
+                            onChange={(e) => setNewParty({...newParty, role: e.target.value as any})}
+                          >
                              <option value="Shipper">Shipper</option>
                              <option value="Consignee">Consignee</option>
                              <option value="Notify">Notify</option>
@@ -544,36 +641,59 @@ export const DossierOperationsTab = () => {
                        </div>
                        <div className="md:col-span-8"><InputField label="Company Name" placeholder="Company Name" value={newParty.name || ''} onChange={e => setNewParty({...newParty, name: e.target.value})} /></div>
                        <div className="md:col-span-12"><InputField label="Email" type="email" placeholder="contact@example.com" value={newParty.email || ''} onChange={e => setNewParty({...newParty, email: e.target.value})} /></div>
+                       <div className="md:col-span-12"><InputField label="Address" placeholder="Full Address" value={newParty.address || ''} onChange={e => setNewParty({...newParty, address: e.target.value})} /></div>
                     </div>
                     <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-                       <button onClick={() => setIsAddingParty(false)} className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-md">Cancel</button>
-                       <button onClick={handleAddParty} className="px-3 py-1.5 text-xs font-bold text-white bg-slate-900 rounded-md hover:bg-slate-800">Save</button>
+                       <button onClick={resetPartyForm} className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-md">Cancel</button>
+                       <button onClick={handleSaveParty} className="px-3 py-1.5 text-xs font-bold text-white bg-slate-900 rounded-md hover:bg-slate-800">
+                           {editingPartyId ? 'Update' : 'Save'}
+                       </button>
                     </div>
                  </div>
               )}
+              
               <div className="grid grid-cols-1 gap-2">
                  {[
-                    { role: 'Shipper', data: dossier.shipper },
-                    { role: 'Consignee', data: dossier.consignee },
-                    { role: 'Notify', data: dossier.notify },
-                    ...(dossier.parties || [])
+                    { role: 'Shipper', data: dossier.shipper, isMain: true },
+                    { role: 'Consignee', data: dossier.consignee, isMain: true },
+                    { role: 'Notify', data: dossier.notify, isMain: true },
+                    ...(dossier.parties || []).map(p => ({ role: p.role, data: p, isMain: false }))
                  ].map((p: any, idx) => (
-                    (p.id || p.data?.name) ? (
+                    (p.data?.name || p.isMain) ? (
                         <div key={idx} className="group p-3 border border-slate-100 rounded-lg bg-white hover:border-blue-200 hover:shadow-sm transition-all flex justify-between items-center">
-                        <div className="flex items-start gap-3">
-                            <div className="mt-0.5 h-7 w-7 rounded bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400"><User className="h-3.5 w-3.5" /></div>
-                            <div>
-                                <div className="flex items-center gap-2 mb-0.5">
-                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider bg-slate-100 px-1.5 py-px rounded">{p.role}</span>
+                            <div className="flex items-start gap-3 flex-1 min-w-0">
+                                <div className="mt-0.5 h-7 w-7 shrink-0 rounded bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400"><User className="h-3.5 w-3.5" /></div>
+                                <div className="truncate">
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider bg-slate-100 px-1.5 py-px rounded">{p.role}</span>
+                                    </div>
+                                    <div className="font-bold text-slate-900 text-xs truncate" title={p.data?.name}>{p.data?.name || <span className="text-slate-300 italic">Not Assigned</span>}</div>
                                 </div>
-                                <div className="font-bold text-slate-900 text-xs">{p.name || p.data?.name || '—'}</div>
                             </div>
-                        </div>
-                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {p.id && !['Shipper', 'Consignee', 'Notify'].includes(p.role) && (
-                                <button onClick={() => removeParty(p.id)} className="p-1.5 text-slate-400 hover:text-red-600 rounded hover:bg-red-50 transition-all"><Trash2 className="h-3.5 w-3.5"/></button>
-                            )}
-                        </div>
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button 
+                                    onClick={() => startEditParty(p.data, p.isMain)} 
+                                    className="p-1.5 text-slate-400 hover:text-blue-600 rounded hover:bg-blue-50 transition-all"
+                                >
+                                    <Pencil className="h-3.5 w-3.5"/>
+                                </button>
+                                {p.isMain ? (
+                                    <button 
+                                        onClick={() => clearMainParty(p.role)} 
+                                        className="p-1.5 text-slate-400 hover:text-amber-600 rounded hover:bg-amber-50 transition-all" 
+                                        title="Clear Field"
+                                    >
+                                        <RefreshCw className="h-3.5 w-3.5"/>
+                                    </button>
+                                ) : (
+                                    <button 
+                                        onClick={() => removeParty(p.data.id)} 
+                                        className="p-1.5 text-slate-400 hover:text-red-600 rounded hover:bg-red-50 transition-all"
+                                    >
+                                        <Trash2 className="h-3.5 w-3.5"/>
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     ) : null
                  ))}
@@ -646,7 +766,10 @@ export const DossierOperationsTab = () => {
 
                {isAddingCargo && (
                   <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg animate-in fade-in slide-in-from-top-2">
-                     <h4 className="text-[10px] font-bold text-slate-900 uppercase tracking-wide mb-3">New Cargo Item</h4>
+                     <h4 className="text-[10px] font-bold text-slate-900 uppercase tracking-wide mb-3 flex justify-between items-center">
+                        {editingCargoId ? "Edit Cargo Item" : "New Cargo Item"}
+                        <button onClick={resetCargoForm}><X className="h-3 w-3 text-slate-400 hover:text-slate-600"/></button>
+                     </h4>
                      <div className="grid grid-cols-1 gap-3 mb-3">
                         <div className="grid grid-cols-12 gap-3">
                            <div className="col-span-4"><InputField label="Qty" type="number" placeholder="0" value={newCargo.packageCount || ''} onChange={e => setNewCargo({...newCargo, packageCount: Number(e.target.value)})} /></div>
@@ -659,8 +782,10 @@ export const DossierOperationsTab = () => {
                          </div>
                      </div>
                      <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-                        <button onClick={() => setIsAddingCargo(false)} className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-md">Cancel</button>
-                        <button onClick={handleAddCargo} className="px-3 py-1.5 text-xs font-bold text-white bg-slate-900 rounded-md hover:bg-slate-800">Add Item</button>
+                        <button onClick={resetCargoForm} className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-md">Cancel</button>
+                        <button onClick={handleSaveCargo} className="px-3 py-1.5 text-xs font-bold text-white bg-slate-900 rounded-md hover:bg-slate-800">
+                            {editingCargoId ? 'Update Item' : 'Add Item'}
+                        </button>
                      </div>
                   </div>
                )}
@@ -668,7 +793,7 @@ export const DossierOperationsTab = () => {
                   {dossier.cargoItems && dossier.cargoItems.map(item => (
                     <div key={item.id} className="group p-3 border border-slate-100 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all bg-white relative">
                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
+                          <div className="flex-1 cursor-pointer" onClick={() => startEditCargo(item)}>
                              <div className="flex items-center gap-2 text-xs font-bold text-slate-900 mb-1">
                                 <span className="bg-slate-100 text-slate-700 px-1.5 py-px rounded border border-slate-200">{item.packageCount} {item.packageType}</span>
                                 <span className="text-slate-300">|</span>
@@ -680,7 +805,14 @@ export const DossierOperationsTab = () => {
                                 <span><b className="text-slate-700">{item.volume.toFixed(2)}</b> m³</span>
                              </div>
                           </div>
-                          <button onClick={() => removeCargo(item.id)} className="p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-red-50"><Trash2 size={14} /></button>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => startEditCargo(item)} className="p-1.5 text-slate-300 hover:text-blue-500 rounded hover:bg-blue-50">
+                                  <Pencil size={14} />
+                              </button>
+                              <button onClick={() => removeCargo(item.id)} className="p-1.5 text-slate-300 hover:text-red-500 rounded hover:bg-red-50">
+                                  <Trash2 size={14} />
+                              </button>
+                          </div>
                        </div>
                     </div>
                   ))}
@@ -713,7 +845,10 @@ export const DossierOperationsTab = () => {
                          <>
                          {isAddingContainer && (
                             <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg animate-in fade-in slide-in-from-top-2">
-                               <h4 className="text-[10px] font-bold text-slate-900 uppercase tracking-wide mb-3">New Container</h4>
+                               <h4 className="text-[10px] font-bold text-slate-900 uppercase tracking-wide mb-3 flex justify-between items-center">
+                                  {editingContainerId ? 'Edit Container' : 'New Container'}
+                                  <button onClick={resetContainerForm}><X className="h-3 w-3 text-slate-400 hover:text-slate-600"/></button>
+                               </h4>
                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                                   <InputField label="Container No." placeholder="CMAU..." value={newContainer.number || ''} onChange={e => setNewContainer({...newContainer, number: e.target.value.toUpperCase()})} />
                                   <SelectField label="Type" value={newContainer.type} onChange={e => setNewContainer({...newContainer, type: e.target.value as any})}>
@@ -728,8 +863,10 @@ export const DossierOperationsTab = () => {
                                   </div>
                                </div>
                                <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-                                  <button onClick={() => setIsAddingContainer(false)} className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-md">Cancel</button>
-                                  <button onClick={handleAddContainer} className="px-3 py-1.5 text-xs font-bold text-white bg-slate-900 rounded-md hover:bg-slate-800">Add</button>
+                                  <button onClick={resetContainerForm} className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-md">Cancel</button>
+                                  <button onClick={handleSaveContainer} className="px-3 py-1.5 text-xs font-bold text-white bg-slate-900 rounded-md hover:bg-slate-800">
+                                      {editingContainerId ? 'Update' : 'Add'}
+                                  </button>
                                </div>
                             </div>
                          )}
@@ -744,9 +881,9 @@ export const DossierOperationsTab = () => {
                              </thead>
                              <tbody className="bg-white divide-y divide-slate-100">
                                {dossier.containers.map(container => (
-                                 <tr key={container.id} className="hover:bg-blue-50/30 transition-colors group">
+                                 <tr key={container.id} className="hover:bg-blue-50/30 transition-colors group cursor-pointer" onClick={() => startEditContainer(container)}>
                                    <td className="px-3 py-2">
-                                     <div className="text-xs font-bold text-slate-900 font-mono tracking-wide">{container.number}</div>
+                                     <div className="text-xs font-bold text-slate-900 font-mono tracking-wide">{container.number || 'PENDING'}</div>
                                      <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1 mt-0.5"><Shield size={10} className="text-green-500"/> {container.seal || '-'}</div>
                                    </td>
                                    <td className="px-3 py-2">
@@ -754,7 +891,10 @@ export const DossierOperationsTab = () => {
                                       <div className="text-[10px] text-slate-500 font-medium">{container.packages} p • {container.weight?.toLocaleString()} k</div>
                                    </td>
                                    <td className="px-3 py-2 text-right">
-                                     <button onClick={() => removeContainer(container.id)} className="p-1.5 text-slate-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-red-50"><Trash2 size={14}/></button>
+                                     <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                         <button onClick={(e) => { e.stopPropagation(); startEditContainer(container); }} className="p-1.5 text-slate-300 hover:text-blue-600 rounded hover:bg-blue-50"><Pencil size={14}/></button>
+                                         <button onClick={(e) => { e.stopPropagation(); removeContainer(container.id); }} className="p-1.5 text-slate-300 hover:text-red-600 rounded hover:bg-red-50"><Trash2 size={14}/></button>
+                                     </div>
                                    </td>
                                  </tr>
                                ))}

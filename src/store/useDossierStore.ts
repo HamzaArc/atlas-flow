@@ -1,6 +1,5 @@
-// src/store/useDossierStore.ts
 import { create } from 'zustand';
-import { Dossier, DossierContainer, ShipmentStatus, ActivityCategory, DossierTask, Document, Quote, ChargeLine } from '@/types/index';
+import { Dossier, DossierContainer, ShipmentStatus, ActivityCategory, DossierTask, Document, Quote, ChargeLine, CargoItem } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 import { DossierService } from '@/services/dossier.service';
 import { generateUUID } from '@/lib/utils';
@@ -141,30 +140,101 @@ export const useDossierStore = create<DossierState>((set, get) => ({
         ? addDays(etd, activeOption.transitTime)
         : addDays(etd, 14);
 
-    // Map Containers
-    const containers: DossierContainer[] = activeOption.equipmentList.map(eq => ({
-        id: generateUUID(),
-        number: '',
-        type: eq.type as any || '40HC',
-        seal: '',
-        weight: 0,
-        packages: 0,
-        packageType: 'PALLETS',
-        volume: 0,
-        status: 'GATE_IN',
-        pickupDate: undefined,
-        returnDate: undefined
-    }));
+    // --- 1. Enhanced Container Mapping ---
+    const containers: DossierContainer[] = [];
+    
+    if (activeOption.equipmentList && activeOption.equipmentList.length > 0) {
+        activeOption.equipmentList.forEach(eq => {
+            const count = eq.count || 1;
+            for (let i = 0; i < count; i++) {
+                containers.push({
+                    id: generateUUID(),
+                    number: '', 
+                    type: (eq.type as any) || '40HC',
+                    seal: '',
+                    weight: 0,
+                    packages: 0,
+                    packageType: quote.packagingType || 'PALLETS',
+                    volume: 0,
+                    status: 'GATE_IN',
+                    pickupDate: undefined,
+                    returnDate: undefined
+                });
+            }
+        });
+    } else if (activeOption.containerCount > 0) {
+        for (let i = 0; i < activeOption.containerCount; i++) {
+            containers.push({
+                id: generateUUID(),
+                number: '',
+                type: (activeOption.equipmentType as any) || '40HC',
+                seal: '',
+                weight: 0,
+                packages: 0,
+                packageType: quote.packagingType || 'PALLETS',
+                volume: 0,
+                status: 'GATE_IN'
+            });
+        }
+    }
 
-    // Map Financial Lines (Expenses and Income)
+    // --- 2. Enhanced Cargo Mapping (FIXED) ---
+    let cargoItems: CargoItem[] = [];
+
+    if (quote.cargoRows && quote.cargoRows.length > 0) {
+        cargoItems = quote.cargoRows.map(r => {
+            // Robust Dimensions Builder
+            let dimensions = '';
+            if (r.length && r.width && r.height) {
+                dimensions = `${r.length}x${r.width}x${r.height}`;
+            }
+
+            // Robust Volume Calculation
+            let rowVolume = Number(r.volume || 0);
+            if (!rowVolume && r.length && r.width && r.height) {
+                // CM to CBM standard
+                const singlePieceVol = (Number(r.length) * Number(r.width) * Number(r.height)) / 1000000;
+                const count = Number(r.count || r.quantity || r.pieces || 1);
+                rowVolume = singlePieceVol * count;
+            }
+            
+            // Robust Field Mapping
+            const count = Number(r.count || r.quantity || r.pieces || r.pkgCount || 0);
+            const type = r.packageType || r.pkgType || r.type || quote.packagingType || 'PALLETS';
+
+            return {
+                id: generateUUID(),
+                description: r.description || quote.goodsDescription || 'General Cargo',
+                packageCount: count,
+                packageType: type,
+                weight: Number(r.weight || r.grossWeight || 0),
+                volume: Number(rowVolume.toFixed(3)),
+                dimensions: dimensions || undefined
+            };
+        });
+    } else {
+        // Fallback if no specific rows defined but global totals exist
+        if (quote.totalWeight || quote.totalVolume) {
+            cargoItems.push({
+                id: generateUUID(),
+                description: quote.goodsDescription || 'General Cargo',
+                packageCount: 1, // Default if unknown
+                packageType: quote.packagingType || 'PALLETS',
+                weight: quote.totalWeight || 0,
+                volume: quote.totalVolume || 0,
+                dimensions: undefined
+            });
+        }
+    }
+
+    // --- 3. Finance Mapping ---
     const financeLines: Partial<ChargeLine>[] = [];
     
     activeOption.items.forEach(item => {
-        // Create Expense (Payable) - Buy Price
         if (item.buyPrice > 0) {
             financeLines.push({
                 type: 'EXPENSE',
-                code: 'FREIGHT_COST', // Generic code, could be improved with mapping
+                code: 'FREIGHT_COST',
                 description: `[Cost] ${item.description}`,
                 amount: item.buyPrice,
                 currency: item.buyCurrency || item.buyCurrency,
@@ -175,7 +245,6 @@ export const useDossierStore = create<DossierState>((set, get) => ({
             });
         }
 
-        // Create Income (Receivable) - Sell Price
         if (item.sellPrice > 0) {
             financeLines.push({
                 type: 'INCOME',
@@ -204,7 +273,7 @@ export const useDossierStore = create<DossierState>((set, get) => ({
         pol: activeOption.pol || quote.pol || '',
         pod: activeOption.pod || quote.pod || '',
         
-        incotermPlace: activeOption.placeOfDelivery || activeOption.placeOfLoading || '',
+        incotermPlace: activeOption.placeOfDelivery || activeOption.placeOfLoading || quote.pol || '',
         
         etd: etd,
         eta: eta,
@@ -213,26 +282,20 @@ export const useDossierStore = create<DossierState>((set, get) => ({
 
         // Parties Mapping
         shipper: { 
-            name: quote.clientName, // Default to client as shipper if not specified
+            name: quote.clientName, 
             role: 'Shipper',
             address: activeOption.placeOfLoading || ''
         },
         consignee: {
-            name: 'To Order', // Placeholder
+            name: 'To Order', 
             role: 'Consignee',
             address: activeOption.placeOfDelivery || ''
         },
         
-        // Goods
         containers: containers,
-        cargoItems: quote.cargoRows ? quote.cargoRows.map(r => ({
-             id: generateUUID(),
-             description: quote.goodsDescription || 'General Cargo',
-             packageCount: r.count || 0,
-             packageType: quote.packagingType || 'PALLETS',
-             weight: r.weight || quote.totalWeight || 0,
-             volume: r.volume || quote.totalVolume || 0
-        })) : [],
+        cargoItems: cargoItems,
+        
+        chargeableWeight: quote.chargeableWeight || 0,
 
         createdDate: new Date().toISOString(),
         status: 'BOOKED',
@@ -246,9 +309,8 @@ export const useDossierStore = create<DossierState>((set, get) => ({
         error: null
     });
 
-    useToast.getState().toast("Booking initialized from quote details.", "success");
-    // Activity Log
-    get().addActivity(`Booking initialized from Quote ${quote.reference}`, 'SYSTEM', 'neutral');
+    useToast.getState().toast("Booking initialized successfully from Quote.", "success");
+    get().addActivity(`Booking initialized from Quote ${quote.reference} (v${quote.version})`, 'SYSTEM', 'neutral');
   },
 
   duplicateDossier: () => {
@@ -344,33 +406,24 @@ export const useDossierStore = create<DossierState>((set, get) => ({
   },
 
   setStage: (stage) => {
-      // Logic to auto-map stage to status for better UX
       let newStatus: ShipmentStatus = get().dossier.status;
-      
-      // Robust status mapping based on granular workflow steps
       const s = stage;
       
-      // Early Stages
       if (['Intake', 'Booking', 'Order', 'Cargo Pickup', 'Container Pickup'].includes(s)) {
           newStatus = 'BOOKED';
       }
-      // Pre-Departure
       else if (['Gate In', 'Warehouse Drop', 'Loading', 'Export Customs'].includes(s)) {
           newStatus = 'AT_POL';
       }
-      // Transit
       else if (['On Water', 'Departed', 'Crossing'].includes(s)) {
           newStatus = 'ON_WATER';
       }
-      // Arrival
       else if (['Arrival (POD)', 'Arrived', 'Import Customs'].includes(s)) {
           newStatus = 'AT_POD';
       }
-      // Delivery
       else if (['Customs', 'Delivery'].includes(s)) {
           newStatus = 'DELIVERED';
       }
-      // Completion
       else if (['Finance', 'Closed'].includes(s)) {
           newStatus = 'COMPLETED';
       }
@@ -500,17 +553,14 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       try {
           const savedDossier = await DossierService.save(dossier);
           
-          // --- Process Pending Finance Lines ---
           if (pendingFinanceLines && pendingFinanceLines.length > 0) {
               const financeStore = useFinanceStore.getState();
-              // Process sequentially to ensure order or reduce race conditions
               for (const line of pendingFinanceLines) {
                   await financeStore.addCharge({
                       ...line,
                       dossierId: savedDossier.id
                   });
               }
-              // Clear pending lines after successful add
               set({ pendingFinanceLines: [] });
           }
 

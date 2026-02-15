@@ -229,7 +229,7 @@ export interface CargoItem {
   packageType: string;
   weight: number; 
   volume: number; 
-  dimensions?: string;
+  dimensions?: string; // Confirmed support for LxWxH string
 }
 
 export interface DossierContainer {
