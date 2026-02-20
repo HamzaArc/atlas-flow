@@ -179,7 +179,8 @@ export function SupplyChainMatrix({ isEditing }: { isEditing: boolean }) {
   const addContactRow = () => {
       setNewSupplier({
           ...newSupplier,
-          additionalContacts: [...newSupplier.additionalContacts, { name: '', role: '', email: '', phone: '' }]
+          // Using as any to allow dynamic addition of wechatId without breaking strict typing if it isn't in AdditionalContact type yet
+          additionalContacts: [...newSupplier.additionalContacts, { name: '', role: '', email: '', phone: '', wechatId: '' } as any]
       });
   };
   const removeContactRow = (index: number) => {
@@ -187,27 +188,10 @@ export function SupplyChainMatrix({ isEditing }: { isEditing: boolean }) {
       updated.splice(index, 1);
       setNewSupplier({ ...newSupplier, additionalContacts: updated });
   };
-  const updateContactRow = (index: number, field: keyof AdditionalContact, value: string) => {
-      const updated = [...newSupplier.additionalContacts];
+  const updateContactRow = (index: number, field: string, value: string) => {
+      const updated = [...newSupplier.additionalContacts] as any[];
       updated[index] = { ...updated[index], [field]: value };
       setNewSupplier({ ...newSupplier, additionalContacts: updated });
-  };
-
-  const addSocialRow = () => {
-      setNewSupplier({
-          ...newSupplier,
-          socialProfiles: [...newSupplier.socialProfiles, { network: 'OTHER', handle: '' }]
-      });
-  };
-  const removeSocialRow = (index: number) => {
-      const updated = [...newSupplier.socialProfiles];
-      updated.splice(index, 1);
-      setNewSupplier({ ...newSupplier, socialProfiles: updated });
-  };
-  const updateSocialRow = (index: number, field: keyof SocialProfile, value: string) => {
-      const updated = [...newSupplier.socialProfiles];
-      updated[index] = { ...updated[index], [field]: value };
-      setNewSupplier({ ...newSupplier, socialProfiles: updated });
   };
 
   // --- HELPERS ---
@@ -427,7 +411,6 @@ export function SupplyChainMatrix({ isEditing }: { isEditing: boolean }) {
                       </DialogHeader>
                   </div>
                   
-                  {/* Replaced ScrollArea with native div scrolling for robustness */}
                   <div className="flex-1 overflow-y-auto p-6">
                       <div className="grid grid-cols-2 gap-4">
                           <div className="col-span-2 space-y-2">
@@ -455,58 +438,77 @@ export function SupplyChainMatrix({ isEditing }: { isEditing: boolean }) {
                               </div>
                           </div>
 
-                          <div className="col-span-2 space-y-2 border-t border-slate-100 pt-2">
-                              <Label>Primary Contact</Label>
-                              <div className="grid grid-cols-2 gap-3">
-                                  <Input placeholder="Contact Name" value={newSupplier.contactName} onChange={(e) => setNewSupplier({...newSupplier, contactName: e.target.value})} />
-                                  <Input placeholder="Phone Number" value={newSupplier.phone} onChange={(e) => setNewSupplier({...newSupplier, phone: e.target.value})} />
-                                  <Input placeholder="Email Address" value={newSupplier.email} onChange={(e) => setNewSupplier({...newSupplier, email: e.target.value})} />
-                                  <Input placeholder="Primary Social ID" value={newSupplier.socialId} onChange={(e) => setNewSupplier({...newSupplier, socialId: e.target.value})} />
+                          {/* REFACTORED PRIMARY CONTACT */}
+                          <div className="col-span-2 space-y-4 border-t border-slate-100 pt-4">
+                              <Label className="text-sm font-semibold text-slate-700">Primary Contact</Label>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-1.5">
+                                      <Label className="text-xs text-slate-500 flex items-center h-4">Contact Name</Label>
+                                      <Input placeholder="e.g. John Doe" value={newSupplier.contactName} onChange={(e) => setNewSupplier({...newSupplier, contactName: e.target.value})} />
+                                  </div>
+                                  <div className="space-y-1.5">
+                                      <Label className="text-xs text-slate-500 flex items-center h-4">Phone Number</Label>
+                                      <Input placeholder="e.g. +86 138 0000 0000" value={newSupplier.phone} onChange={(e) => setNewSupplier({...newSupplier, phone: e.target.value})} />
+                                  </div>
+                                  <div className="space-y-1.5">
+                                      <Label className="text-xs text-slate-500 flex items-center h-4">Email Address</Label>
+                                      <Input placeholder="e.g. john@supplier.com" value={newSupplier.email} onChange={(e) => setNewSupplier({...newSupplier, email: e.target.value})} />
+                                  </div>
+                                  <div className="space-y-1.5">
+                                      <Label className="text-xs text-slate-500 flex items-center gap-1 h-4">
+                                          <MessageCircle className="h-3.5 w-3.5 text-green-500" /> WeChat ID
+                                      </Label>
+                                      <Input placeholder="e.g. wxid_12345" value={newSupplier.socialId} onChange={(e) => setNewSupplier({...newSupplier, socialId: e.target.value})} />
+                                  </div>
                               </div>
                           </div>
 
-                          {/* DYNAMIC ADDITIONAL CONTACTS */}
-                          <div className="col-span-2 space-y-2 border-t border-slate-100 pt-2">
+                          {/* REFACTORED ADDITIONAL CONTACTS */}
+                          <div className="col-span-2 space-y-4 border-t border-slate-100 pt-4">
                               <div className="flex justify-between items-center">
-                                <Label>Additional Contacts</Label>
-                                <Button variant="ghost" size="sm" onClick={addContactRow}><Plus className="h-3 w-3 mr-1"/> Add Contact</Button>
+                                  <Label className="text-sm font-semibold text-slate-700">Additional Contacts</Label>
+                                  <Button variant="outline" size="sm" onClick={addContactRow} className="h-8">
+                                      <Plus className="h-3 w-3 mr-1"/> Add Contact
+                                  </Button>
                               </div>
-                              <div className="space-y-2">
+                              <div className="space-y-3">
                                   {newSupplier.additionalContacts.map((contact, idx) => (
-                                      <div key={idx} className="flex gap-2 items-center bg-slate-50 p-2 rounded">
-                                          <Input className="h-7 text-xs" placeholder="Name" value={contact.name} onChange={(e) => updateContactRow(idx, 'name', e.target.value)} />
-                                          <Input className="h-7 text-xs" placeholder="Role" value={contact.role} onChange={(e) => updateContactRow(idx, 'role', e.target.value)} />
-                                          <Input className="h-7 text-xs" placeholder="Phone" value={contact.phone} onChange={(e) => updateContactRow(idx, 'phone', e.target.value)} />
-                                          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500 shrink-0" onClick={() => removeContactRow(idx)}><X className="h-3 w-3"/></Button>
+                                      <div key={idx} className="relative bg-slate-50/80 p-4 rounded-lg border border-slate-200 group">
+                                          <Button 
+                                              variant="ghost" 
+                                              size="icon" 
+                                              className="absolute top-2 right-2 h-7 w-7 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-600 hover:bg-red-50" 
+                                              onClick={() => removeContactRow(idx)}
+                                          >
+                                              <X className="h-4 w-4"/>
+                                          </Button>
+                                          <div className="grid grid-cols-2 gap-4 pr-8">
+                                              <div className="space-y-1.5">
+                                                  <Label className="text-xs text-slate-500 flex items-center h-4">Contact Name</Label>
+                                                  <Input className="bg-white" placeholder="e.g. Jane Doe" value={contact.name} onChange={(e) => updateContactRow(idx, 'name', e.target.value)} />
+                                              </div>
+                                              <div className="space-y-1.5">
+                                                  <Label className="text-xs text-slate-500 flex items-center h-4">Phone Number</Label>
+                                                  <Input className="bg-white" placeholder="e.g. +86 138 0000 0001" value={contact.phone} onChange={(e) => updateContactRow(idx, 'phone', e.target.value)} />
+                                              </div>
+                                              <div className="space-y-1.5">
+                                                  <Label className="text-xs text-slate-500 flex items-center h-4">Email Address</Label>
+                                                  <Input className="bg-white" placeholder="e.g. jane@supplier.com" value={contact.email} onChange={(e) => updateContactRow(idx, 'email', e.target.value)} />
+                                              </div>
+                                              <div className="space-y-1.5">
+                                                  <Label className="text-xs text-slate-500 flex items-center gap-1 h-4">
+                                                      <MessageCircle className="h-3.5 w-3.5 text-green-500" /> WeChat ID
+                                                  </Label>
+                                                  <Input className="bg-white" placeholder="e.g. wxid_67890" value={(contact as any).wechatId || ''} onChange={(e) => updateContactRow(idx, 'wechatId', e.target.value)} />
+                                              </div>
+                                          </div>
                                       </div>
                                   ))}
-                                  {newSupplier.additionalContacts.length === 0 && <p className="text-xs text-slate-400 italic">No additional contacts.</p>}
-                              </div>
-                          </div>
-
-                          {/* DYNAMIC SOCIAL PROFILES */}
-                          <div className="col-span-2 space-y-2 border-t border-slate-100 pt-2">
-                              <div className="flex justify-between items-center">
-                                <Label>Social Media Profiles</Label>
-                                <Button variant="ghost" size="sm" onClick={addSocialRow}><Plus className="h-3 w-3 mr-1"/> Add Profile</Button>
-                              </div>
-                              <div className="space-y-2">
-                                  {newSupplier.socialProfiles.map((social, idx) => (
-                                      <div key={idx} className="flex gap-2 items-center bg-slate-50 p-2 rounded">
-                                          <Select value={social.network} onValueChange={(v) => updateSocialRow(idx, 'network', v)}>
-                                              <SelectTrigger className="h-7 w-[100px] text-xs"><SelectValue /></SelectTrigger>
-                                              <SelectContent>
-                                                  <SelectItem value="WECHAT">WeChat</SelectItem>
-                                                  <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
-                                                  <SelectItem value="LINKEDIN">LinkedIn</SelectItem>
-                                                  <SelectItem value="OTHER">Other</SelectItem>
-                                              </SelectContent>
-                                          </Select>
-                                          <Input className="h-7 text-xs" placeholder="Handle / ID" value={social.handle} onChange={(e) => updateSocialRow(idx, 'handle', e.target.value)} />
-                                          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500 shrink-0" onClick={() => removeSocialRow(idx)}><X className="h-3 w-3"/></Button>
+                                  {newSupplier.additionalContacts.length === 0 && (
+                                      <div className="text-center py-6 border border-dashed border-slate-200 rounded-lg bg-slate-50/50">
+                                          <p className="text-xs text-slate-400 italic">No additional contacts. Click 'Add Contact' to create one.</p>
                                       </div>
-                                  ))}
-                                  {newSupplier.socialProfiles.length === 0 && <p className="text-xs text-slate-400 italic">No additional profiles.</p>}
+                                  )}
                               </div>
                           </div>
                       </div>
