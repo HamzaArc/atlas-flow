@@ -1,5 +1,6 @@
+// src/store/useQuoteStore.ts
 import { create } from 'zustand';
-import { QuoteService } from '@/services/quote.service';
+import { QuoteService, FetchQuotesParams } from '@/services/quote.service';
 import { Quote, QuoteLineItem, QuoteOption, TransportMode, Incoterm, Currency, Probability, PackagingType, ActivityItem, ActivityCategory, QuoteApproval, ApprovalTrigger, ClientFinancials } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
 import { useTariffStore } from '@/store/useTariffStore';
@@ -28,9 +29,25 @@ interface ClientSnapshotData {
     salespersonName?: string;
 }
 
+// Stats interface for the Dashboard KPIs
+interface QuoteDashboardStats {
+    total: number;
+    draft: number;
+    sent: number;
+    accepted: number;
+    converted: number;
+    validation: number;
+    pipelineValue: number;
+    totalValue: number;
+    winRate: number;
+    expiringSoon: number;
+}
+
 interface QuoteState {
   // --- DATABASE STATE ---
   quotes: Quote[];
+  totalRecords: number; // For Server-Side Pagination
+  dashboardStats: QuoteDashboardStats; // Lightweight KPI Stats
   isLoading: boolean;
 
   // --- EDITOR STATE ---
@@ -40,7 +57,6 @@ interface QuoteState {
   masterReference: string; 
   version: number;
   customerReference: string;
-  // Added CONVERTED to status type
   status: 'DRAFT' | 'PRICING' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'REJECTED' | 'CONVERTED';
   
   // CRM & Identity
@@ -167,7 +183,11 @@ interface QuoteState {
   cancelQuote: (reason: string) => Promise<void>;
   createRevision: () => Promise<void>;
 
-  fetchQuotes: () => Promise<void>;
+  // Data fetching
+  fetchQuotes: () => Promise<void>; // Legacy
+  fetchPaginatedQuotes: (params: FetchQuotesParams) => Promise<void>;
+  fetchDashboardStats: () => Promise<void>;
+
   saveQuote: () => Promise<void>;
   loadQuote: (id: string) => void; 
   createNewQuote: () => void;
@@ -199,40 +219,19 @@ const checkStrictExpiry = (items: QuoteLineItem[]): boolean => {
     });
 };
 
-// HELPER: Auto-detect VAT Rule based on description keywords
 const detectSmartVatRule = (desc: string): 'STD_20' | 'ROAD_14' | 'EXPORT_0_ART92' | null => {
     const d = desc.toLowerCase().trim();
     if (!d) return null;
 
-    // RULE 1: International Freight (Export/Import) -> 0%
-    if (
-        d.includes('freight') || d.includes('fret') || 
-        d.includes('ocean') || d.includes('sea') || 
-        d.includes('air') || d.includes('bunker') ||
-        d.includes('thc') || d.includes('isps') || d.includes('seal')
-    ) {
+    if (d.includes('freight') || d.includes('fret') || d.includes('ocean') || d.includes('sea') || d.includes('air') || d.includes('bunker') || d.includes('thc') || d.includes('isps') || d.includes('seal')) {
         return 'EXPORT_0_ART92';
     }
-
-    // RULE 2: Inland Transport / Trucking -> 14%
-    if (
-        d.includes('truck') || d.includes('transport') || 
-        d.includes('camion') || d.includes('haulage') || 
-        d.includes('livraison') || d.includes('delivery')
-    ) {
+    if (d.includes('truck') || d.includes('transport') || d.includes('camion') || d.includes('haulage') || d.includes('livraison') || d.includes('delivery')) {
         return 'ROAD_14';
     }
-
-    // RULE 3: Services / Customs -> 20%
-    if (
-        d.includes('custom') || d.includes('douane') || 
-        d.includes('admin') || d.includes('dossier') || 
-        d.includes('handl') || d.includes('manutention') ||
-        d.includes('storage') || d.includes('magasin')
-    ) {
+    if (d.includes('custom') || d.includes('douane') || d.includes('admin') || d.includes('dossier') || d.includes('handl') || d.includes('manutention') || d.includes('storage') || d.includes('magasin')) {
         return 'STD_20';
     }
-
     return null;
 };
 
@@ -362,6 +361,10 @@ const getTaxRate = (rule: string) => {
 
 export const useQuoteStore = create<QuoteState>((set, get) => ({
   quotes: [],
+  totalRecords: 0,
+  dashboardStats: {
+    total: 0, draft: 0, sent: 0, accepted: 0, converted: 0, validation: 0, pipelineValue: 0, totalValue: 0, winRate: 0, expiringSoon: 0
+  },
   isLoading: false,
   ...DEFAULT_STATE,
 
@@ -686,7 +689,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
   addLineItem: (section, initialData = {}) => {
     const { id, activeOptionId, options, items } = get();
-    // Calculate default sellPrice based on initial data or defaults
     const defaultBuy = initialData.buyPrice || 0;
     const defaultMarkup = initialData.markupValue || 20;
     const defaultMarkupType = initialData.markupType || 'PERCENT';
@@ -702,7 +704,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       section,
       description: '',
       buyPrice: 0,
-      sellPrice: 0, // Explicit initialization
+      sellPrice: 0, 
       buyCurrency: 'MAD', 
       markupType: 'PERCENT',
       markupValue: 20, 
@@ -713,7 +715,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       ...initialData
     };
     
-    // Ensure sellPrice is set if not provided in initialData
     if (newItem.sellPrice === 0 && newItem.buyPrice === 0 && !initialData.sellPrice) {
          newItem.sellPrice = defaultSell;
     }
@@ -770,7 +771,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         return { price: defaultVal, source: 'SMART_INIT' };
     };
 
-
     const createSmartItem = (
         section: 'ORIGIN' | 'FREIGHT' | 'DESTINATION', 
         desc: string, 
@@ -786,7 +786,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         section,
         description: desc,
         buyPrice: priceInfo.price,
-        sellPrice: priceInfo.price, // Initialize sellPrice (0% markup default for smart lines)
+        sellPrice: priceInfo.price,
         buyCurrency: 'MAD',
         markupType: 'PERCENT',
         markupValue: 0,
@@ -864,13 +864,10 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
   updateLineItem: (id, updates) => {
     const { items, exchangeRates, quoteCurrency, options, activeOptionId, paymentTerms } = get();
     
-    // 0. AUTO-DETECT VAT RULE (Feature C: VAT Intelligence)
-    // Only apply if description changed and VAT wasn't explicitly provided in this update
     if (updates.description && !updates.vatRule) {
         const smartVat = detectSmartVatRule(updates.description);
         if (smartVat) {
             updates.vatRule = smartVat;
-            // NEW: Explicit Notification for Transparency
             useToast.getState().toast(
                 `VAT auto-adjusted to ${smartVat === 'EXPORT_0_ART92' ? '0% (Export)' : smartVat === 'ROAD_14' ? '14% (Transport)' : '20%'} based on description.`, 
                 "info"
@@ -878,16 +875,12 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         }
     }
     
-    // 1. UPDATE THE TARGET ITEM
     let updatedItems = items.map(item => {
       if (item.id !== id && id !== 'trigger') return item;
       if (id !== 'trigger') {
           const merged = { ...item, ...updates };
           
-          // STRICT TYPE FIX: Always calculate sellPrice to ensure it matches 'number' type
-          // If updates contains sellPrice, we use it, otherwise we calculate it from buyPrice + markup
           let newSellPrice = merged.sellPrice;
-          
           if (updates.buyPrice !== undefined || updates.markupValue !== undefined || updates.markupType !== undefined) {
               if (merged.markupType === 'PERCENT') {
                   newSellPrice = merged.buyPrice * (1 + merged.markupValue / 100);
@@ -901,7 +894,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       return item;
     });
 
-    // 2. REACTIVE LOGIC: Update Linked Lines
     if (id !== 'trigger') {
         const changedItem = updatedItems.find(i => i.id === id);
         
@@ -920,7 +912,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         }
     }
     
-    // 3. FINANCIAL CALCULATIONS
     let totalCostMAD = 0, totalSellMAD = 0, totalTaxMAD = 0;
 
     updatedItems.forEach(item => {
@@ -991,8 +982,6 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       set((state) => ({ activities: [newItem, ...state.activities] }));
   },
 
-  // --- WORKFLOW ACTIONS ---
-  
   attemptSubmission: async () => {
       const { approval, hasExpiredRates } = get();
 
@@ -1098,16 +1087,73 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       useToast.getState().toast(`Created Revision v${newVersion}`, "success");
   },
 
-  // --- DATABASE ACTIONS ---
+  // DATA FETCHING ACTIONS
   fetchQuotes: async () => {
+      // Legacy fetching logic kept for compatibility with other screens if any exist
       set({ isLoading: true });
       try {
           const quotes = await QuoteService.fetchAll();
-          set({ quotes, isLoading: false });
+          set({ quotes, totalRecords: quotes.length, isLoading: false });
       } catch (error) {
           console.error(error);
           set({ isLoading: false });
           useToast.getState().toast("Failed to load quotes.", "error");
+      }
+  },
+
+  fetchPaginatedQuotes: async (params: FetchQuotesParams) => {
+      set({ isLoading: true });
+      try {
+          const { data, count } = await QuoteService.fetchPaginated(params);
+          set({ quotes: data, totalRecords: count, isLoading: false });
+      } catch (error) {
+          console.error(error);
+          set({ isLoading: false });
+          useToast.getState().toast("Failed to load paginated quotes.", "error");
+      }
+  },
+
+  fetchDashboardStats: async () => {
+      try {
+          const rawStats = await QuoteService.fetchStats();
+          
+          let draft = 0, sent = 0, accepted = 0, converted = 0, validation = 0;
+          let pipelineValue = 0, totalValue = 0, expiringSoon = 0;
+          
+          const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+          const today = new Date();
+
+          rawStats.forEach((r: any) => {
+              const val = r.total_ttc || 0;
+              totalValue += val;
+              
+              if (r.status === 'DRAFT') draft++;
+              if (r.status === 'SENT') sent++;
+              if (r.status === 'ACCEPTED') accepted++;
+              if (r.status === 'CONVERTED') converted++;
+              if (r.status === 'VALIDATION') validation++;
+
+              if (['DRAFT', 'VALIDATION', 'SENT'].includes(r.status)) {
+                  pipelineValue += val;
+              }
+
+              const vDate = new Date(r.validity_date);
+              if (vDate > today && vDate <= nextWeek && !['ACCEPTED', 'REJECTED', 'CONVERTED'].includes(r.status)) {
+                  expiringSoon++;
+              }
+          });
+
+          const total = rawStats.length;
+          const winRate = total > 0 ? Math.round((accepted / total) * 100) : 0;
+
+          set({
+              dashboardStats: {
+                  total, draft, sent, accepted, converted, validation, pipelineValue, totalValue, winRate, expiringSoon
+              }
+          });
+
+      } catch (error) {
+          console.error("Error fetching stats:", error);
       }
   },
 
@@ -1134,6 +1180,9 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           validityDate: new Date(state.validityDate), 
           cargoReadyDate: new Date(state.cargoReadyDate), 
           requestedDepartureDate: state.requestedDepartureDate ? new Date(state.requestedDepartureDate) : undefined,
+          estimatedArrivalDate: state.estimatedArrivalDate ? new Date(state.estimatedArrivalDate) : undefined,
+          transitTime: state.transitTime,
+          freeTime: state.freeTime,
           
           pol: state.pol,
           pod: state.pod,
@@ -1155,7 +1204,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
           goodsDescription: state.goodsDescription,
           hsCode: state.hsCode,
-          packagingType: state.packagingType, // Added
+          packagingType: state.packagingType,
           isHazmat: state.isHazmat,
           isReefer: state.isReefer,
           temperature: state.temperature,
@@ -1177,8 +1226,10 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
           if (state.id === 'new') {
               set({ id: newId });
           }
-          await get().fetchQuotes();
+          await get().fetchDashboardStats();
+          // Rely on the dashboard to re-trigger the fetchPaginated call when state updates
           set({ isLoading: false });
+          useToast.getState().toast("Quote saved successfully.", "success");
       } catch (error) {
           console.error(error);
           set({ isLoading: false });
@@ -1230,6 +1281,9 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               validityDate: quote.validityDate.toISOString().split('T')[0],
               cargoReadyDate: quote.cargoReadyDate.toISOString().split('T')[0],
               requestedDepartureDate: quote.requestedDepartureDate ? quote.requestedDepartureDate.toISOString().split('T')[0] : '',
+              estimatedArrivalDate: quote.estimatedArrivalDate ? quote.estimatedArrivalDate.toISOString().split('T')[0] : '',
+              transitTime: quote.transitTime || 0,
+              freeTime: quote.freeTime || 0,
               
               cargoRows: quote.cargoRows,
               
@@ -1243,7 +1297,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
 
               goodsDescription: quote.goodsDescription,
               hsCode: quote.hsCode,
-              packagingType: quote.packagingType || 'PALLETS', // Added with fallback
+              packagingType: quote.packagingType || 'PALLETS', 
               isHazmat: quote.isHazmat,
               isReefer: quote.isReefer,
               temperature: quote.temperature,
@@ -1262,7 +1316,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
               
               equipmentList: activeOpt?.equipmentList || [],
               
-              editorMode: 'EXPRESS' // Enforced Express Mode on Load
+              editorMode: 'EXPRESS' 
           });
 
           if (activeOptId) {
@@ -1279,8 +1333,10 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
       set({ isLoading: true });
       try {
           await QuoteService.delete(id);
-          await get().fetchQuotes();
+          await get().fetchDashboardStats();
+          // Let UI re-trigger pagination reload naturally
           set({ isLoading: false });
+          useToast.getState().toast("Quote deleted successfully.", "success");
       } catch (error) {
           console.error(error);
           set({ isLoading: false });
@@ -1298,7 +1354,7 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
         masterReference: newRef,
         version: 1, 
         status: 'DRAFT',
-        editorMode: 'EXPRESS', // Force Express mode on duplicate
+        editorMode: 'EXPRESS', 
         activities: [
             { id: 'init', category: 'SYSTEM', text: 'Duplicated from ' + current.reference, meta: 'System', tone: 'neutral', timestamp: new Date() }
         ]

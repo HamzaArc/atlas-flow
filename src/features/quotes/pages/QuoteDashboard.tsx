@@ -1,3 +1,4 @@
+// src/features/quotes/pages/QuoteDashboard.tsx
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom"; // Hook
 import { 
@@ -7,7 +8,7 @@ import {
   ArrowUpDown, Trash2, X, Loader2,
   Calendar, ArrowUpRight, User,
   MapPin, Plane, Ship, Truck, AlertCircle,
-  Layers
+  Layers, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,7 +31,7 @@ import { cn } from "@/lib/utils";
 // --- TYPES ---
 type SortField = 'reference' | 'clientName' | 'validityDate' | 'totalTTCTarget' | 'probability';
 type SortOrder = 'asc' | 'desc';
-type TabView = 'ALL' | 'DRAFT' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'EXPIRING' | 'ARCHIVED';
+type TabView = 'ALL' | 'DRAFT' | 'VALIDATION' | 'SENT' | 'ACCEPTED' | 'CONVERTED' | 'EXPIRING' | 'ARCHIVED';
 
 // --- COMPONENTS ---
 const KpiCard = ({ title, value, subtext, icon: Icon, colorClass, trend, trendValue, bgClass }: any) => (
@@ -115,9 +116,18 @@ export default function QuoteDashboard() {
   const [sortField, setSortField] = useState<SortField>('validityDate');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   useEffect(() => {
     fetchQuotes();
   }, []);
+
+  // Reset pagination on filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [currentTab, searchTerm, sortField, sortOrder, pageSize]);
 
   const handleQuickEntry = () => {
       createNewQuote();
@@ -151,6 +161,7 @@ export default function QuoteDashboard() {
       const draft = quotes.filter(q => q.status === 'DRAFT').length;
       const sent = quotes.filter(q => q.status === 'SENT').length;
       const accepted = quotes.filter(q => q.status === 'ACCEPTED').length;
+      const converted = quotes.filter(q => q.status === 'CONVERTED').length;
       const validation = quotes.filter(q => q.status === 'VALIDATION').length;
       
       const getQuoteValue = (quote: any) => {
@@ -169,29 +180,34 @@ export default function QuoteDashboard() {
       const nextWeek = addDays(new Date(), 7);
       const expiringSoon = quotes.filter(q => {
           const vDate = new Date(q.validityDate);
-          return vDate > new Date() && vDate <= nextWeek && q.status !== 'ACCEPTED' && q.status !== 'REJECTED';
+          return vDate > new Date() && vDate <= nextWeek && !['ACCEPTED', 'REJECTED', 'CONVERTED'].includes(q.status);
       }).length;
 
-      return { total, draft, sent, accepted, validation, pipelineValue, totalValue, winRate, expiringSoon };
+      return { total, draft, sent, accepted, converted, validation, pipelineValue, totalValue, winRate, expiringSoon };
   }, [quotes]);
 
   const filteredQuotes = useMemo(() => {
       let data = quotes;
 
-      if (currentTab !== 'ALL') {
-          if (currentTab === 'ARCHIVED') {
-              data = data.filter(q => ['ACCEPTED', 'REJECTED'].includes(q.status));
-          } else if (currentTab === 'EXPIRING') {
-              const nextWeek = addDays(new Date(), 7);
-              data = data.filter(q => {
-                  const vDate = new Date(q.validityDate);
-                  return vDate > new Date() && vDate <= nextWeek && q.status !== 'ACCEPTED' && q.status !== 'REJECTED';
-              });
-          } else {
-              data = data.filter(q => q.status === currentTab);
-          }
+      // Filter handling
+      if (currentTab === 'ALL') {
+          // Exclude converted strictly from all tabs except CONVERTED tab itself
+          data = data.filter(q => q.status !== 'CONVERTED');
+      } else if (currentTab === 'ARCHIVED') {
+          data = data.filter(q => ['ACCEPTED', 'REJECTED'].includes(q.status) && q.status !== 'CONVERTED');
+      } else if (currentTab === 'EXPIRING') {
+          const nextWeek = addDays(new Date(), 7);
+          data = data.filter(q => {
+              const vDate = new Date(q.validityDate);
+              return vDate > new Date() && vDate <= nextWeek && !['ACCEPTED', 'REJECTED', 'CONVERTED'].includes(q.status);
+          });
+      } else if (currentTab === 'CONVERTED') {
+          data = data.filter(q => q.status === 'CONVERTED');
+      } else {
+          data = data.filter(q => q.status === currentTab);
       }
 
+      // Search handling
       if (searchTerm) {
           const lower = searchTerm.toLowerCase();
           data = data.filter(q => 
@@ -201,6 +217,7 @@ export default function QuoteDashboard() {
           );
       }
 
+      // Sorting
       return data.sort((a, b) => {
           const valA = a[sortField];
           const valB = b[sortField];
@@ -224,11 +241,15 @@ export default function QuoteDashboard() {
       });
   }, [quotes, searchTerm, currentTab, sortField, sortOrder]);
 
+  const paginatedQuotes = useMemo(() => {
+    return filteredQuotes.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  }, [filteredQuotes, currentPage, pageSize]);
+
   const renderTableBody = () => {
     if (isLoading) {
         return (
             <TableRow>
-                <TableCell colSpan={9} className="h-48 text-center text-slate-400">
+                <TableCell colSpan={12} className="h-48 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                         <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
                         <span className="text-sm">Fetching latest opportunities...</span>
@@ -238,10 +259,10 @@ export default function QuoteDashboard() {
         );
     }
 
-    if (filteredQuotes.length === 0) {
+    if (paginatedQuotes.length === 0) {
         return (
             <TableRow>
-                <TableCell colSpan={9} className="h-48 text-center text-slate-400">
+                <TableCell colSpan={12} className="h-48 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-3">
                         <div className="p-3 bg-slate-50 rounded-full">
                             <Filter className="h-6 w-6 text-slate-300" />
@@ -256,7 +277,7 @@ export default function QuoteDashboard() {
         );
     }
 
-    return filteredQuotes.map((quote: any) => {
+    return paginatedQuotes.map((quote: any) => {
         const activeOption = quote.options?.find((o: any) => o.id === quote.activeOptionId) || quote.options?.[0];
         const optionsCount = quote.options?.length || 0;
         
@@ -265,9 +286,17 @@ export default function QuoteDashboard() {
         const displayPOL = quote.pol || activeOption?.pol || '---';
         const displayPOD = quote.pod || activeOption?.pod || '---';
         const ttc = quote.totalTTCTarget || activeOption?.totalTTC || 0;
+        
         const reqDepDate = quote.requestedDepartureDate 
             ? new Date(quote.requestedDepartureDate) 
             : null;
+        
+        const targetEta = quote.estimatedArrivalDate
+            ? new Date(quote.estimatedArrivalDate)
+            : null;
+            
+        const estTransit = quote.transitTime || activeOption?.transitTime || '--';
+        const displayFreeTime = quote.freeTime || activeOption?.freeTime || '--';
 
         return (
             <TableRow 
@@ -276,7 +305,7 @@ export default function QuoteDashboard() {
                 onClick={() => handleEdit(quote.id)}
             >
                 <TableCell className="pl-6 align-top py-4 w-[160px]">
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1 items-start">
                         <div className="flex items-center gap-2 font-mono font-bold text-xs text-blue-700">
                             {quote.reference}
                         </div>
@@ -285,12 +314,17 @@ export default function QuoteDashboard() {
                             quote.status === 'DRAFT' ? "bg-slate-100 text-slate-500 border-slate-200" :
                             quote.status === 'SENT' ? "bg-blue-50 text-blue-600 border-blue-100" :
                             quote.status === 'ACCEPTED' ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                            quote.status === 'CONVERTED' ? "bg-purple-100 text-purple-700 border-purple-200" :
                             quote.status === 'VALIDATION' ? "bg-amber-50 text-amber-600 border-amber-100" :
                             "bg-red-50 text-red-600 border-red-100"
                         )}>
                             {quote.status}
                         </Badge>
-                        {quote.version > 1 && <span className="text-[9px] text-slate-400 font-medium">Version {quote.version}</span>}
+                        {quote.version > 1 && (
+                            <Badge className="w-fit text-[10px] h-5 px-1.5 rounded border border-indigo-200 bg-indigo-50 text-indigo-700 font-bold mt-1 shadow-sm">
+                                v{quote.version}
+                            </Badge>
+                        )}
                     </div>
                 </TableCell>
                 
@@ -355,6 +389,35 @@ export default function QuoteDashboard() {
                         </div>
                     </div>
                 </TableCell>
+                
+                {/* 3 New Columns */}
+                <TableCell className="align-top py-4">
+                    <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] text-slate-400 font-medium">Target ETA</span>
+                        <div className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                            <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                            {targetEta && isValid(targetEta) ? format(targetEta, 'dd MMM yyyy') : <span className="text-slate-400">--</span>}
+                        </div>
+                    </div>
+                </TableCell>
+                
+                <TableCell className="align-top py-4">
+                    <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] text-slate-400 font-medium">Transit</span>
+                        <div className="text-xs font-semibold text-slate-700">
+                            {estTransit} {estTransit !== '--' ? 'Days' : ''}
+                        </div>
+                    </div>
+                </TableCell>
+                
+                <TableCell className="align-top py-4">
+                    <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] text-slate-400 font-medium">Free Time</span>
+                        <div className="text-xs font-semibold text-slate-700">
+                            {displayFreeTime} {displayFreeTime !== '--' ? 'Days' : ''}
+                        </div>
+                    </div>
+                </TableCell>
 
                  <TableCell className="align-top py-4">
                     <div className="flex flex-col gap-0.5">
@@ -415,8 +478,6 @@ export default function QuoteDashboard() {
             </div>
             
             <div className="flex items-center gap-3">
-
-
                 <Button 
                     onClick={handleQuickEntry} 
                     className="bg-slate-900 text-white hover:bg-slate-700 shadow-lg shadow-indigo-200/50 transition-all h-10 px-3 font-semibold"
@@ -472,30 +533,37 @@ export default function QuoteDashboard() {
         </div>
 
         {/* MAIN CONTENT AREA */}
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
             
             <Tabs defaultValue="ALL" onValueChange={(v) => setCurrentTab(v as TabView)} className="w-full">
                 
                 {/* TOOLBAR */}
                 <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/30">
-                    <TabsList className="bg-slate-100 p-1 rounded-lg h-9">
-                        <TabsTrigger value="ALL" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm">All Quotes</TabsTrigger>
-                        <TabsTrigger value="DRAFT" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm">Drafts</TabsTrigger>
-                        <TabsTrigger value="VALIDATION" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                    <TabsList className="bg-slate-100 p-1 rounded-lg h-9 overflow-x-auto flex-nowrap shrink-0">
+                        <TabsTrigger value="ALL" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm px-3">All Quotes</TabsTrigger>
+                        <TabsTrigger value="DRAFT" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm px-3">Drafts</TabsTrigger>
+                        <TabsTrigger value="VALIDATION" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm px-3">
                             In Review
                             {stats.validation > 0 && <span className="ml-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-100 text-[9px] font-bold text-amber-600">{stats.validation}</span>}
                         </TabsTrigger>
-                        <TabsTrigger value="SENT" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm">Sent</TabsTrigger>
-                        <TabsTrigger value="EXPIRING" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                        <TabsTrigger value="SENT" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm px-3">Sent</TabsTrigger>
+                        
+                        {/* New Dedicated Converted Tab */}
+                        <TabsTrigger value="CONVERTED" className="text-xs h-7 data-[state=active]:bg-purple-100 data-[state=active]:text-purple-900 data-[state=active]:shadow-sm px-3">
+                            Converted
+                            {stats.converted > 0 && <span className="ml-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-purple-200 text-[9px] font-bold text-purple-700">{stats.converted}</span>}
+                        </TabsTrigger>
+                        
+                        <TabsTrigger value="EXPIRING" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm px-3">
                             <span className="flex items-center gap-1.5">
                                 Expiring
                                 {stats.expiringSoon > 0 && <AlertCircle className="h-3 w-3 text-red-500" />}
                             </span>
                         </TabsTrigger>
-                        <TabsTrigger value="ARCHIVED" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm">History (Won/Lost)</TabsTrigger>
+                        <TabsTrigger value="ARCHIVED" className="text-xs h-7 data-[state=active]:bg-white data-[state=active]:shadow-sm px-3">History (Won/Lost)</TabsTrigger>
                     </TabsList>
 
-                    <div className="relative w-full sm:max-w-xs">
+                    <div className="relative w-full sm:max-w-xs shrink-0">
                          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                          <Input 
                             placeholder="Filter by ref, client or rep..." 
@@ -512,7 +580,7 @@ export default function QuoteDashboard() {
                 </div>
 
                 {/* TABLE */}
-                <TabsContent value={currentTab} className="m-0">
+                <TabsContent value={currentTab} className="m-0 overflow-x-auto">
                     <Table>
                         <TableHeader className="bg-slate-50 border-b border-slate-200">
                             <TableRow className="hover:bg-transparent">
@@ -524,8 +592,13 @@ export default function QuoteDashboard() {
                                 </TableHead>
                                 <TableHead className="font-bold text-[11px] uppercase text-slate-500 h-10">Route Details</TableHead>
                                 <TableHead className="font-bold text-[11px] uppercase text-slate-500 h-10">Req. Dep</TableHead>
-                                <TableHead className="font-bold text-[11px] uppercase text-slate-500 h-10">Options</TableHead>
                                 
+                                {/* 3 New Grid Columns Added here */}
+                                <TableHead className="font-bold text-[11px] uppercase text-slate-500 h-10 whitespace-nowrap">Target ETA</TableHead>
+                                <TableHead className="font-bold text-[11px] uppercase text-slate-500 h-10 whitespace-nowrap">Est. Transit (Days)</TableHead>
+                                <TableHead className="font-bold text-[11px] uppercase text-slate-500 h-10 whitespace-nowrap">Free Time (Days)</TableHead>
+                                
+                                <TableHead className="font-bold text-[11px] uppercase text-slate-500 h-10">Options</TableHead>
                                 <TableHead className="font-bold text-[11px] uppercase text-slate-500 text-right cursor-pointer h-10" onClick={() => toggleSort('totalTTCTarget')}>
                                      <div className="flex items-center justify-end gap-1">Value (TTC) {sortField === 'totalTTCTarget' && <ArrowUpDown className="h-3 w-3" />}</div>
                                 </TableHead>
@@ -539,6 +612,48 @@ export default function QuoteDashboard() {
                     </Table>
                 </TabsContent>
             </Tabs>
+            
+            {/* Pagination Controls */}
+            <div className="flex flex-col sm:flex-row items-center justify-between px-6 py-4 border-t border-slate-200 bg-slate-50/50 mt-auto">
+                <div className="flex items-center gap-2 mb-4 sm:mb-0">
+                    <span className="text-xs font-medium text-slate-500">Rows per page:</span>
+                    <select 
+                        className="h-8 rounded-md border border-slate-200 bg-white text-xs px-2 outline-none focus:ring-1 focus:ring-blue-500"
+                        value={pageSize}
+                        onChange={(e) => setPageSize(Number(e.target.value))}
+                    >
+                        <option value={10}>10</option>
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                    </select>
+                </div>
+                
+                <div className="text-xs font-medium text-slate-500 mb-4 sm:mb-0">
+                    Showing {(currentPage - 1) * pageSize + (filteredQuotes.length > 0 ? 1 : 0)} to {Math.min(currentPage * pageSize, filteredQuotes.length)} of {filteredQuotes.length}
+                </div>
+                
+                <div className="flex items-center gap-2">
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-8 px-3 text-xs" 
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+                        disabled={currentPage === 1}
+                    >
+                        <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Prev
+                    </Button>
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-8 px-3 text-xs" 
+                        onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredQuotes.length / pageSize), p + 1))} 
+                        disabled={currentPage >= Math.ceil(filteredQuotes.length / pageSize) || filteredQuotes.length === 0}
+                    >
+                        Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                    </Button>
+                </div>
+            </div>
+            
         </div>
     </div>
   );

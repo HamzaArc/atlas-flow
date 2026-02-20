@@ -1,5 +1,15 @@
+// src/services/quote.service.ts
 import { supabase } from '@/lib/supabase';
 import { Quote, QuoteOption, PackagingType } from '@/types/index';
+
+export interface FetchQuotesParams {
+    page: number;
+    pageSize: number;
+    statusTab: string;
+    searchTerm: string;
+    sortField: string;
+    sortOrder: 'asc' | 'desc';
+}
 
 // Helper to map DB Row -> Domain Model
 const mapRowToQuote = (row: any): Quote => {
@@ -47,6 +57,9 @@ const mapRowToQuote = (row: any): Quote => {
         validityDate: new Date(row.validity_date),
         cargoReadyDate: new Date(row.data?.cargoReadyDate || new Date()),
         requestedDepartureDate: row.data?.requestedDepartureDate ? new Date(row.data.requestedDepartureDate) : undefined,
+        estimatedArrivalDate: row.data?.estimatedArrivalDate ? new Date(row.data.estimatedArrivalDate) : undefined,
+        transitTime: row.data?.transitTime || 0,
+        freeTime: row.data?.freeTime || 0,
         
         // Flattened dashboard fields
         pol: row.pol,
@@ -77,7 +90,7 @@ const mapRowToQuote = (row: any): Quote => {
 
 export const QuoteService = {
     /**
-     * Fetches all quotes ordered by creation date
+     * Legacy fetchAll (Keep for compatibility if used elsewhere, but ideally deprecated for dashboard)
      */
     fetchAll: async (): Promise<Quote[]> => {
         const { data, error } = await supabase
@@ -87,6 +100,76 @@ export const QuoteService = {
 
         if (error) throw error;
         return (data || []).map(mapRowToQuote);
+    },
+
+    /**
+     * Optimized Server-Side Paginated Fetch
+     */
+    fetchPaginated: async (params: FetchQuotesParams): Promise<{ data: Quote[], count: number }> => {
+        const { page, pageSize, statusTab, searchTerm, sortField, sortOrder } = params;
+        
+        // Base Query
+        let query = supabase.from('quotes').select('*', { count: 'exact' });
+
+        // Apply Tab Status Filters
+        if (statusTab === 'ARCHIVED') {
+            query = query.in('status', ['ACCEPTED', 'REJECTED']);
+        } else if (statusTab === 'CONVERTED') {
+            query = query.eq('status', 'CONVERTED');
+        } else if (statusTab === 'EXPIRING') {
+            const today = new Date().toISOString();
+            const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+            query = query
+                .gte('validity_date', today)
+                .lte('validity_date', nextWeek)
+                .not('status', 'in', '("ACCEPTED","REJECTED","CONVERTED")');
+        } else if (statusTab !== 'ALL') {
+            query = query.eq('status', statusTab);
+        } else {
+            // "ALL" tab excludes CONVERTED
+            query = query.neq('status', 'CONVERTED');
+        }
+
+        // Apply Text Search
+        if (searchTerm) {
+            query = query.or(`reference.ilike.%${searchTerm}%,client_name.ilike.%${searchTerm}%`);
+        }
+
+        // Apply Sorting
+        const dbSortFieldMap: Record<string, string> = {
+            reference: 'reference',
+            clientName: 'client_name',
+            validityDate: 'validity_date',
+            totalTTCTarget: 'total_ttc'
+        };
+        const mappedSortField = dbSortFieldMap[sortField] || 'created_at';
+        query = query.order(mappedSortField, { ascending: sortOrder === 'asc' });
+
+        // Apply Pagination
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        query = query.range(from, to);
+
+        const { data, error, count } = await query;
+        if (error) throw error;
+
+        return {
+            data: (data || []).map(mapRowToQuote),
+            count: count || 0
+        };
+    },
+
+    /**
+     * Lightweight Fetch for KPI Dashboard Stats
+     */
+    fetchStats: async (): Promise<any[]> => {
+        // Only select the bare minimum fields needed to calculate KPIs
+        const { data, error } = await supabase
+            .from('quotes')
+            .select('status, validity_date, total_ttc');
+
+        if (error) throw error;
+        return data || [];
     },
 
     /**
@@ -119,6 +202,9 @@ export const QuoteService = {
             probability: quote.probability,
             cargoReadyDate: quote.cargoReadyDate,
             requestedDepartureDate: quote.requestedDepartureDate,
+            estimatedArrivalDate: quote.estimatedArrivalDate,
+            transitTime: quote.transitTime,
+            freeTime: quote.freeTime,
             competitorInfo: quote.competitorInfo,
             customerReference: quote.customerReference,
             hsCode: quote.hsCode,

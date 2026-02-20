@@ -1,5 +1,4 @@
 // src/types/index.ts
-
 // --- 1. CORE LOGISTICS ENUMS ---
 export type Incoterm = 
   | 'EXW' | 'FCA' | 'CPT' | 'CIP' | 'DAP' | 'DPU' | 'DDP' 
@@ -178,6 +177,9 @@ export interface Quote {
   validityDate: Date; 
   cargoReadyDate: Date;
   requestedDepartureDate?: Date;
+  estimatedArrivalDate?: Date; // Added for Target ETA display
+  transitTime?: number;        // Added for dashboard level transit access
+  freeTime?: number;           // Added for dashboard level free time access
   pol?: string;
   pod?: string;
   mode?: TransportMode;       

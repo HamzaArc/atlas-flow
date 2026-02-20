@@ -1,20 +1,43 @@
+// src/store/useDossierStore.ts
 import { create } from 'zustand';
 import { Dossier, DossierContainer, ShipmentStatus, ActivityCategory, DossierTask, Document, Quote, ChargeLine, CargoItem } from '@/types/index';
 import { useToast } from "@/components/ui/use-toast";
-import { DossierService } from '@/services/dossier.service';
+import { DossierService, FetchDossiersParams } from '@/services/dossier.service';
 import { generateUUID } from '@/lib/utils';
 import { useFinanceStore } from './useFinanceStore';
 import { addDays } from 'date-fns';
 
+export interface ExceptionDetail {
+    id: string;
+    ref: string;
+    reason: string;
+}
+
+export interface DossierDashboardStats {
+    total: number;
+    bookings: number;
+    inTransit: number;
+    exceptions: number;
+    exceptionDetails: ExceptionDetail[];
+    sea: number;
+    air: number;
+    road: number;
+}
+
 interface DossierState {
   dossiers: Dossier[];
+  totalRecords: number;
+  dashboardStats: DossierDashboardStats;
   dossier: Dossier;
   isLoading: boolean;
   isEditing: boolean;
   error: string | null;
   pendingFinanceLines: Partial<ChargeLine>[];
 
-  fetchDossiers: () => Promise<void>;
+  fetchDossiers: () => Promise<void>; 
+  fetchPaginatedDossiers: (params: FetchDossiersParams) => Promise<void>;
+  fetchDashboardStats: () => Promise<void>;
+
   createDossier: () => void;
   initializeFromQuote: (quote: Quote) => void;
   loadDossier: (id: string) => Promise<void>;
@@ -82,7 +105,6 @@ const DEFAULT_DOSSIER: Dossier = {
     alerts: [], 
     nextAction: 'Initialize Booking',
     
-    // New Fields Defaults
     chargeableWeight: 0,
     flightNumber: '',
     truckPlate: '',
@@ -92,6 +114,10 @@ const DEFAULT_DOSSIER: Dossier = {
 
 export const useDossierStore = create<DossierState>((set, get) => ({
   dossiers: [],
+  totalRecords: 0,
+  dashboardStats: {
+      total: 0, bookings: 0, inTransit: 0, exceptions: 0, exceptionDetails: [], sea: 0, air: 0, road: 0
+  },
   dossier: DEFAULT_DOSSIER,
   isLoading: false,
   isEditing: false,
@@ -102,11 +128,70 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       set({ isLoading: true, error: null });
       try {
           const dossiers = await DossierService.fetchAll();
-          set({ dossiers, isLoading: false });
+          set({ dossiers, totalRecords: dossiers.length, isLoading: false });
       } catch (e: any) {
           console.error("Failed to fetch dossiers", e);
           set({ isLoading: false, error: e.message || 'Failed to fetch dossiers' });
           useToast.getState().toast("Connection Error: Could not retrieve shipments.", "error");
+      }
+  },
+
+  fetchPaginatedDossiers: async (params: FetchDossiersParams) => {
+      set({ isLoading: true, error: null });
+      try {
+          const { data, count } = await DossierService.fetchPaginated(params);
+          set({ dossiers: data, totalRecords: count, isLoading: false });
+      } catch (e: any) {
+          console.error("Failed to fetch paginated dossiers", e);
+          set({ isLoading: false, error: e.message });
+      }
+  },
+
+  fetchDashboardStats: async () => {
+      try {
+          const raw = await DossierService.fetchStats();
+          let bookings = 0, inTransit = 0, exceptions = 0;
+          let sea = 0, air = 0, road = 0;
+          const exceptionDetails: ExceptionDetail[] = [];
+
+          raw.forEach((r: any) => {
+              if (r.stage === 'Booking') bookings++;
+              if (r.stage === 'Transit' || r.stage === 'Origin') inTransit++;
+              
+              if (r.mode?.includes('SEA')) sea++;
+              if (r.mode?.includes('AIR')) air++;
+              if (r.mode?.includes('ROAD')) road++;
+              
+              if (r.eta) {
+                  const daysToEta = Math.ceil((new Date(r.eta).getTime() - Date.now()) / (1000 * 3600 * 24));
+                  if (r.status === 'ON_WATER' && daysToEta < 2) {
+                      exceptions++;
+                      let reasonText = '';
+                      if (daysToEta < 0) reasonText = `Overdue by ${Math.abs(daysToEta)} days`;
+                      else if (daysToEta === 0) reasonText = `Arriving today`;
+                      else reasonText = `Arriving in ${daysToEta} day(s)`;
+
+                      exceptionDetails.push({
+                          id: r.id,
+                          ref: r.ref,
+                          reason: reasonText
+                      });
+                  }
+              }
+          });
+
+          set({
+              dashboardStats: {
+                  total: raw.length,
+                  bookings,
+                  inTransit,
+                  exceptions,
+                  exceptionDetails,
+                  sea, air, road
+              }
+          });
+      } catch (e) {
+          console.error("Error fetching dashboard stats", e);
       }
   },
 
@@ -124,14 +209,12 @@ export const useDossierStore = create<DossierState>((set, get) => ({
     const random = Math.floor(1000 + Math.random() * 9000);
     const newRef = `BKG-${year}-${random}`;
     
-    // Determine active option
     const activeOption = quote.options.find(o => o.id === quote.activeOptionId) || quote.options[0];
     if (!activeOption) {
         useToast.getState().toast("Error: Quote has no options to convert.", "error");
         return;
     }
 
-    // Prepare Date Logic
     const etd = quote.requestedDepartureDate 
         ? new Date(quote.requestedDepartureDate) 
         : (quote.cargoReadyDate ? new Date(quote.cargoReadyDate) : new Date());
@@ -140,7 +223,6 @@ export const useDossierStore = create<DossierState>((set, get) => ({
         ? addDays(etd, activeOption.transitTime)
         : addDays(etd, 14);
 
-    // --- 1. Enhanced Container Mapping ---
     const containers: DossierContainer[] = [];
     
     if (activeOption.equipmentList && activeOption.equipmentList.length > 0) {
@@ -178,27 +260,22 @@ export const useDossierStore = create<DossierState>((set, get) => ({
         }
     }
 
-    // --- 2. Enhanced Cargo Mapping (FIXED) ---
     let cargoItems: CargoItem[] = [];
 
     if (quote.cargoRows && quote.cargoRows.length > 0) {
         cargoItems = quote.cargoRows.map(r => {
-            // Robust Dimensions Builder
             let dimensions = '';
             if (r.length && r.width && r.height) {
                 dimensions = `${r.length}x${r.width}x${r.height}`;
             }
 
-            // Robust Volume Calculation
             let rowVolume = Number(r.volume || 0);
             if (!rowVolume && r.length && r.width && r.height) {
-                // CM to CBM standard
                 const singlePieceVol = (Number(r.length) * Number(r.width) * Number(r.height)) / 1000000;
                 const count = Number(r.count || r.quantity || r.pieces || 1);
                 rowVolume = singlePieceVol * count;
             }
             
-            // Robust Field Mapping
             const count = Number(r.count || r.quantity || r.pieces || r.pkgCount || 0);
             const type = r.packageType || r.pkgType || r.type || quote.packagingType || 'PALLETS';
 
@@ -213,12 +290,11 @@ export const useDossierStore = create<DossierState>((set, get) => ({
             };
         });
     } else {
-        // Fallback if no specific rows defined but global totals exist
         if (quote.totalWeight || quote.totalVolume) {
             cargoItems.push({
                 id: generateUUID(),
                 description: quote.goodsDescription || 'General Cargo',
-                packageCount: 1, // Default if unknown
+                packageCount: 1, 
                 packageType: quote.packagingType || 'PALLETS',
                 weight: quote.totalWeight || 0,
                 volume: quote.totalVolume || 0,
@@ -227,7 +303,6 @@ export const useDossierStore = create<DossierState>((set, get) => ({
         }
     }
 
-    // --- 3. Finance Mapping ---
     const financeLines: Partial<ChargeLine>[] = [];
     
     activeOption.items.forEach(item => {
@@ -280,7 +355,6 @@ export const useDossierStore = create<DossierState>((set, get) => ({
         transitTime: activeOption.transitTime || 0,
         freeTimeDays: activeOption.freeTime || 7,
 
-        // Parties Mapping
         shipper: { 
             name: quote.clientName, 
             role: 'Shipper',
@@ -479,8 +553,6 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       }
   })),
 
-  // --- Document Actions ---
-  
   uploadFile: async (file, type, isInternal, nameOverride) => {
       const { dossier } = get();
       if (!dossier.id || dossier.id.startsWith('new-')) {
@@ -548,7 +620,7 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       set({ isLoading: true });
       get().runSmartChecks(); 
       
-      const { dossier, dossiers, pendingFinanceLines } = get();
+      const { dossier, pendingFinanceLines } = get();
       
       try {
           const savedDossier = await DossierService.save(dossier);
@@ -564,23 +636,10 @@ export const useDossierStore = create<DossierState>((set, get) => ({
               set({ pendingFinanceLines: [] });
           }
 
-          const index = dossiers.findIndex(d => d.id === dossier.id);
-          let newDossiers = [...dossiers];
-          
-          if (index >= 0) {
-              newDossiers[index] = savedDossier;
-          } else {
-              const tempIndex = dossiers.findIndex(d => d.id === dossier.id);
-              if (tempIndex >= 0) {
-                  newDossiers[tempIndex] = savedDossier;
-              } else {
-                  newDossiers.unshift(savedDossier);
-              }
-          }
+          get().fetchDashboardStats(); // Refresh stats after saving
 
           set({ 
               dossier: savedDossier, 
-              dossiers: newDossiers, 
               isLoading: false, 
               isEditing: false 
           });
@@ -597,8 +656,8 @@ export const useDossierStore = create<DossierState>((set, get) => ({
       set({ isLoading: true });
       try {
           await DossierService.delete(id);
-          set((state) => ({ 
-              dossiers: state.dossiers.filter(d => d.id !== id),
+          get().fetchDashboardStats(); // Sync stats
+          set((_state) => ({ 
               isLoading: false
           }));
           useToast.getState().toast("Shipment deleted.", "info");

@@ -1,6 +1,17 @@
+// src/services/dossier.service.ts
 import { supabase } from '@/lib/supabase';
 import { Dossier, DossierAlert, ShipmentStage, DossierContainer, ShipmentEvent, DossierTask, ActivityItem, Document } from '@/types/index';
 import { generateUUID } from '@/lib/utils';
+
+// --- Types ---
+export interface FetchDossiersParams {
+    page: number;
+    pageSize: number;
+    filterMode: string;
+    searchTerm: string;
+    sortField?: string;
+    sortOrder?: 'asc' | 'desc';
+}
 
 // --- Helpers ---
 const isValidUuid = (id?: string) => {
@@ -8,7 +19,6 @@ const isValidUuid = (id?: string) => {
 };
 
 // --- Mappers ---
-
 const mapDossierFromDb = (row: any): Dossier => {
   if (!row) throw new Error("Dossier data missing");
 
@@ -203,6 +213,55 @@ export const DossierService = {
         return data.map(mapDossierFromDb);
     },
 
+    fetchPaginated: async (params: FetchDossiersParams): Promise<{ data: Dossier[], count: number }> => {
+        const { page, pageSize, filterMode, searchTerm, sortField = 'created_at', sortOrder = 'desc' } = params;
+        
+        let query = supabase.from('dossiers').select(`
+            *,
+            dossier_containers(*),
+            dossier_events(*),
+            dossier_tasks(*),
+            dossier_activities(*),
+            dossier_documents(*)
+        `, { count: 'exact' });
+
+        if (filterMode && filterMode !== 'All') {
+            query = query.ilike('mode', `%${filterMode}%`);
+        }
+
+        if (searchTerm) {
+            query = query.or(`ref.ilike.%${searchTerm}%,client_name.ilike.%${searchTerm}%,booking_ref.ilike.%${searchTerm}%,carrier.ilike.%${searchTerm}%,owner.ilike.%${searchTerm}%`);
+        }
+
+        query = query.order(sortField, { ascending: sortOrder === 'asc' });
+
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        query = query.range(from, to);
+
+        const { data, error, count } = await query;
+        if (error) throw error;
+
+        return {
+            data: (data || []).map(row => {
+                const dossier = mapDossierFromDb(row);
+                const { alerts } = DossierService.analyzeHealth(dossier);
+                dossier.alerts = alerts;
+                return dossier;
+            }),
+            count: count || 0
+        };
+    },
+
+    fetchStats: async (): Promise<any[]> => {
+        const { data, error } = await supabase
+            .from('dossiers')
+            .select('id, ref, stage, mode, status, eta'); // Added 'ref' here
+
+        if (error) throw error;
+        return data || [];
+    },
+
     getById: async (id: string): Promise<Dossier | null> => {
         const { data, error } = await supabase
             .from('dossiers')
@@ -350,31 +409,27 @@ export const DossierService = {
     },
 
     // --- Documents API ---
-    
     uploadDocument: async (dossierId: string, file: File, meta: { type: string, isInternal: boolean }): Promise<Document> => {
         const fileExt = file.name.split('.').pop();
         const fileName = `${dossierId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
         
-        // 1. Upload file
         const { error: uploadError } = await supabase.storage
             .from('dossier-documents')
             .upload(fileName, file);
 
         if (uploadError) throw uploadError;
 
-        // 2. Get URL
         const { data: { publicUrl } } = supabase.storage
             .from('dossier-documents')
             .getPublicUrl(fileName);
 
-        // 3. Save Record
         const docPayload = {
             dossier_id: dossierId,
             name: file.name,
             type: meta.type,
             size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
             url: publicUrl,
-            status: 'ISSUED', // Default
+            status: 'ISSUED', 
             is_internal: meta.isInternal
         };
 
@@ -390,7 +445,6 @@ export const DossierService = {
     },
 
     updateDocument: async (id: string, updates: Partial<Document>): Promise<Document> => {
-        // Map UI fields to DB fields
         const payload = {
             name: updates.name,
             type: updates.type,

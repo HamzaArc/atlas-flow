@@ -1,60 +1,86 @@
+// src/features/dossier/pages/DossierDashboard.tsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Activity, Calendar, Truck, AlertTriangle, 
   Search, ArrowRight, ChevronRight, Plus,
   Anchor, Plane, Box, FileText, CheckCircle2, RefreshCw,
-  Trash2, Filter, User
+  Trash2, Filter, User, Loader2, ChevronLeft, Info
 } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
-import { ShipmentStage } from "@/types/index";
 import { NewDossierDialog } from "../components/dialogs/NewDossierDialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function DossierDashboard() {
   const navigate = useNavigate();
-  const { dossiers, fetchDossiers, deleteDossier, isLoading, error } = useDossierStore();
+  const { 
+      dossiers, 
+      totalRecords, 
+      dashboardStats: stats,
+      fetchPaginatedDossiers, 
+      fetchDashboardStats,
+      deleteDossier, 
+      isLoading, 
+      error 
+  } = useDossierStore();
+  
   useToast();
+
+  // Local Form & Filter State
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterMode, setFilterMode] = useState<string>('All');
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // 1. Fetch Stats Independently on Mount
   useEffect(() => {
-    fetchDossiers();
-  }, [fetchDossiers]);
+    fetchDashboardStats();
+  }, [fetchDashboardStats]);
 
-  // --- Statistics ---
-  const totalShipments = dossiers.length;
-  const bookings = dossiers.filter(s => s.stage === ShipmentStage.BOOKING).length;
-  const inTransit = dossiers.filter(s => s.stage === ShipmentStage.TRANSIT || s.stage === ShipmentStage.ORIGIN).length;
-  const exceptions = dossiers.filter(s => s.alerts?.some(a => a.type === 'BLOCKER')).length;
+  // 2. Debounce Text Inputs
+  useEffect(() => {
+      const handler = setTimeout(() => {
+          setDebouncedSearch(searchQuery);
+      }, 400); 
+      return () => clearTimeout(handler);
+  }, [searchQuery]);
 
-  // --- Filtering ---
-  const filteredDossiers = dossiers.filter(s => {
-    const matchesMode = filterMode === 'All' || s.mode.includes(filterMode);
-    if (!matchesMode) return false;
+  // 3. Reset pagination if search or tabs change
+  useEffect(() => {
+      setCurrentPage(1);
+  }, [filterMode, debouncedSearch, pageSize]);
 
-    if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        return (
-            (s.clientName && s.clientName.toLowerCase().includes(query)) || 
-            (s.ref && s.ref.toLowerCase().includes(query)) ||
-            (s.bookingRef && s.bookingRef.toLowerCase().includes(query)) ||
-            (s.carrier && s.carrier.toLowerCase().includes(query)) ||
-            (s.owner && s.owner.toLowerCase().includes(query)) ||
-            (s.stage && s.stage.toLowerCase().includes(query))
-        );
-    }
-    return true;
-  });
+  // 4. Primary Data Loader trigger (Server-Side Execution)
+  useEffect(() => {
+      fetchPaginatedDossiers({
+          page: currentPage,
+          pageSize,
+          filterMode,
+          searchTerm: debouncedSearch,
+          sortField: 'created_at',
+          sortOrder: 'desc'
+      });
+  }, [currentPage, pageSize, filterMode, debouncedSearch, fetchPaginatedDossiers]);
 
   // --- Handlers ---
+  const handleManualRefresh = () => {
+      fetchDashboardStats();
+      fetchPaginatedDossiers({ page: currentPage, pageSize, filterMode, searchTerm: debouncedSearch });
+  };
+
   const handleDelete = async (e: React.MouseEvent, id: string, ref: string) => {
     e.stopPropagation();
     if (window.confirm(`Are you sure you want to delete dossier ${ref}? This action cannot be undone.`)) {
       try {
         await deleteDossier(id);
+        handleManualRefresh();
       } catch (err) {
         console.error("Delete failed", err);
       }
@@ -83,20 +109,55 @@ export default function DossierDashboard() {
     }
   };
 
-  const StatCard = ({ title, value, icon: Icon, color, subtext }: any) => (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all group">
-       <div className="flex justify-between items-start mb-4">
-          <div>
-             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{title}</h3>
-             <div className="text-3xl font-bold text-slate-900 tracking-tight">{value}</div>
-          </div>
-          <div className={`p-3 rounded-xl ${color} bg-opacity-10 text-opacity-100 group-hover:scale-110 transition-transform`}>
-             <Icon size={24} className={color.replace('bg-', 'text-')} />
-          </div>
-       </div>
-       {subtext && <div className="text-xs font-medium text-slate-500 bg-slate-50 inline-block px-2 py-1 rounded border border-slate-100">{subtext}</div>}
-    </div>
-  );
+  // Enhanced Stat Card with native Tooltip integration
+  const StatCard = ({ title, value, icon: Icon, color, subtext, details }: any) => {
+    const CardContentWrapper = (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all group relative h-full flex flex-col justify-between">
+           <div className="flex justify-between items-start mb-4">
+              <div>
+                 <div className="flex items-center gap-1.5 mb-1">
+                     <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">{title}</h3>
+                     {details && details.length > 0 && <Info className="h-3.5 w-3.5 text-blue-400 cursor-help" />}
+                 </div>
+                 <div className="text-3xl font-bold text-slate-900 tracking-tight">{value}</div>
+              </div>
+              <div className={`p-3 rounded-xl ${color} bg-opacity-10 text-opacity-100 group-hover:scale-110 transition-transform shrink-0`}>
+                 <Icon size={24} className={color.replace('bg-', 'text-')} />
+              </div>
+           </div>
+           {subtext && <div className="text-xs font-medium text-slate-500 bg-slate-50 inline-block px-2 py-1 rounded border border-slate-100 mt-auto self-start">{subtext}</div>}
+        </div>
+    );
+
+    if (details && details.length > 0) {
+        return (
+            <TooltipProvider>
+                <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                        <div className="cursor-help block h-full">
+                            {CardContentWrapper}
+                        </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="w-64 p-3 bg-slate-900 text-slate-100 border-slate-800 shadow-xl rounded-xl z-50">
+                        <p className="font-bold text-xs mb-3 text-slate-400 uppercase tracking-wider">Requires Attention</p>
+                        <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
+                            {details.map((d: any) => (
+                                <div key={d.id} className="flex flex-col gap-0.5 border-b border-slate-700/50 pb-2 last:border-0 last:pb-0">
+                                    <span className="font-mono text-xs font-bold text-blue-400">{d.ref}</span>
+                                    <span className="text-[10px] text-slate-300 flex items-center gap-1.5">
+                                        <AlertTriangle size={10} className="text-red-400" /> {d.reason}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        );
+    }
+
+    return <div className="h-full">{CardContentWrapper}</div>;
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans w-full">
@@ -107,13 +168,13 @@ export default function DossierDashboard() {
            <div>
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Operations Dashboard</h1>
               <p className="text-sm text-slate-500 mt-1">
-                Real-time visibility across <span className="font-bold text-slate-900">{totalShipments} active dossiers</span>.
-                {exceptions > 0 && <span className="ml-1 text-red-600 font-medium">• {exceptions} require attention</span>}
+                Real-time visibility across <span className="font-bold text-slate-900">{stats.total} active dossiers</span>.
+                {stats.exceptions > 0 && <span className="ml-1 text-red-600 font-medium">• {stats.exceptions} require attention</span>}
               </p>
            </div>
            <div className="flex gap-2">
              <button 
-                onClick={() => fetchDossiers()}
+                onClick={handleManualRefresh}
                 className="bg-white text-slate-600 border border-slate-200 px-3 py-2.5 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-50 transition-colors"
                 title="Refresh Data"
              >
@@ -132,31 +193,32 @@ export default function DossierDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
            <StatCard 
               title="Active Jobs" 
-              value={totalShipments} 
+              value={stats.total} 
               icon={Activity} 
               color="bg-blue-500"
               subtext="Total dossiers in pipe"
            />
            <StatCard 
               title="Booking" 
-              value={bookings} 
+              value={stats.bookings} 
               icon={Calendar} 
               color="bg-purple-500" 
               subtext="Allocation pending"
            />
            <StatCard 
               title="In Transit" 
-              value={inTransit} 
+              value={stats.inTransit} 
               icon={Truck} 
               color="bg-indigo-500" 
               subtext="Live on water/road"
            />
            <StatCard 
               title="Exceptions" 
-              value={exceptions} 
+              value={stats.exceptions} 
               icon={AlertTriangle} 
               color="bg-red-500" 
               subtext="Blockers detected"
+              details={stats.exceptionDetails} // Injects the hover tooltip details here!
            />
         </div>
 
@@ -216,12 +278,17 @@ export default function DossierDashboard() {
                     </thead>
                     <tbody className="divide-y divide-slate-50 bg-white">
                        {isLoading ? (
-                          <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-400 italic">Synchronizing logistics data...</td></tr>
+                          <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-400 italic">
+                              <div className="flex flex-col items-center justify-center gap-2">
+                                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                                  <span className="text-sm">Fetching logistics data...</span>
+                              </div>
+                          </td></tr>
                        ) : error ? (
                           <tr><td colSpan={7} className="px-6 py-12 text-center text-red-500">{error}</td></tr>
-                       ) : filteredDossiers.length === 0 ? (
+                       ) : dossiers.length === 0 ? (
                           <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-400">No matching dossiers found.</td></tr>
-                       ) : filteredDossiers.map(dossier => (
+                       ) : dossiers.map(dossier => (
                           <tr 
                              key={dossier.id} 
                              onClick={() => navigate(`/dossiers/${dossier.id}`)}
@@ -299,10 +366,48 @@ export default function DossierDashboard() {
                     </tbody>
                  </table>
               </div>
-              <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                 <span className="text-xs text-slate-400 font-medium">Showing {filteredDossiers.length} of {dossiers.length} dossiers</span>
-                 <button className="text-xs font-bold text-blue-600 hover:underline transition-colors">Export Dashboard (CSV)</button>
+
+              {/* Server-Side Pagination Controls */}
+              <div className="flex flex-col sm:flex-row items-center justify-between px-6 py-4 border-t border-slate-200 bg-slate-50/50 mt-auto">
+                  <div className="flex items-center gap-2 mb-4 sm:mb-0">
+                      <span className="text-xs font-medium text-slate-500">Rows per page:</span>
+                      <select 
+                          className="h-8 rounded-md border border-slate-200 bg-white text-xs px-2 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                          value={pageSize}
+                          onChange={(e) => setPageSize(Number(e.target.value))}
+                      >
+                          <option value={10}>10</option>
+                          <option value={20}>20</option>
+                          <option value={50}>50</option>
+                      </select>
+                  </div>
+                  
+                  <div className="text-xs font-medium text-slate-500 mb-4 sm:mb-0">
+                      Showing {(currentPage - 1) * pageSize + (totalRecords > 0 ? 1 : 0)} to {Math.min(currentPage * pageSize, totalRecords)} of {totalRecords}
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                      <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-8 px-3 text-xs" 
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+                          disabled={currentPage === 1 || isLoading}
+                      >
+                          <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Prev
+                      </Button>
+                      <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-8 px-3 text-xs" 
+                          onClick={() => setCurrentPage(p => Math.min(Math.ceil(totalRecords / pageSize), p + 1))} 
+                          disabled={currentPage >= Math.ceil(totalRecords / pageSize) || totalRecords === 0 || isLoading}
+                      >
+                          Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                      </Button>
+                  </div>
               </div>
+
            </div>
 
            {/* Right: Insights & Tasks (1/4 width) */}
@@ -312,9 +417,9 @@ export default function DossierDashboard() {
                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-6">Transport Mix</h3>
                  <div className="space-y-4">
                     {[
-                        { label: 'Sea Freight', count: dossiers.filter(d => d.mode.includes('SEA')).length, color: 'bg-blue-500' },
-                        { label: 'Air Freight', count: dossiers.filter(d => d.mode.includes('AIR')).length, color: 'bg-purple-500' },
-                        { label: 'Road/Land', count: dossiers.filter(d => d.mode.includes('ROAD')).length, color: 'bg-orange-500' }
+                        { label: 'Sea Freight', count: stats.sea, color: 'bg-blue-500' },
+                        { label: 'Air Freight', count: stats.air, color: 'bg-purple-500' },
+                        { label: 'Road/Land', count: stats.road, color: 'bg-orange-500' }
                     ].map((item, idx) => (
                         <div key={idx} className="space-y-1.5">
                             <div className="flex justify-between text-[11px] font-bold">
@@ -324,7 +429,7 @@ export default function DossierDashboard() {
                             <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
                                 <div 
                                     className={`${item.color} h-full rounded-full transition-all duration-1000`} 
-                                    style={{ width: `${(item.count / dossiers.length) * 100 || 0}%` }}
+                                    style={{ width: `${(item.count / (stats.total || 1)) * 100}%` }}
                                 />
                             </div>
                         </div>
