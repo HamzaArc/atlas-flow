@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { 
   Activity, Calendar, Truck, AlertTriangle, 
   Search, ArrowRight, ChevronRight, Plus,
-  Anchor, Plane, Box, FileText, CheckCircle2, RefreshCw,
+  Anchor, Plane, Box, RefreshCw,
   Trash2, Filter, User, Loader2, ChevronLeft, Info
 } from "lucide-react";
 import { useDossierStore } from "@/store/useDossierStore";
@@ -33,6 +33,7 @@ export default function DossierDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterMode, setFilterMode] = useState<string>('All');
+  const [filterStage, setFilterStage] = useState<string>('All');
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
 
   // Pagination State
@@ -55,7 +56,7 @@ export default function DossierDashboard() {
   // 3. Reset pagination if search or tabs change
   useEffect(() => {
       setCurrentPage(1);
-  }, [filterMode, debouncedSearch, pageSize]);
+  }, [filterMode, filterStage, debouncedSearch, pageSize]);
 
   // 4. Primary Data Loader trigger (Server-Side Execution)
   useEffect(() => {
@@ -63,16 +64,17 @@ export default function DossierDashboard() {
           page: currentPage,
           pageSize,
           filterMode,
+          filterStage,
           searchTerm: debouncedSearch,
           sortField: 'created_at',
           sortOrder: 'desc'
       });
-  }, [currentPage, pageSize, filterMode, debouncedSearch, fetchPaginatedDossiers]);
+  }, [currentPage, pageSize, filterMode, filterStage, debouncedSearch, fetchPaginatedDossiers]);
 
   // --- Handlers ---
   const handleManualRefresh = () => {
       fetchDashboardStats();
-      fetchPaginatedDossiers({ page: currentPage, pageSize, filterMode, searchTerm: debouncedSearch });
+      fetchPaginatedDossiers({ page: currentPage, pageSize, filterMode, filterStage, searchTerm: debouncedSearch });
   };
 
   const handleDelete = async (e: React.MouseEvent, id: string, ref: string) => {
@@ -218,15 +220,15 @@ export default function DossierDashboard() {
               icon={AlertTriangle} 
               color="bg-red-500" 
               subtext="Blockers detected"
-              details={stats.exceptionDetails} // Injects the hover tooltip details here!
+              details={stats.exceptionDetails} 
            />
         </div>
 
-        {/* Main Content Split */}
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
+        {/* Main Content */}
+        <div className="w-full">
            
-           {/* Left: Shipments Table (3/4 width on large screens) */}
-           <div className="xl:col-span-3 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[600px]">
+           {/* Shipments Table */}
+           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[600px]">
               {/* Table Toolbar */}
               <div className="p-5 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-center gap-4 bg-white">
                  <div className="flex items-center gap-4 w-full lg:w-auto">
@@ -244,6 +246,25 @@ export default function DossierDashboard() {
                         </button>
                         ))}
                     </div>
+                    
+                    <div className="flex bg-slate-100/80 p-1 rounded-xl">
+                        <select
+                            value={filterStage}
+                            onChange={(e) => setFilterStage(e.target.value)}
+                            className="bg-transparent text-slate-600 text-[11px] font-bold px-2 py-1 outline-none cursor-pointer border-none"
+                        >
+                            <option value="All">All Stages</option>
+                            <option value="Intake">Intake</option>
+                            <option value="Booking">Booking</option>
+                            <option value="Origin">Origin</option>
+                            <option value="Transit">Transit</option>
+                            <option value="Customs">Customs</option>
+                            <option value="Delivery">Delivery</option>
+                            <option value="Finance">Finance</option>
+                            <option value="Closed">Closed</option>
+                        </select>
+                    </div>
+
                     <div className="hidden lg:flex items-center gap-2 text-slate-400">
                         <Filter size={14} />
                         <span className="text-[11px] font-bold uppercase tracking-wider">Filters</span>
@@ -406,74 +427,6 @@ export default function DossierDashboard() {
                           Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
                       </Button>
                   </div>
-              </div>
-
-           </div>
-
-           {/* Right: Insights & Tasks (1/4 width) */}
-           <div className="space-y-6">
-              
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-6">Transport Mix</h3>
-                 <div className="space-y-4">
-                    {[
-                        { label: 'Sea Freight', count: stats.sea, color: 'bg-blue-500' },
-                        { label: 'Air Freight', count: stats.air, color: 'bg-purple-500' },
-                        { label: 'Road/Land', count: stats.road, color: 'bg-orange-500' }
-                    ].map((item, idx) => (
-                        <div key={idx} className="space-y-1.5">
-                            <div className="flex justify-between text-[11px] font-bold">
-                                <span className="text-slate-600">{item.label}</span>
-                                <span className="text-slate-900">{item.count}</span>
-                            </div>
-                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                                <div 
-                                    className={`${item.color} h-full rounded-full transition-all duration-1000`} 
-                                    style={{ width: `${(item.count / (stats.total || 1)) * 100}%` }}
-                                />
-                            </div>
-                        </div>
-                    ))}
-                 </div>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                 <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Critical Tasks</h3>
-                    <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded-full">3 Immediate</span>
-                 </div>
-                 <div className="divide-y divide-slate-50">
-                    <div className="p-4 hover:bg-slate-50 transition-colors cursor-pointer group">
-                       <div className="flex items-start gap-3">
-                          <div className="mt-1"><AlertTriangle size={16} className="text-red-500" /></div>
-                          <div>
-                             <div className="text-sm font-bold text-slate-900 group-hover:text-blue-600">Submit Manifest Correction</div>
-                             <div className="text-xs text-slate-500 mt-1">REF-2024-0899 • Due Today</div>
-                          </div>
-                       </div>
-                    </div>
-                    <div className="p-4 hover:bg-slate-50 transition-colors cursor-pointer group">
-                       <div className="flex items-start gap-3">
-                          <div className="mt-1"><FileText size={16} className="text-orange-500" /></div>
-                          <div>
-                             <div className="text-sm font-bold text-slate-900 group-hover:text-blue-600">Approve Supplier Invoice</div>
-                             <div className="text-xs text-slate-500 mt-1">REF-2024-0902 • Due Tomorrow</div>
-                          </div>
-                       </div>
-                    </div>
-                    <div className="p-4 hover:bg-slate-50 transition-colors cursor-pointer group">
-                       <div className="flex items-start gap-3">
-                          <div className="mt-1"><CheckCircle2 size={16} className="text-green-500" /></div>
-                          <div>
-                             <div className="text-sm font-bold text-slate-900 group-hover:text-blue-600">Send Arrival Notice</div>
-                             <div className="text-xs text-slate-500 mt-1">REF-2024-0892 • Due Jun 12</div>
-                          </div>
-                       </div>
-                    </div>
-                 </div>
-                 <button className="w-full py-3 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors border-t border-slate-100">
-                    View All Tasks
-                 </button>
               </div>
 
            </div>

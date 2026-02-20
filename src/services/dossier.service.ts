@@ -8,6 +8,7 @@ export interface FetchDossiersParams {
     page: number;
     pageSize: number;
     filterMode: string;
+    filterStage?: string;
     searchTerm: string;
     sortField?: string;
     sortOrder?: 'asc' | 'desc';
@@ -214,7 +215,7 @@ export const DossierService = {
     },
 
     fetchPaginated: async (params: FetchDossiersParams): Promise<{ data: Dossier[], count: number }> => {
-        const { page, pageSize, filterMode, searchTerm, sortField = 'created_at', sortOrder = 'desc' } = params;
+        const { page, pageSize, filterMode, filterStage, searchTerm, sortField = 'created_at', sortOrder = 'desc' } = params;
         
         let query = supabase.from('dossiers').select(`
             *,
@@ -227,6 +228,10 @@ export const DossierService = {
 
         if (filterMode && filterMode !== 'All') {
             query = query.ilike('mode', `%${filterMode}%`);
+        }
+        
+        if (filterStage && filterStage !== 'All') {
+            query = query.ilike('stage', `%${filterStage}%`);
         }
 
         if (searchTerm) {
@@ -256,7 +261,7 @@ export const DossierService = {
     fetchStats: async (): Promise<any[]> => {
         const { data, error } = await supabase
             .from('dossiers')
-            .select('id, ref, stage, mode, status, eta'); // Added 'ref' here
+            .select('id, ref, stage, mode, status, eta');
 
         if (error) throw error;
         return data || [];
